@@ -1,4 +1,10 @@
-import { GitHubError, type GitHubClient, type InstallationClient, type RepoInfo } from "./client.ts";
+import {
+  GitHubError,
+  type CommitDetails,
+  type GitHubClient,
+  type InstallationClient,
+  type RepoInfo,
+} from "./client.ts";
 
 /**
  * In-memory GitHub for tests and local development without a GitHub App.
@@ -12,6 +18,8 @@ export class FakeGitHub implements GitHubClient {
   /** Queue of errors to throw on the next calls (to test retries). */
   readonly failures: GitHubError[] = [];
   readonly calls: string[] = [];
+  /** Commit details keyed by "owner/repo@sha" (lowercase owner/repo). */
+  readonly commits = new Map<string, CommitDetails>();
   /** Repository ids are unique across instances, as on GitHub. */
   private static nextId = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
 
@@ -49,6 +57,13 @@ export class FakeGitHub implements GitHubClient {
         };
         this.repos.set(key, repo);
         return repo;
+      },
+      getCommit: async (owner, repo, sha) => {
+        this.calls.push(`getCommit ${owner}/${repo}@${sha.slice(0, 7)}`);
+        fail();
+        const commit = this.commits.get(`${owner}/${repo}@${sha}`.toLowerCase());
+        if (!commit) throw new GitHubError(404, "No commit found for SHA", false);
+        return commit;
       },
       addCollaborator: async (owner, repo, username, permission) => {
         this.calls.push(`addCollaborator ${owner}/${repo} ${username}`);

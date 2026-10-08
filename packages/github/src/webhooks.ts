@@ -91,3 +91,74 @@ export type InstallationEvent = z.infer<typeof installationEventSchema>;
 export function installAppUrl(appSlug: string): string {
   return `https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new`;
 }
+
+const repoRef = z.object({ id: z.number().int(), full_name: z.string() }).passthrough();
+
+/** `push`: commits on a branch (GitHub includes at most 20 in the payload). */
+export const pushEventSchema = z.object({
+  ref: z.string(),
+  repository: repoRef,
+  commits: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[0-9a-f]{40}$/),
+        message: z.string(),
+        timestamp: z.string(),
+        distinct: z.boolean().default(true),
+        author: z.object({ username: z.string().optional() }).passthrough().optional(),
+      }),
+    )
+    .default([]),
+});
+export type PushEvent = z.infer<typeof pushEventSchema>;
+
+export const pullRequestEventSchema = z.object({
+  action: z.string(),
+  repository: repoRef,
+  pull_request: z
+    .object({
+      id: z.number().int(),
+      number: z.number().int(),
+      title: z.string(),
+      body: z.string().nullable().optional(),
+      state: z.enum(["open", "closed"]),
+      merged_at: z.string().nullable().optional(),
+      created_at: z.string(),
+      closed_at: z.string().nullable().optional(),
+      user: z.object({ id: z.number().int(), login: z.string() }).passthrough(),
+    })
+    .passthrough(),
+});
+export type PullRequestEvent = z.infer<typeof pullRequestEventSchema>;
+
+export const pullRequestReviewEventSchema = z.object({
+  action: z.string(),
+  repository: repoRef,
+  pull_request: z.object({ number: z.number().int() }).passthrough(),
+  review: z
+    .object({
+      id: z.number().int(),
+      state: z.string(),
+      submitted_at: z.string().nullable().optional(),
+      user: z.object({ id: z.number().int() }).passthrough().nullable(),
+    })
+    .passthrough(),
+});
+export type PullRequestReviewEvent = z.infer<typeof pullRequestReviewEventSchema>;
+
+export const issuesEventSchema = z.object({
+  action: z.string(),
+  repository: repoRef,
+  issue: z
+    .object({
+      id: z.number().int(),
+      number: z.number().int(),
+      title: z.string(),
+      state: z.enum(["open", "closed"]),
+      created_at: z.string(),
+      closed_at: z.string().nullable().optional(),
+      user: z.object({ id: z.number().int() }).passthrough(),
+    })
+    .passthrough(),
+});
+export type IssuesEvent = z.infer<typeof issuesEventSchema>;

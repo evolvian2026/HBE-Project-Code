@@ -270,6 +270,85 @@ export interface SubmissionsTable {
   updated_at: DefaultTimestamp;
 }
 
+export interface CommitsTable {
+  id: Generated<string>;
+  institution_id: string;
+  repository_id: string;
+  sha: string;
+  branch: string | null;
+  message: Generated<string>;
+  authored_at: Timestamp;
+  pushed_at: DefaultTimestamp;
+  author_login: string | null;
+  author_github_id: number | null;
+  author_profile_id: string | null;
+  details_status: Generated<"pending" | "done" | "unavailable">;
+  parent_count: number | null;
+  additions: number | null;
+  deletions: number | null;
+  files_changed: number | null;
+  effective_lines: number | null;
+  is_bot: Generated<boolean>;
+  created_at: DefaultTimestamp;
+}
+
+export interface PullRequestsTable {
+  id: Generated<string>;
+  institution_id: string;
+  repository_id: string;
+  number: number;
+  github_id: number;
+  author_github_id: number | null;
+  author_profile_id: string | null;
+  title: Generated<string>;
+  body_length: Generated<number>;
+  linked_issues: Generated<number[]>;
+  state: "open" | "closed" | "merged";
+  review_count: Generated<number>;
+  opened_at: Timestamp;
+  closed_at: Timestamp | null;
+  merged_at: Timestamp | null;
+  updated_at: DefaultTimestamp;
+}
+
+export interface PrReviewsTable {
+  id: Generated<string>;
+  institution_id: string;
+  repository_id: string;
+  pr_number: number;
+  github_review_id: number;
+  reviewer_github_id: number | null;
+  reviewer_profile_id: string | null;
+  state: string;
+  submitted_at: Timestamp;
+}
+
+export interface IssuesTable {
+  id: Generated<string>;
+  institution_id: string;
+  repository_id: string;
+  number: number;
+  github_id: number;
+  author_github_id: number | null;
+  author_profile_id: string | null;
+  title: Generated<string>;
+  state: "open" | "closed";
+  opened_at: Timestamp;
+  closed_at: Timestamp | null;
+  updated_at: DefaultTimestamp;
+}
+
+export interface ProcessSnapshotsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  score: string; // numeric
+  breakdown: Json;
+  policy: Json;
+  is_final: Generated<boolean>;
+  computed_at: DefaultTimestamp;
+}
+
 export interface Database {
   institutions: InstitutionsTable;
   profiles: ProfilesTable;
@@ -290,6 +369,11 @@ export interface Database {
   assignment_extensions: AssignmentExtensionsTable;
   repositories: RepositoriesTable;
   submissions: SubmissionsTable;
+  commits: CommitsTable;
+  pull_requests: PullRequestsTable;
+  pr_reviews: PrReviewsTable;
+  issues: IssuesTable;
+  process_snapshots: ProcessSnapshotsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

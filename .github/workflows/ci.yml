@@ -98,6 +98,8 @@ jobs:
 
       - name: End-to-end tests
         run: pnpm test:e2e
+        env:
+          E2E_WEBHOOK_SECRET: ci-secret
 
       - name: Upload Playwright report and app log
         if: failure()

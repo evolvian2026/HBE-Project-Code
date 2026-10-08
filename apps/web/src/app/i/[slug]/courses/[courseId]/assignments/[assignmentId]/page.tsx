@@ -1,8 +1,9 @@
-import { formatInZone } from "@hbe/core";
+import { formatInZone, type ProcessResult } from "@hbe/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
 import { MarkdownView } from "@/components/markdown";
+import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
@@ -47,7 +48,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const ids = { slug, courseId: course.id, assignmentId: a.id };
   const base = `/i/${slug}/courses/${course.id}`;
 
-  const [criteria, submissions, extension] = await Promise.all([
+  const [criteria, submissions, extension, snapshots] = await Promise.all([
     supabase
       .from("assignment_criteria")
       .select("id, title, description, max_points")
@@ -65,7 +66,16 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       .eq("assignment_id", a.id)
       .eq("user_id", ctx.session.userId)
       .maybeSingle(),
+    supabase
+      .from("process_snapshots")
+      .select("submission_id, score, breakdown, submission:submissions!inner(assignment_id)")
+      .eq("submission.assignment_id", a.id),
   ]);
+  const processBySubmission = new Map(
+    ((snapshots.data ?? []) as unknown as { submission_id: string; score: string; breakdown: ProcessResult }[]).map(
+      (p) => [p.submission_id, p],
+    ),
+  );
   type Submission = {
     id: string;
     user_id: string;
@@ -164,6 +174,21 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         </Card>
       )}
 
+      {mine && mine.status === "active" && (
+        <Card title="Your progress" description="Updated as you push. Counts toward your grade.">
+          {processBySubmission.get(mine.id) ? (
+            <ProcessBreakdown result={processBySubmission.get(mine.id)!.breakdown} weightInGrade={a.weights.process} />
+          ) : (
+            <EmptyState title="No activity yet">Push your first commit to start.</EmptyState>
+          )}
+          <p className="mt-4 text-sm">
+            <Link href={`${base}/assignments/${a.id}/submissions/${mine.id}`} className="text-accent hover:underline">
+              See your commit history
+            </Link>
+          </p>
+        </Card>
+      )}
+
       <Card title="Specification">
         {a.spec_md.trim() ? <MarkdownView>{a.spec_md}</MarkdownView> : <EmptyState title="No specification yet" />}
       </Card>
@@ -236,7 +261,9 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                 return (
                   <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
                     <span>
-                      {s.profile?.full_name ?? s.profile?.email ?? "Unknown"}
+                      <Link href={`${base}/assignments/${a.id}/submissions/${s.id}`} className="hover:text-accent">
+                        {s.profile?.full_name ?? s.profile?.email ?? "Unknown"}
+                      </Link>
                       <span className="text-muted">
                         {s.profile?.github_login ? ` · @${s.profile.github_login}` : ""}
                       </span>
@@ -255,6 +282,11 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                             Retry
                           </Button>
                         </form>
+                      )}
+                      {processBySubmission.get(s.id) && (
+                        <span className="tabular-nums text-muted" title="Process score">
+                          process {Math.round(Number(processBySubmission.get(s.id)!.score))}
+                        </span>
                       )}
                       {s.repository && (
                         <a

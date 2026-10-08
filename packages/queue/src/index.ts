@@ -12,6 +12,10 @@ export interface QueuePayloads {
   "provision-submission": { submissionId: string };
   /** Re-enqueue submissions stuck in provisioning. */
   "provisioning-sweep": Record<string, never>;
+  /** Fetch author and line counts for a repository's pending commits. */
+  "commit-details": { repositoryId: string };
+  /** Recompute a submission's process score from its activity. */
+  "process-score": { submissionId: string };
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -29,6 +33,8 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "email-outbox": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
   "provision-submission": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300 },
   "provisioning-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
+  "commit-details": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300 },
+  "process-score": { retryLimit: 3, retryDelay: 10, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

@@ -139,6 +139,19 @@ begin
     (tests.id('inst_a'), tests.id('assign_a1'), tests.id('student_a'), now() + interval '20 days'),
     (tests.id('inst_b'), tests.id('assign_b1'), tests.id('student_b'), now() + interval '20 days');
 
+  -- Activity in each student repository
+  insert into public.commits (institution_id, repository_id, sha, authored_at, author_profile_id)
+    select r.institution_id, r.id, repeat(substr(md5(r.name), 1, 1), 40), now(), s.user_id
+    from public.repositories r join public.submissions s on s.repository_id = r.id;
+  insert into public.pull_requests (institution_id, repository_id, number, github_id, state, opened_at)
+    select r.institution_id, r.id, 1, (random() * 1e9)::bigint, 'open', now() from public.repositories r;
+  insert into public.pr_reviews (institution_id, repository_id, pr_number, github_review_id, state, submitted_at)
+    select r.institution_id, r.id, 1, (random() * 1e9)::bigint, 'approved', now() from public.repositories r;
+  insert into public.issues (institution_id, repository_id, number, github_id, state, opened_at)
+    select r.institution_id, r.id, 2, (random() * 1e9)::bigint, 'open', now() from public.repositories r;
+  insert into public.process_snapshots (institution_id, submission_id, score, breakdown, policy)
+    select s.institution_id, s.id, 50, '{}', '{}' from public.submissions s where s.repository_id is not null;
+
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
     (tests.id('inst_b'), tests.id('admin_b'), 7002);
@@ -165,6 +178,11 @@ language sql security invoker set search_path = '' as $$
   union all select 'assignment_extensions', count(*) from public.assignment_extensions where institution_id = p_institution
   union all select 'repositories', count(*) from public.repositories where institution_id = p_institution
   union all select 'submissions', count(*) from public.submissions where institution_id = p_institution
+  union all select 'commits', count(*) from public.commits where institution_id = p_institution
+  union all select 'pull_requests', count(*) from public.pull_requests where institution_id = p_institution
+  union all select 'pr_reviews', count(*) from public.pr_reviews where institution_id = p_institution
+  union all select 'issues', count(*) from public.issues where institution_id = p_institution
+  union all select 'process_snapshots', count(*) from public.process_snapshots where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

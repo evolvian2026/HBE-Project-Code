@@ -12,6 +12,18 @@ export class GitHubError extends Error {
   }
 }
 
+export interface CommitDetails {
+  sha: string;
+  /** The GitHub user GitHub matched to the commit's author email, if any. */
+  authorId: number | null;
+  authorLogin: string | null;
+  authorIsBot: boolean;
+  parentCount: number;
+  additions: number;
+  deletions: number;
+  files: { filename: string; additions: number; deletions: number; patch?: string }[];
+}
+
 export interface RepoInfo {
   id: number;
   owner: string;
@@ -30,6 +42,7 @@ export interface InstallationClient {
     name: string;
     description: string;
   }): Promise<RepoInfo>;
+  getCommit(owner: string, repo: string, sha: string): Promise<CommitDetails>;
   /** `invited`: GitHub emailed an invitation; `added`: they already had access (org member). */
   addCollaborator(
     owner: string,
@@ -105,6 +118,24 @@ export class GitHubAppClient implements GitHubClient {
             include_all_branches: false,
           }),
         ),
+      getCommit: async (owner, repo, sha) => {
+        const c = await call<CommitJson>("GET", `/repos/${enc(owner)}/${enc(repo)}/commits/${enc(sha)}`);
+        return {
+          sha: c.sha,
+          authorId: c.author?.id ?? null,
+          authorLogin: c.author?.login ?? null,
+          authorIsBot: c.author?.type === "Bot" || /\[bot\]$/.test(c.author?.login ?? ""),
+          parentCount: c.parents.length,
+          additions: c.stats?.additions ?? 0,
+          deletions: c.stats?.deletions ?? 0,
+          files: (c.files ?? []).map((f) => ({
+            filename: f.filename,
+            additions: f.additions,
+            deletions: f.deletions,
+            patch: f.patch,
+          })),
+        };
+      },
       addCollaborator: async (owner, repo, username, permission) => {
         const result = await call<unknown>("PUT", `/repos/${enc(owner)}/${enc(repo)}/collaborators/${enc(username)}`, {
           permission,
@@ -171,6 +202,14 @@ export class GitHubAppClient implements GitHubClient {
       rateLimited || res.status >= 500,
     );
   }
+}
+
+interface CommitJson {
+  sha: string;
+  author: { id: number; login: string; type: string } | null;
+  parents: unknown[];
+  stats?: { additions: number; deletions: number };
+  files?: { filename: string; additions: number; deletions: number; patch?: string }[];
 }
 
 interface RepoJson {

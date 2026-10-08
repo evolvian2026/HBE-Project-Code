@@ -4,6 +4,7 @@ import { drainEmailOutbox } from "./email-outbox.ts";
 import type { GitHubClient } from "@hbe/github";
 import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "./github-events.ts";
 import { provisionSubmission, sweepProvisioning } from "./provisioning.ts";
+import { computeSubmissionProcess, fetchCommitDetails } from "./activity.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
 export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, settings: Settings): Promise<void> {
@@ -33,5 +34,16 @@ export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, s
     await sweepProvisioning(deps);
   });
   await queue.schedule("provisioning-sweep", "*/2 * * * *", {});
+
+  await queue.work("commit-details", async (job) => {
+    await fetchCommitDetails(deps, job.data.repositoryId);
+  });
+  await queue.work(
+    "process-score",
+    async (job) => {
+      await computeSubmissionProcess(deps, job.data.submissionId);
+    },
+    { concurrency: settings.profile.runtime.queue_concurrency },
+  );
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

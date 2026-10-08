@@ -1,7 +1,15 @@
 import { sql, withActor, type Db } from "@hbe/db";
-import { installationEventSchema, type InstallationEvent } from "@hbe/github";
+import {
+  installationEventSchema,
+  issuesEventSchema,
+  pullRequestEventSchema,
+  pullRequestReviewEventSchema,
+  pushEventSchema,
+  type InstallationEvent,
+} from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
 import type { FastifyBaseLogger } from "fastify";
+import { handleIssue, handlePullRequest, handlePullRequestReview, handlePush } from "./activity.ts";
 
 export interface WorkerDeps {
   db: Db;
@@ -32,11 +40,23 @@ export async function processGithubEvent(deps: WorkerDeps, eventId: number): Pro
       case "installation":
         await handleInstallation(deps, installationEventSchema.parse(event.payload));
         break;
+      case "push":
+        await handlePush(deps, pushEventSchema.parse(event.payload));
+        break;
+      case "pull_request":
+        await handlePullRequest(deps, pullRequestEventSchema.parse(event.payload));
+        break;
+      case "pull_request_review":
+        await handlePullRequestReview(deps, pullRequestReviewEventSchema.parse(event.payload));
+        break;
+      case "issues":
+        await handleIssue(deps, issuesEventSchema.parse(event.payload));
+        break;
       case "ping":
         break;
       default:
-        // Stored for later phases (push, pull_request, issues normalisers arrive in Phase 1).
-        log.debug({ eventId, event: event.event }, "no handler for event type yet");
+        // Stored and kept for reconciliation; no normaliser needed for this event type.
+        log.debug({ eventId, event: event.event }, "no handler for event type");
     }
     await db
       .updateTable("github_events")
