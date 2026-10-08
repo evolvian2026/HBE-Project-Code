@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
@@ -62,8 +62,22 @@ export type Role = z.infer<typeof roles>;
 
 const OVERRIDE_PREFIX = "HBE__";
 
+/**
+ * Finds the repo's `config/` directory: HBE_CONFIG_DIR wins (set in Docker images); otherwise
+ * search upward from the working directory, then from this file (bundled builds move this file).
+ */
 export function defaultConfigDir(): string {
-  return resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../config");
+  const starts = [process.cwd(), dirname(fileURLToPath(import.meta.url))];
+  for (const start of starts) {
+    let dir = start;
+    for (;;) {
+      if (existsSync(resolve(dir, "config", "profiles"))) return resolve(dir, "config");
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  throw new Error("Could not find config/profiles; set HBE_CONFIG_DIR");
 }
 
 /** Values in env overrides are parsed as JSON when possible (numbers, booleans, arrays), else kept as strings. */

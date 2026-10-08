@@ -1,0 +1,141 @@
+-- Test helpers. Files run in alphabetical order, so this one installs the
+-- helpers (committed, not rolled back) before the other test files use them.
+-- Nothing here is part of the migrations or ships to any deployed database.
+
+create extension if not exists pgtap with schema extensions;
+
+create schema if not exists tests;
+grant usage on schema tests to authenticated;
+
+-- Named fixture ids, filled in by each test file inside its own transaction.
+create table if not exists tests.ids (name text primary key, id uuid not null);
+grant select on tests.ids to authenticated;
+
+create or replace function tests.id(p_name text) returns uuid
+language sql stable security definer set search_path = '' as $$
+  select id from tests.ids where name = p_name;
+$$;
+
+-- Creates an auth user (the profile is created by the on_auth_user_created trigger)
+-- and optionally a linked GitHub identity.
+create or replace function tests.create_user(
+  p_email text,
+  p_github_id bigint default null,
+  p_github_login text default null,
+  p_confirmed boolean default true
+) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  uid uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at,
+                          raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values (uid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', p_email,
+          case when p_confirmed then now() end,
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          jsonb_build_object('full_name', split_part(p_email, '@', 1)),
+          now(), now());
+
+  if p_github_id is not null then
+    insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at)
+    values (p_github_id::text, uid,
+            jsonb_build_object('sub', p_github_id::text, 'user_name', p_github_login),
+            'github', now(), now(), now());
+  end if;
+
+  return uid;
+end;
+$$;
+
+-- Switch to the `authenticated` role with the given user as JWT subject.
+-- Undo with `reset role;` in the test file.
+create or replace function tests.authenticate_as(p_user uuid) returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+                     jsonb_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+end;
+$$;
+
+-- Builds two institutions (alpha, beta) with users, courses, invitations and
+-- GitHub installations. Must be called as postgres inside the test transaction.
+create or replace function tests.seed_two_institutions() returns void
+language plpgsql set search_path = '' as $$
+begin
+  insert into tests.ids (name, id) values
+    ('super',     tests.create_user('super@test.local')),
+    ('admin_a',   tests.create_user('admin.a@test.local')),
+    ('teacher_a', tests.create_user('teacher.a@test.local')),
+    ('student_a', tests.create_user('student.a@test.local', 1001, 'student-a')),
+    ('admin_b',   tests.create_user('admin.b@test.local')),
+    ('student_b', tests.create_user('student.b@test.local', 2001, 'student-b')),
+    ('inst_a',    'aaaaaaaa-0000-4000-8000-000000000001'),
+    ('inst_b',    'bbbbbbbb-0000-4000-8000-000000000001'),
+    ('course_a1', 'aaaaaaaa-0000-4000-8000-0000000000c1'),
+    ('course_a2', 'aaaaaaaa-0000-4000-8000-0000000000c2'),
+    ('course_b1', 'bbbbbbbb-0000-4000-8000-0000000000c1'),
+    ('gh_a',      'aaaaaaaa-0000-4000-8000-0000000000f1'),
+    ('gh_b',      'bbbbbbbb-0000-4000-8000-0000000000f1');
+
+  insert into public.user_roles (user_id, role) values (tests.id('super'), 'super_admin');
+
+  insert into public.institutions (id, name, slug) values
+    (tests.id('inst_a'), 'Alpha University', 'alpha'),
+    (tests.id('inst_b'), 'Beta College', 'beta');
+
+  insert into public.institution_memberships (institution_id, user_id, role) values
+    (tests.id('inst_a'), tests.id('admin_a'), 'admin'),
+    (tests.id('inst_a'), tests.id('teacher_a'), 'teacher'),
+    (tests.id('inst_a'), tests.id('student_a'), 'student'),
+    (tests.id('inst_b'), tests.id('admin_b'), 'admin'),
+    (tests.id('inst_b'), tests.id('student_b'), 'student');
+
+  insert into public.github_installations (id, institution_id, installation_id, account_id, account_login, account_type) values
+    (tests.id('gh_a'), tests.id('inst_a'), 501, 9001, 'alpha-cs', 'Organization'),
+    (tests.id('gh_b'), tests.id('inst_b'), 502, 9002, 'beta-cs', 'Organization');
+  insert into public.github_installations (institution_id, installation_id, account_id, account_login, account_type)
+    values (null, 503, 9003, 'unlinked-org', 'Organization');
+
+  insert into public.courses (id, institution_id, code, name, term, github_installation_id) values
+    (tests.id('course_a1'), tests.id('inst_a'), 'CS101', 'Web Development', '2026-T1', tests.id('gh_a')),
+    (tests.id('course_a2'), tests.id('inst_a'), 'CS201', 'Databases', '2026-T1', null),
+    (tests.id('course_b1'), tests.id('inst_b'), 'FS100', 'Full-Stack Basics', '2026-T1', tests.id('gh_b'));
+
+  insert into public.course_memberships (institution_id, course_id, user_id, role) values
+    (tests.id('inst_a'), tests.id('course_a1'), tests.id('teacher_a'), 'instructor'),
+    (tests.id('inst_a'), tests.id('course_a1'), tests.id('student_a'), 'student'),
+    (tests.id('inst_b'), tests.id('course_b1'), tests.id('student_b'), 'student');
+
+  insert into public.invitations (institution_id, email, role) values
+    (tests.id('inst_a'), 'pending.a@test.local', 'student'),
+    (tests.id('inst_b'), 'pending.b@test.local', 'student');
+
+  insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
+    (tests.id('inst_a'), tests.id('admin_a'), 7001),
+    (tests.id('inst_b'), tests.id('admin_b'), 7002);
+end;
+$$;
+
+-- Rows in every tenant-owned table that the *current* role can see for an institution.
+-- SECURITY INVOKER, so RLS applies. Add every new tenant-owned table here.
+create or replace function tests.visible_rows(p_institution uuid) returns table (tbl text, n bigint)
+language sql security invoker set search_path = '' as $$
+  select 'institutions', count(*) from public.institutions where id = p_institution
+  union all select 'institution_memberships', count(*) from public.institution_memberships where institution_id = p_institution
+  union all select 'courses', count(*) from public.courses where institution_id = p_institution
+  union all select 'course_memberships', count(*) from public.course_memberships where institution_id = p_institution
+  union all select 'invitations', count(*) from public.invitations where institution_id = p_institution
+  union all select 'audit_logs', count(*) from public.audit_logs where institution_id = p_institution
+  union all select 'github_installations', count(*) from public.github_installations where institution_id = p_institution
+  union all select 'github_link_requests', count(*) from public.github_link_requests where institution_id = p_institution
+  union all select 'github_events', count(*) from public.github_events where institution_id = p_institution
+$$;
+
+grant execute on all functions in schema tests to authenticated;
+
+begin;
+select plan(1);
+select ok(true, 'test helpers installed');
+select * from finish();
+commit;
