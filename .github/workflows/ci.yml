@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Validate config templates parse
+        run: pnpm --filter @hbe/settings test
+
+  integration:
+    name: Database, integration and end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start local Supabase (Postgres, Auth, REST, Mailpit)
+        run: pnpm db:start
+
+      - name: Database tests (pgTAP) and schema lint
+        run: |
+          pnpm db:test
+          pnpm db:lint
+
+      - name: Integration tests (db, queue, server)
+        run: pnpm test:integration
+
+      - name: Build web and server
+        run: pnpm build
+
+      - name: Start the app (single process, all roles)
+        run: |
+          eval "$(pnpm -s exec supabase status -o env | sed 's/^/export SB_/')"
+          cat > "$RUNNER_TEMP/app.env" <<ENV
+          NODE_ENV=production
+          HBE_ENV=local
+          HBE_PLAN_PROFILE=free
+          ROLES=web,api,worker
+          PORT=3000
+          APP_URL=http://localhost:3000
+          API_URL=http://localhost:3000
+          SUPABASE_URL=${SB_API_URL}
+          SUPABASE_PUBLISHABLE_KEY=${SB_PUBLISHABLE_KEY}
+          SUPABASE_SECRET_KEY=${SB_SECRET_KEY}
+          DATABASE_URL=${SB_DB_URL}
+          QUEUE_DATABASE_URL=${SB_DB_URL}
+          GITHUB_APP_ID=1
+          GITHUB_APP_PRIVATE_KEY_BASE64=eA==
+          GITHUB_APP_SLUG=hbe-ci
+          GITHUB_WEBHOOK_SECRET=ci-secret
+          GRADER_REPO=hbe-ci/hbe-grader
+          EMAIL_FROM=HBE CI <ci@localhost>
+          TOKEN_ENCRYPTION_KEY=ci
+          ENV
+          cd apps/server
+          nohup node --env-file="$RUNNER_TEMP/app.env" dist/main.js > "$RUNNER_TEMP/app.log" 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/healthz && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/app.log"; exit 1
+
+      - name: Install Playwright browser
+        run: pnpm --filter @hbe/e2e exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report and app log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            ${{ runner.temp }}/app.log
+          retention-days: 7
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: hbe-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

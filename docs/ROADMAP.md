@@ -5,7 +5,17 @@ tests run, a teacher sees the result, the grade is archived and reaches the LMS)
 it. Multi-tenancy is in the schema from the first migration, because adding it later is very
 expensive. Durations assume 2–3 developers and are indicative only.
 
-## Phase 0: Foundations (2 weeks)
+## Phase 0: Foundations (2 weeks) — ✅ built
+
+Done: monorepo and CI; tenancy migrations with RLS, composite FKs and audit log; 66 pgTAP checks;
+Supabase Auth (GitHub + email) with access token hook and invitation acceptance; super admin
+console; institution switcher; role-aware institution pages; GitHub webhook intake, worker and
+secure organisation linking; single Docker image with `ROLES`; settings package; ADRs 0001–0014;
+Playwright end-to-end tests.
+
+Carried into Phase 1: MFA enrolment UI and enforcement for admins (FR-1.3), invitation
+management UI for institution admins, and deploying the free-tier demo environment.
+
 - Monorepo scaffold (pnpm, Turborepo, TS strict, ESLint/Prettier, Vitest), CI on PRs
 - Local Supabase stack; first migrations: institutions, profiles, institution and course
   memberships, `institution_id` + composite FKs convention; pgTAP **tenant-isolation** harness

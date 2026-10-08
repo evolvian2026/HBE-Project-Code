@@ -30,9 +30,10 @@ pnpm config:check path/to/file.env    # validate an env file before deploying
 |------|---------|
 | `config/profiles/free.yaml` | Free-tier limits: low concurrency, short retention for temporary data, GitHub-hosted runners, `pg_dump` backups, run quotas within the 2,000-minute budget |
 | `config/profiles/paid.yaml` | Production limits: self-hosted runners, PITR backups, SAML SSO enabled, larger quotas |
-| `config/env/local.env.example` | Local development (`supabase start`) |
+| `config/env/local.env.example` | Local development: `pnpm env:local` turns it into `.env.local` with the local stack's keys |
 | `config/env/demo-render.env.example` | Free-tier demo on Render + Supabase Free |
 | `config/env/production-aws.env.example` | EC2 + Supabase Pro. Lines that differ from the demo are commented `CHANGED` |
+| `Dockerfile` | One image for every role; `WEB_DIR` and `HBE_CONFIG_DIR` are set inside it |
 | `render.yaml` | Render Blueprint for the demo (one free Docker service, Singapore) |
 | `deploy/aws/docker-compose.prod.yml` | EC2 stage A: the same image as `web` / `api` / `worker` containers, plus Caddy |
 | `deploy/aws/Caddyfile` | TLS and routing for the same `app.` / `api.` hostnames |

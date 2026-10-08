@@ -205,8 +205,10 @@ Three layers:
    assigned to.
 
 A **Custom Access Token Hook** (Postgres function) puts `platform_role` and the list of
-`{institution_id, role}` pairs into the JWT, so the UI and API can gate routes without an extra
-query. Per-course checks always go to the database, because they change too often to cache in a token.
+`{institution_id, slug, role}` entries into the JWT, for UI routing only. Every authorisation
+decision (RLS helpers and the API's permission checks) reads current memberships from the
+database, so removing or demoting someone takes effect immediately
+([ADR 0012](adr/0012-authorisation-reads-database.md)).
 
 ### 4.4 Enforcement layers
 

@@ -130,67 +130,47 @@ erDiagram
 
 ## 3. RLS pattern
 
+Implemented in `supabase/migrations/20261008000001_tenancy_core.sql`. Policy helpers live in a
+`private` schema (not exposed through the Data API), are `SECURITY DEFINER`, and read
+memberships from the **database**, never from JWT claims, so removing or demoting a member takes
+effect immediately ([ADR 0012](adr/0012-authorisation-reads-database.md)).
+
 ```sql
--- Institutions the current user belongs to (from the JWT claim written by the access token hook)
-create function public.current_institution_ids() returns uuid[]
-language sql stable as $$
-  select coalesce(
-    array(select (x->>'institution_id')::uuid
-          from jsonb_array_elements(auth.jwt()->'institutions') x),
-    '{}');
-$$;
-
-create function public.is_institution_admin(iid uuid) returns boolean
+-- Institutions where the caller is an active member and the institution is usable
+create function private.my_institution_ids() returns uuid[]
 language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.institution_memberships
-                 where institution_id = iid and user_id = (select auth.uid())
-                   and role = 'admin' and status = 'active');
+  select coalesce(array_agg(m.institution_id), '{}')
+  from public.institution_memberships m
+  join public.institutions i on i.id = m.institution_id
+  where m.user_id = (select auth.uid()) and m.status = 'active'
+    and i.status in ('active', 'read_only');
 $$;
 
-create function public.is_course_staff(cid uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.course_memberships
-                 where course_id = cid and user_id = (select auth.uid())
-                   and role in ('instructor','ta'));
-$$;
+-- Also: private.is_super_admin(), private.has_institution_role(iid, roles[]),
+--       private.has_course_role(cid, roles[]), private.institution_is_writable(iid)
 
-create function public.owns_submission(sid uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.submissions s
-    left join public.team_members tm on tm.team_id = s.team_id
-    where s.id = sid and (s.user_id = (select auth.uid()) or tm.user_id = (select auth.uid())));
-$$;
+create policy courses_select on public.courses for select to authenticated
+  using (
+    private.has_institution_role(institution_id, '{admin,teacher}')
+    or private.has_course_role(id, '{instructor,ta,student}')
+  );
 
--- Example: evaluation runs. The tenant check comes first, then the role check.
-alter table public.evaluation_runs enable row level security;
-
-create policy "tenant: students read own runs" on public.evaluation_runs
-  for select to authenticated
-  using (institution_id = any (public.current_institution_ids())
-         and public.owns_submission(submission_id));
-
-create policy "tenant: staff and admins read runs" on public.evaluation_runs
-  for select to authenticated
-  using (institution_id = any (public.current_institution_ids())
-         and (public.is_institution_admin(institution_id)
-              or public.is_course_staff(
-                   (select a.course_id from public.submissions s
-                    join public.assignments a on a.id = s.assignment_id
-                    where s.id = submission_id))));
-
--- No insert/update policies: only the service role (worker) writes runs.
-
--- Students see grades and reports only after release
-create policy "students read released grades" on public.grades
-  for select to authenticated
-  using (institution_id = any (public.current_institution_ids())
-         and released_at is not null and is_current
-         and user_id = (select auth.uid()));
+create policy courses_insert on public.courses for insert to authenticated
+  with check (private.has_institution_role(institution_id, '{admin,teacher}')
+              and private.institution_is_writable(institution_id));
 ```
 
-Tenant isolation is tested with pgTAP. For every table, create two institutions with data,
-sign in as each role in institution A, and assert that zero rows from B are returned.
+Rules of thumb:
+- Super admins see platform data (institutions, installations) but **not** tenant data such as
+  memberships or courses; that will need an audited support-access grant.
+- Suspended institutions are invisible to their members; read-only ones accept no writes.
+- Server code connects as the table owner and bypasses RLS, so it authorises through
+  `packages/core` and always filters by `institution_id`.
+
+Tenant isolation is tested with pgTAP (`supabase/tests/database`). Two institutions are seeded,
+and for every role the tests assert that nothing from the other institution is visible.
+`tests.visible_rows()` lists every tenant-owned table, and a guard test fails if a new table with
+`institution_id` is not added to it.
 
 ## 4. Indexes worth having from day one
 

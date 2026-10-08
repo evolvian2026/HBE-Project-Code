@@ -20,7 +20,9 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
-    "db:lint": "supabase db lint --level warning"
+    "db:lint": "supabase db lint --level warning",
+    "test:e2e": "pnpm --filter @hbe/e2e test:e2e",
+    "env:local": "node scripts/local-env.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

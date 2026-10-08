@@ -1,14 +1,15 @@
-import type { NextConfig } from "next";
-
 // Local development reads the same .env.local as the server (repo root). Deployed
 // processes get their environment from the platform instead.
-try {
-  process.loadEnvFile("../../.env.local");
-} catch {
-  // no local env file
+if (process.env.NODE_ENV === "development") {
+  try {
+    process.loadEnvFile("../../.env.local");
+  } catch {
+    // no local env file
+  }
 }
 
-const config: NextConfig = {
+/** @type {import("next").NextConfig} */
+const config = {
   poweredByHeader: false,
   // The repo-wide ESLint run covers this app.
   eslint: { ignoreDuringBuilds: true },

@@ -30,7 +30,8 @@ x-app: &app
 services:
   web:
     <<: *app
-    environment: { ROLES: web, PORT: "3000" }
+    # Server-side calls from the web app go straight to the api container.
+    environment: { ROLES: web, PORT: "3000", INTERNAL_API_URL: "http://api:4000" }
 
   api:
     <<: *app

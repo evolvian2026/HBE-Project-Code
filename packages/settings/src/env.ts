@@ -21,6 +21,8 @@ export const envSchema = z.object({
 
   APP_URL: url,
   API_URL: url,
+  /** Private address of the api role for server-side calls from web (e.g. http://api:4000). */
+  INTERNAL_API_URL: url.optional(),
 
   SUPABASE_URL: url,
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
