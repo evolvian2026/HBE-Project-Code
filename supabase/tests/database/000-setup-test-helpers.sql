@@ -212,6 +212,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'rubric_scores', count(*) from public.rubric_scores where institution_id = p_institution
   union all select 'feedback', count(*) from public.feedback where institution_id = p_institution
   union all select 'grades', count(*) from public.grades where institution_id = p_institution
+  union all select 'submission_overview', count(*) from public.submission_overview where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

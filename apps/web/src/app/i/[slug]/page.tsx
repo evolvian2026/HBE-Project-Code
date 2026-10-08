@@ -1,5 +1,8 @@
+import { formatInZone } from "@hbe/core";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { OVERVIEW_COLUMNS, type OverviewRow } from "@/components/course-matrix";
+import { fmt } from "@/components/grade";
 import { Alert, Badge, Button, Card, EmptyState } from "@/components/ui";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -49,6 +52,56 @@ export default async function InstitutionOverview({ params, searchParams }: Prop
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
+  // My assignments (students): what's due, how the tests look, and released grades.
+  const mine = ((
+    await supabase
+      .from("submission_overview")
+      .select(`${OVERVIEW_COLUMNS}, course_id`)
+      .eq("user_id", session.userId)
+      .eq("institution_id", institution.id)
+  ).data ?? []) as unknown as (OverviewRow & { course_id: string })[];
+  const [myAssignments, myExtensions] = mine.length
+    ? await Promise.all([
+        supabase
+          .from("assignments")
+          .select("id, title, due_at, course:courses(code, timezone)")
+          .in(
+            "id",
+            mine.map((m) => m.assignment_id),
+          ),
+        supabase.from("assignment_extensions").select("assignment_id, due_at").eq("user_id", session.userId),
+      ])
+    : [null, null];
+  const assignmentById = new Map(
+    (
+      (myAssignments?.data ?? []) as unknown as {
+        id: string;
+        title: string;
+        due_at: string;
+        course: { code: string; timezone: string } | null;
+      }[]
+    ).map((a) => [a.id, a]),
+  );
+  const extensionDue = new Map(
+    ((myExtensions?.data ?? []) as { assignment_id: string; due_at: string }[]).map((x) => [x.assignment_id, x.due_at]),
+  );
+  const myWork = mine
+    .filter((m) => assignmentById.has(m.assignment_id))
+    .map((m) => {
+      const a = assignmentById.get(m.assignment_id)!;
+      return { ...m, a, due: extensionDue.get(m.assignment_id) ?? a.due_at };
+    })
+    // Open work first, soonest deadline first; then finished work, most recent first.
+    .sort((x, y) =>
+      Boolean(x.finalized_at) !== Boolean(y.finalized_at)
+        ? x.finalized_at
+          ? 1
+          : -1
+        : x.finalized_at
+          ? y.due.localeCompare(x.due)
+          : x.due.localeCompare(y.due),
+    );
+
   const counts: Record<string, number> = { admin: 0, teacher: 0, student: 0 };
   for (const m of members.data ?? []) counts[m.role] = (counts[m.role] ?? 0) + 1;
   const activeInstallations = (installations.data ?? []).filter((i) => !i.deleted_at);
@@ -66,6 +119,51 @@ export default async function InstitutionOverview({ params, searchParams }: Prop
             </Card>
           ))}
         </div>
+      )}
+
+      {myWork.length > 0 && (
+        <Card title="My assignments">
+          <ul className="divide-y divide-border">
+            {myWork.map((w) => {
+              const tests =
+                w.latest_run_summary?.total !== undefined
+                  ? `${w.latest_run_summary.passed}/${w.latest_run_summary.total} tests passing`
+                  : null;
+              return (
+                <li key={w.submission_id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                  <span>
+                    <Link
+                      href={`/i/${slug}/courses/${w.course_id}/assignments/${w.assignment_id}`}
+                      className="font-medium hover:text-accent"
+                    >
+                      {w.a.title}
+                    </Link>
+                    <span className="text-muted">
+                      {" · "}
+                      {w.a.course?.code} · due {formatInZone(w.due, w.a.course?.timezone ?? "UTC")}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {w.final_score !== null ? (
+                      <Badge tone="success">grade {fmt(w.final_score)}</Badge>
+                    ) : w.status === "missing" ? (
+                      <Badge tone="danger">nothing submitted</Badge>
+                    ) : w.finalized_at ? (
+                      <Badge tone="accent">{w.late_days ? `submitted ${w.late_days}d late` : "submitted"}</Badge>
+                    ) : (
+                      <>
+                        {tests && <span className="text-muted">{tests}</span>}
+                        <Badge tone={new Date(w.due) < new Date() ? "warning" : "neutral"}>
+                          {new Date(w.due) < new Date() ? "late window" : "open"}
+                        </Badge>
+                      </>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
 
       <Card

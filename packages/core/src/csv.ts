@@ -43,3 +43,19 @@ export function parseCsv(text: string): string[][] {
   }
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
+
+export type CsvCell = string | number | boolean | null | undefined;
+
+/**
+ * Writes RFC 4180 CSV (CRLF line ends). Text that a spreadsheet would run as a formula
+ * (starting with =, +, -, @, tab or carriage return) is prefixed with an apostrophe.
+ */
+export function toCsv(rows: CsvCell[][]): string {
+  const cell = (value: CsvCell): string => {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
+}

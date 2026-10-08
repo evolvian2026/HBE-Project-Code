@@ -168,6 +168,35 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await expect(card.getByText(/Adjusted by your instructor/)).toBeVisible();
   await expect(student.getByText("Bonus for the excellent tests")).toHaveCount(0);
 
+  // The course dashboard shows the released grade, and the export has it.
+  await teacher.goto(`/i/${slug}/courses/${course!.id}`);
+  const row = teacher
+    .getByTestId("course-matrix")
+    .getByRole("row")
+    .filter({ hasText: email("student") });
+  await expect(row.getByRole("link")).toHaveText("55 ✓");
+  const csv = await (await teacher.request.get(`/i/${slug}/courses/${course!.id}/grades.csv`)).text();
+  const [header, line] = csv
+    .replace(/^\ufeff/, "")
+    .trim()
+    .split("\r\n");
+  const record = Object.fromEntries(header!.split(",").map((h, i) => [h, line!.split(",")[i]]));
+  expect(record).toMatchObject({
+    Email: email("student"),
+    Assignment: "Todo API",
+    Status: "graded",
+    Tests: "50",
+    Rubric: "80",
+    Calculated: "50",
+    Override: "55",
+    Final: "55",
+    Released: "yes",
+  });
+
+  // And the student's overview lists it.
+  await student.goto(`/i/${slug}`);
+  await expect(student.locator("section").filter({ hasText: "My assignments" }).getByText("grade 55")).toBeVisible();
+
   await studentCtx.close();
   await teacherCtx.close();
 });
