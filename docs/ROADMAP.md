@@ -11,12 +11,14 @@ expensive. Durations assume 2–3 developers and are indicative only.
   memberships, `institution_id` + composite FKs convention; pgTAP **tenant-isolation** harness
 - Supabase Auth: GitHub (students) + email (staff); Custom Access Token Hook with institution claims
 - Super admin can create an institution; institution switcher in the UI
-- Render Blueprint for `web` + `api` on staging; custom domain on a staging subdomain
+- Single Dockerfile with `ROLES` switch; `packages/queue` on pg-boss
+- **Free-tier demo environment** (DEPLOYMENT.md §1): Render free (Singapore) + Supabase free
+  (Singapore); `app.`/`api.` custom domains; keep-awake pg_cron job; nightly `pg_dump` to R2
 - Dev GitHub App + test org; webhook endpoint with signature verification, `github_events`
   inbox, installation-to-institution mapping
 - ADRs recording decisions D1–D11 from ARCHITECTURE §1
 
-**Exit:** two test institutions on `staging.example.com`, with users in each who can't see
+**Exit:** two test institutions on the demo environment, with users in each who can't see
 each other's data (proven by tests); webhooks land in the DB.
 
 ## Phase 1: MVP vertical slice (6–8 weeks)
@@ -24,7 +26,7 @@ each other's data (proven by tests); webhooks land in the DB.
 - **Stack profiles v1**: two global profiles (e.g. MERN and Django + React), with adapters and
   template repos; contract validator stage
 - Teacher: create and publish an assignment locked to a stack profile → repos provisioned
-- Worker + BullMQ: webhook normalisation, commit attribution, meaningful-commit filter
+- Worker role (pg-boss): webhook normalisation, commit attribution, meaningful-commit filter
 - Grader v1: private grader repo, `evaluate.yml`, Compose harness, API + Playwright stages,
   randomised test data, OIDC-authenticated results, full failure evidence for students
 - Check Run on the student commit; run history and run detail pages
@@ -42,20 +44,31 @@ report archived and downloadable.
 - **LMS integration**: LTI 1.3 tool (login, launch, deep linking, JWKS, dynamic registration)
   tested against Canvas and Moodle; AGS grade passback; Google Classroom courseWork + grade
   passback; sync panel with retry; roster sync (NRPS / Classroom); nightly reconciliation
-- Archive replication to an external write-once bucket; restore drill
+- Archive replication to R2; contract-end, export-notice and purge workflow (contract + 2 years)
 - Inline code review UI and PR review mirroring; extensions; regrade requests; bulk re-run
 - Team assignments with contribution-share flags; commit claims workflow
-- Reconciliation cron jobs, stale-run reaper, per-institution quotas and concurrency caps
+- Reconciliation schedules, stale-run reaper, per-institution quotas and concurrency caps
 - Realtime run status; email notifications
 - Institution admin: settings, stack-profile management, LMS connections, SSO (SAML), audit
   log, usage; super admin console
 - Observability, load test at NFR-1 targets, accessibility audit, security review / pen-test
   of the tenant isolation, auth, LTI and grader paths
 
-**Exit:** second and third institutions onboarded, with grades flowing to their LMSs.
+**Exit:** second and third institutions onboarded on the demo stack, with grades flowing to
+their LMSs.
+
+## Phase 2.5: Move to production on AWS (1–2 weeks)
+- Terraform `deploy/aws/` (stage A single host: EC2 t4g.medium, ASG of 1, Caddy, SSM, ECR,
+  CloudWatch); S3 archive bucket with Object Lock
+- Upgrade Supabase to Pro (PITR) in Singapore; turn off `DEMO_MODE` retention overrides
+- DNS cutover following DEPLOYMENT.md §3; Render kept as a 48-hour rollback
+- Grader runner stack in a separate `hbe-grader` AWS account (ephemeral EC2 spot runners)
+
+**Exit:** production on EC2 with no code changes from the demo; runners in Singapore, paid by
+the platform.
 
 ## Phase 3: Scale & extend (ongoing)
-- Self-hosted ephemeral runners; per-institution runner pools
+- Stage B high availability (ALB + multi-AZ Auto Scaling group) when uptime needs require it
 - More stack profiles (Spring Boot, .NET, Laravel, …) contributed by institutions
 - Analytics: per-test failure heat-maps, cohort comparisons across terms, at-risk prediction
 - Optional stages: Lighthouse, Semgrep, coverage, similarity detection
@@ -71,7 +84,8 @@ report archived and downloadable.
 | "Any stack" makes the harness brittle | Curated, versioned stack profiles with adapters; black-box hidden tests; contract validator fails fast |
 | LMS differences and API limits (Classroom only accepts grades on coursework the platform created) | Adapter per LMS, platform creates Classroom courseWork itself, idempotent syncs, reconciliation report |
 | Losing records if GitHub or the LMS deletes data | Snapshots and reports in Storage, replicated to a write-once external bucket |
-| Actions minutes at deadline peaks | Education benefits, debounce + quotas, self-hosted runners, queue instead of drop |
+| Free-tier limits during demos (sleep, 512 MB RAM, 500 MB DB, 2,000 Actions minutes) | Keep-awake job, single process with low concurrency, demo retention overrides, run quotas and a monthly minutes budget |
+| Runner cost (the platform pays) at deadline peaks | Debounce + quotas, spot instances, max-instance cap, AWS Budgets alerts, per-institution usage reports |
 | Flaky E2E tests causing unfair grades | Deterministic harness, retry-once for E2E tests with flake tracking, infra-error classification, teacher re-run |
 | RLS mistakes leaking data across courses | pgTAP tests per policy, service-role use limited to api/worker, security review |
 | Webhook loss | Persist first, redelivery cron, periodic reconciliation |

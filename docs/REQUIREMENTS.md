@@ -14,7 +14,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | TA | Course-scoped helper with review/grading rights but no course configuration rights. |
 | Institution admin | Manages users, roles, courses, stack profiles, GitHub orgs, LMS connections and settings for one institution. |
 | Super admin | Platform operator: creates and manages institutions, global stack profiles, platform health. |
-| System | GitHub App, worker, cron jobs, grader runners. |
+| System | GitHub App, worker role (jobs + schedules), grader runners. |
 
 ---
 
@@ -27,7 +27,8 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-0.2 | All data is isolated per institution; no user can read another institution's data unless they are a member of it. | M |
 | FR-0.3 | A user may belong to several institutions with different roles, and can switch between them. | M |
 | FR-0.4 | Each institution connects its own GitHub org(s), LMS connections, SSO, branding, quotas and retention policy. | M |
-| FR-0.5 | Per-institution usage reporting: active users, evaluation runs, Actions minutes, storage. | S |
+| FR-0.5 | Per-institution usage reporting: active users, evaluation runs, runner minutes, storage. The platform pays for compute, so usage reports drive plan limits. | M |
+| FR-0.7 | Contract lifecycle: set the contract end date, which makes the institution read-only and schedules the purge 2 years later. | S |
 | FR-0.6 | Per-institution subdomain or vanity domain. | C |
 
 ### FR-1 Authentication & accounts
@@ -136,6 +137,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-9.3 | Teachers and admins can view any student's full performance history (all courses, terms, submissions, reports), including archived courses. | M |
 | FR-9.4 | Students can view and download their own released grade reports at any time. | M |
 | FR-9.5 | Archived records are replicated to an external write-once bucket. | S |
+| FR-9.7 | Records are kept for the contract plus 2 years. Institution admins get export notices 90 and 30 days before the purge, plus a full export (ZIP of reports, snapshots and CSVs). | S |
 | FR-9.6 | Institution admins handle erasure requests by anonymising or deleting, according to policy, with an audit record. | S |
 
 ### FR-10 LMS integration
@@ -159,10 +161,11 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | NFR-2 | Latency | p95 page load under 2 s; p95 API under 300 ms (excluding GitHub calls); webhook ack under 500 ms; webhook to visible in UI under 30 s. |
 | NFR-3 | Evaluation time | Typical run under 10 minutes end to end; hard job timeout 20 minutes. |
 | NFR-4 | Availability | 99.5% monthly for web/api; no lost webhooks (persist first, reconcile later). |
-| NFR-5 | Durability | Supabase daily backups plus PITR in production; Storage records replicated to an external write-once bucket; RPO ≤ 1 h (DB) / 24 h (objects), RTO ≤ 4 h; quarterly restore drill. Submission snapshots and grade reports are never deleted except under an institution's retention or erasure policy. |
+| NFR-5 | Durability & retention | Production: Supabase daily backups plus PITR, Storage records replicated to S3 with Object Lock, RPO ≤ 1 h (DB) / 24 h (objects), RTO ≤ 4 h, quarterly restore drill. Demo: nightly `pg_dump` to R2. Records are kept for the contract plus **2 years**, then purged after export notices (ARCHITECTURE §12.5). |
+| NFR-15 | Cost / free-tier demo | The full flow must run on free tiers (Render, Supabase, GitHub, R2, Resend) for demos, within their limits (DEPLOYMENT.md §1.2). Moving to EC2 must need no code changes and no change of hostnames. |
 | NFR-6 | Security | OWASP ASVS L2 as the baseline; RLS on all user-data tables with tenant isolation tests for every table; LTI launches validated (nonce, state, issuer, deployment); LMS OAuth tokens encrypted at rest; secrets only in Render env groups / GitHub secrets; webhook HMAC; OIDC for grader callbacks; CSP, HSTS, secure cookies; dependency scanning (Dependabot/Renovate); least-privilege GitHub App. |
 | NFR-7 | Isolation | Untrusted student code never runs on platform infrastructure (ARCHITECTURE §6.4). |
-| NFR-8 | Privacy | FERPA/GDPR-aligned: data minimisation, retention policy, export and delete on request, DPAs with vendors, no PII in logs. |
+| NFR-8 | Privacy & residency | All platform data is hosted in **Singapore** (Supabase ap-southeast-1, Render singapore, AWS ap-southeast-1). Baseline is Singapore's PDPA plus institution-specific rules. Data minimisation, export and delete on request, DPAs with vendors, no PII in logs; the privacy notice discloses GitHub-hosted data. |
 | NFR-9 | Auditability | All grade-affecting and permission-affecting actions recorded with actor, time, before/after. |
 | NFR-10 | Accessibility | WCAG 2.1 AA. |
 | NFR-11 | Observability | Structured logs, error tracking, tracing, alerting (ARCHITECTURE §11). |
@@ -180,7 +183,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | Monorepo | pnpm workspaces + Turborepo | Nx |
 | Frontend | Next.js (App Router), React, Tailwind CSS, shadcn/ui, TanStack Query/Table, Monaco diff viewer, Recharts | Remix, SvelteKit |
 | API | Fastify + Zod + OpenAPI generation | NestJS (heavier), Next.js route handlers (fine for MVP) |
-| Jobs | BullMQ on Render Key Value | Supabase Queues (pgmq) / pg-boss: fewer services, less tooling |
+| Jobs & schedules | **pg-boss** (Postgres-backed) behind `packages/queue` | BullMQ + Redis (needs Redis, which the free tier lacks), Supabase Queues (pgmq, no built-in cron) |
 | DB access | supabase-js (RLS, from web); Kysely with generated types (api/worker) | Drizzle, Prisma |
 | Database / Auth / Storage / Realtime | Supabase | — |
 | GitHub | GitHub App, Octokit (`@octokit/app`, `@octokit/webhooks`), GraphQL for bulk reads | — |
@@ -188,9 +191,10 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | Email | Resend or Postmark (also used as Supabase SMTP) | SES |
 | LMS | LTI 1.3 Advantage via `jose` (Canvas, Moodle); `googleapis` Classroom client | ltijs |
 | Reports | `@react-pdf/renderer` (PDF), canonical JSON + SHA-256 | Headless Chromium |
-| Archive backup | Cloudflare R2 or Backblaze B2 with object lock | AWS S3 |
+| Archive backup | Cloudflare R2 free (demo) → S3 ap-southeast-1 with Object Lock (production) | Backblaze B2 |
 | Observability | pino, Sentry, OpenTelemetry → Grafana Cloud/Honeycomb | Datadog |
-| Hosting | Render (web, api, worker, cron, Key Value) | — |
+| Hosting | **Demo:** Render free web service (Singapore), all roles in one container. **Production:** AWS EC2 ap-southeast-1 with Docker Compose + Caddy, later ALB + Auto Scaling group; Terraform; ECR; SSM | ECS Fargate, Render paid |
+| Grader compute | GitHub-hosted runners (demo) → ephemeral self-hosted EC2 spot runners via `terraform-aws-github-runner` (production); **paid by the platform** | — |
 | DNS / domain | Any registrar; Cloudflare DNS recommended (proxy **off** for Render records) | — |
 | Platform testing | Vitest, Playwright, pgTAP, MSW for GitHub API mocks | Jest |
 
@@ -218,17 +222,11 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 |---|----------|----------|-----------------------|
 | Q1 | Tenancy | **Multiple institutions** on one deployment, isolated by `institution_id` + RLS | ARCHITECTURE §4.1, FR-0, DATA_MODEL |
 | Q2 | Tech stacks | **Any stack**; the teacher/admin fixes one **stack profile** per project | ARCHITECTURE §6.1, FR-3.1a/b |
-| Q3 | Volume and persistence | About **100 concurrent students**; **all submissions and grade reports stored permanently** and viewable at any time | NFR-1, NFR-5, ARCHITECTURE §12, FR-9 |
+| Q3 | Volume and persistence | About **100 concurrent students**; all submissions and grade reports stored and viewable at any time | NFR-1, ARCHITECTURE §12, FR-9 |
 | Q4 | LMS | Grades **flow to Canvas, Moodle and Google Classroom**; the platform stays the system of record | ARCHITECTURE §13, FR-10 |
 | Q5 | Failure detail | Students see **enough detail to fix the problem**; test source stays hidden | ARCHITECTURE §6.5, FR-5.7 |
 | Q6 | Activity in grades | **Yes**: a process score is a standard grade component | ARCHITECTURE §5.4, FR-4.4a–c |
-
-### Still open
-
-1. **Data residency**: which regions must data stay in (e.g. India, EU, US)? This sets the
-   Supabase and Render regions. If institutions need different regions, we would need one
-   deployment per region.
-2. **Default retention period**: "permanent" in practice means until the institution's
-   contract ends plus N years. What is N?
-3. **Who pays for evaluation compute**: is it the platform (included in the plan) or each
-   institution (bring your own runners or GitHub org)?
+| Q7 | Data residency | **Singapore** (Supabase, Render and AWS all in ap-southeast-1 / singapore) | NFR-8, DEPLOYMENT |
+| Q8 | Retention | Contract **+ 2 years**, then purge after export notices | ARCHITECTURE §12, FR-9.7, NFR-5 |
+| Q9 | Who pays for evaluation compute | **The platform**: shared, platform-owned runner pool with per-institution quotas | ARCHITECTURE §6.7, DEPLOYMENT §2.4 |
+| Q10 | Hosting | **Free tiers for the demo**, then **AWS EC2** (Supabase stays managed, upgraded to Pro) | DEPLOYMENT, NFR-15 |

@@ -12,7 +12,7 @@ Management Platform. Read it with [REQUIREMENTS.md](./REQUIREMENTS.md) (what it 
 |---|----------|-----|
 | D1 | **TypeScript end to end, in a pnpm + Turborepo monorepo** | One language for UI, API, worker and test harness; shared types and Zod schemas. |
 | D2 | **Supabase is the system of record**: Postgres, Auth, Storage, Realtime | Requested; Row Level Security (RLS) gives defence in depth for multi-role access. |
-| D3 | **Render hosts our code only**: web app, API, worker, cron jobs, Key Value (Redis) | Requested; Render does not allow privileged Docker, so it must *not* run student code. |
+| D3 | **The app host runs our code only.** That's Render's free tier for the demo, then AWS EC2 (Singapore) in production, with one Docker image for both | Student code is never run on the app host. Using the same container image keeps the move to EC2 to a configuration change. |
 | D4 | **Student code runs on GitHub Actions runners, never on our servers** | Untrusted code needs throwaway isolated machines. Hosted runners give that at no ops cost; self-hosted ephemeral runners are the scale-up path. |
 | D5 | **Integrate through a GitHub App, not an OAuth App or PATs** | Fine-grained per-repo permissions, installation tokens that expire, webhooks, Check Runs, higher rate limits. |
 | D6 | **Webhook-first, async-by-default** | Webhooks are acknowledged in under a second and queued; all heavy work happens in the worker. Polling is only for reconciliation. |
@@ -34,17 +34,15 @@ flowchart LR
     A[Admin]
   end
 
-  subgraph Render["Render (our code)"]
-    WEB["web<br/>Next.js<br/>app.example.com"]
-    API["api<br/>Fastify<br/>api.example.com"]
-    WRK["worker<br/>BullMQ consumers"]
-    CRON["cron jobs<br/>sync / rollups / deadlines"]
-    KV[("Key Value<br/>(Redis) queues")]
+  subgraph Host["App host: Render free (demo) → AWS EC2 ap-southeast-1 (production)"]
+    WEB["web role<br/>Next.js<br/>app.example.com"]
+    API["api role<br/>Fastify<br/>api.example.com"]
+    WRK["worker role<br/>pg-boss jobs + schedules"]
   end
 
-  subgraph Supabase
+  subgraph Supabase["Supabase (Singapore)"]
     AUTH[Auth]
-    DB[("Postgres + RLS")]
+    DB[("Postgres + RLS<br/>+ pg-boss queue")]
     STO[(Storage)]
     RT[Realtime]
   end
@@ -52,7 +50,7 @@ flowchart LR
   subgraph GitHub
     APP[GitHub App]
     REPOS["Student repos<br/>(classroom org)"]
-    GRADER["Private grader repo<br/>+ Actions runners"]
+    GRADER["Private grader repo<br/>+ runners (hosted → EC2 ephemeral)"]
   end
 
   S & T & A --> WEB
@@ -61,15 +59,15 @@ flowchart LR
   WEB <-- live updates --> RT
   WEB --> AUTH
   REPOS -- webhooks --> API
-  API --> KV --> WRK
+  API -- enqueue --> DB
+  DB -- jobs --> WRK
   WRK -- installation tokens --> APP
   WRK -- create repos, Check Runs, PR comments --> REPOS
   WRK -- workflow_dispatch --> GRADER
   GRADER -- checkout @ SHA --> REPOS
   GRADER -- results (OIDC-authenticated) --> API
-  GRADER -- artifacts (signed URL) --> STO
-  API & WRK & CRON --> DB
-  WRK -- source snapshots, PDF reports --> STO
+  GRADER -- artifacts + source snapshot (signed URL) --> STO
+  WRK -- PDF reports --> STO
 
   subgraph LMSs["Institution LMSs"]
     LMS["Canvas / Moodle<br/>(LTI 1.3)"]
@@ -82,21 +80,24 @@ flowchart LR
 
 ### Components
 
-| Component | Tech | Render type | Responsibility |
-|-----------|------|-------------|----------------|
-| **web** | Next.js (App Router), React, Tailwind, shadcn/ui, TanStack Query, `@supabase/ssr` | Web Service | All UIs (student, teacher, admin); simple RLS-protected reads straight from Supabase; calls `api` for privileged operations. |
-| **api** | Fastify, Zod, `@octokit/app`, `jose` | Web Service (always on) | GitHub webhook receiver, privileged REST API, results callback from grader, signed upload URLs. Stateless; scales horizontally. |
-| **worker** | Node + BullMQ | Background Worker | Webhook processing, repo provisioning, evaluation orchestration, scoring, Check Runs / PR comments, submission snapshots and grade reports, LMS sync, notifications, email. |
-| **cron** | Node scripts | Cron Jobs | GitHub reconciliation sync, deadline cut-offs, metric rollups, stale-run reaper, retention cleanup. |
-| **Key Value** | Redis-compatible | Render Key Value | BullMQ queues, rate-limit counters, short-lived caches. Not a system of record. |
-| **Supabase** | Postgres 15+, Auth, Storage, Realtime | Managed | Data, identity, artifacts (logs, screenshots, Playwright traces), live dashboard updates. |
-| **grader** | Private GitHub repo with reusable workflows, hidden tests, Docker Compose harness, Playwright | GitHub Actions | Builds and runs each submission in isolation and reports structured results. |
+The platform's own code ships as **one Docker image** with three **roles**, selected by the
+`ROLES` environment variable. On the free tier, all three roles run in one process. On EC2
+they run as separate containers that can be scaled independently. The code is identical in
+both cases; see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-> **Why a separate `api` when Next.js has route handlers?** Webhooks and grader callbacks must be
-> always on, fast, and independent of UI deploys; long-running GitHub calls should not share a
-> process with page rendering. If you want fewer services for the MVP, the `api` routes can start
-> inside Next.js and be extracted later. Keep them in a separate package (`packages/core`) from
-> day one so the move is mechanical.
+| Role / component | Tech | Responsibility |
+|------------------|------|----------------|
+| **web** | Next.js (App Router), React, Tailwind, shadcn/ui, TanStack Query, `@supabase/ssr` | All UIs (student, teacher, admins); simple RLS-protected reads straight from Supabase; calls the `api` role for privileged operations. |
+| **api** | Fastify, Zod, `@octokit/app`, `jose` | GitHub webhook receiver, privileged REST API, grader results callback, LTI endpoints, signed upload URLs. Stateless. |
+| **worker** | Node + **pg-boss** | Webhook processing, repo provisioning, evaluation orchestration, scoring, Check Runs / PR comments, grade reports, LMS sync, notifications, email; also runs the **scheduled jobs** (pg-boss cron), so no separate cron service is needed. |
+| **Supabase** | Postgres 15+, Auth, Storage, Realtime | Data, identity, job queue (pg-boss schema), artifacts, snapshots, reports, live dashboard updates. |
+| **grader** | Private GitHub repo with reusable workflows, hidden tests, Docker Compose harness, Playwright | Builds and runs each submission in isolation, snapshots the graded source, and reports structured results. |
+
+> **Why pg-boss instead of Redis/BullMQ?** At about 100 concurrent students the job volume is
+> small. A Postgres-backed queue gives durable, transactional jobs (enqueue in the same
+> transaction as the data change) plus cron-style schedules. It needs no Redis, which the free
+> tier lacks and which would otherwise be one more thing to run on EC2. The queue sits behind a
+> `packages/queue` interface, so switching to BullMQ/SQS later only touches one package.
 
 ---
 
@@ -106,13 +107,13 @@ flowchart LR
 hbe-project-code/
 ├── apps/
 │   ├── web/                 # Next.js app (student / teacher / admin portals)
-│   ├── api/                 # Fastify: REST, webhooks, grader callbacks
-│   ├── worker/              # BullMQ job processors
-│   └── cron/                # Entry points for Render Cron Jobs
+│   └── server/              # Single entry point: Fastify api + pg-boss worker/schedules,
+│                            #   and (when ROLES includes web) serves the Next.js handler
 ├── packages/
 │   ├── core/                # Domain logic: scoring, policies, permissions (pure TS, unit-tested)
 │   ├── db/                  # Generated Supabase types, query helpers (Kysely), repositories
 │   ├── github/              # GitHub App client, webhook schemas, token cache, rate-limit handling
+│   ├── queue/               # Queue + schedule interface (pg-boss implementation)
 │   ├── contracts/           # Zod schemas shared by api/web/worker/grader (API DTOs, result payloads)
 │   ├── lms/                 # LMS adapters: LTI 1.3 (Canvas, Moodle), Google Classroom API
 │   ├── reports/             # Grade report rendering (HTML → PDF)
@@ -129,7 +130,10 @@ hbe-project-code/
 │   └── suites/<institution>/<assignment>/ # Hidden API + E2E tests, versioned
 ├── templates/               # Starter repos per assignment (runtime contract baked in)
 ├── docs/
-├── render.yaml              # Render Blueprint (all services + env groups)
+├── Dockerfile               # One image for all roles (Render and EC2)
+├── render.yaml              # Render Blueprint for the free-tier demo
+├── deploy/aws/              # Terraform + docker-compose.prod.yml + Caddyfile for EC2
+├── deploy/runners/          # Ephemeral self-hosted GitHub runner setup (EC2)
 └── turbo.json / pnpm-workspace.yaml
 ```
 
@@ -157,7 +161,7 @@ Each **institution** (university, college, bootcamp) is a tenant with its own:
 | API / worker | Every request resolves an **active institution** (from the URL or the institution switcher). Every job payload carries `institution_id`, and repository functions require it as a parameter. |
 | Storage | Paths start with `inst/{institution_id}/…`, and Storage RLS checks that prefix. |
 | GitHub | The webhook `installation.id` maps to exactly one institution. Events from unknown installations are stored but not processed. |
-| Grader | Suites are namespaced by institution. Results callbacks are matched to the run's institution. Institutions may optionally register their own self-hosted runner pool (runner label `hbe-{institution_slug}`). |
+| Grader | Suites are namespaced by institution. Results callbacks are matched to the run's institution. Runners are platform-owned and shared, and every run is a fresh, throwaway machine, so nothing carries over between tenants. |
 | Rate limits / quotas | Run quotas, concurrency caps and Actions-minute budgets are tracked per institution, so one tenant's deadline rush can't starve another. |
 
 **URLs**: start with a single `app.example.com` and an institution switcher
@@ -506,8 +510,9 @@ run out below that, so:
 1. Apply for **GitHub Education / GitHub Campus** benefits for the grader organisation.
 2. Run **self-hosted ephemeral runners** (autoscaled VMs with `--ephemeral`, or ARC on
    Kubernetes) labelled `hbe-grader`. At this scale, 4–8 concurrent runners clear a deadline
-   rush in minutes. The workflow only changes its `runs-on`. Institutions may also bring their
-   own runner pool (§4.1).
+   rush in minutes. The workflow only changes its `runs-on`. **The platform pays for all
+   evaluation compute**, so the runner pool is platform-owned and shared across institutions,
+   with per-institution quotas (§4.1). See DEPLOYMENT.md §3 for the EC2 runner design.
 3. Cap runs per student per day and debounce pushes (§6.2). Track minutes per institution.
 
 ---
@@ -561,7 +566,7 @@ platform audit log. Super admins see tenant data only through an audited, time-b
 | LMS | `/lti/login`, `/lti/launch`, `/lti/deep-link`, `/lti/register`, `/.well-known/jwks.json`, `POST /v1/assignments/:id/lms-sync`, `GET /v1/oauth/google/callback` | LTI id_token / staff JWT |
 | Institution admin | `/v1/admin/users`, `/v1/admin/settings`, `/v1/admin/installations`, `/v1/admin/stack-profiles`, `/v1/admin/lms-connections` | Institution admin JWT + MFA |
 | Super admin | `/v1/platform/institutions`, `/v1/platform/stack-profiles`, `/v1/platform/health` | Super admin JWT + MFA |
-| Health | `GET /healthz` (liveness), `GET /readyz` (DB + Redis) | none |
+| Health | `GET /healthz` (liveness), `GET /readyz` (DB + queue) | none |
 
 Plain CRUD reads (lists, dashboards) go straight from `web` to Supabase under RLS. The API
 handles anything that needs the service role, GitHub, the queues, or multi-step transactions.
@@ -569,7 +574,7 @@ OpenAPI is generated from Zod schemas (`fastify-type-provider-zod`).
 
 ---
 
-## 9. Background jobs (BullMQ queues)
+## 9. Background jobs (pg-boss queues and schedules)
 
 | Queue | Jobs | Retries |
 |-------|------|---------|
@@ -581,105 +586,43 @@ OpenAPI is generated from Zod schemas (`fastify-type-provider-zod`).
 | `records` | source snapshots, grade report rendering (JSON + PDF), course-close archival | 5; a failure blocks grade release until resolved |
 | `lms-sync` | grade passback, roster sync, assignment linking | 8, exponential backoff; then shown on the teacher's sync panel |
 
-Cron jobs (Render): `*/15` redeliver failed webhooks · `*/5` reap stale runs (queued for more than 30
+Schedules (pg-boss cron, run by the worker role; times in Asia/Singapore): `*/15` redeliver failed webhooks · `*/5` reap stale runs (queued for more than 30
 minutes or running for more than 45) · `0 * * * *` deadline cut-off and final graded runs · `0 2 * * *` activity rollups ·
 `0 3 * * 0` retention cleanup · `30 2 * * *` archive replication to the external bucket ·
 `0 4 * * *` LMS grade reconciliation and roster sync.
 
 ---
 
-## 10. Deployment: Render + Supabase + custom domain
+## 10. Deployment
 
-### 10.1 Environments
+Full details, including free-tier limits, the Render demo setup, the AWS EC2 production design
+and the migration runbook, are in **[DEPLOYMENT.md](./DEPLOYMENT.md)**. In summary:
 
-| Env | Supabase | Render | GitHub |
-|-----|----------|--------|--------|
-| local | `supabase start` (Docker) | `pnpm dev` | Dev GitHub App + test org, webhooks through `smee.io` |
-| staging | Separate project | Separate services (Blueprint, `staging` branch) or preview environments | Staging App + staging org |
-| production | Separate project (Pro plan: daily backups, PITR add-on) | Production services from `main` | Production App + classroom org(s) |
+| | Demo (now) | Production (later) |
+|---|---|---|
+| App host | Render **free** web service, Singapore region, one container with `ROLES=web,api,worker` | **AWS EC2, ap-southeast-1 (Singapore)**, the same image as separate `web`, `api` and `worker` containers behind Caddy (then an ALB) |
+| Database / auth / storage | Supabase **Free**, Singapore | Supabase **Pro**, Singapore (backups, PITR, no pausing). Stays managed. |
+| Queue / schedules | pg-boss in Supabase Postgres | Same |
+| Grader runners | GitHub-hosted runners (free org minutes) | Ephemeral self-hosted runners on EC2 spot instances in a separate AWS account |
+| Archive replica | Cloudflare R2 free tier | S3 ap-southeast-1 with Object Lock |
+| Domain | `app.` / `api.` CNAME → Render | Same hostnames → EC2/ALB. Cutover is a DNS change. |
 
-Never share a Supabase project or GitHub App between environments.
+Rules that keep the migration cheap (enforced from day one):
+1. Use **only your own hostnames** (`app.example.com`, `api.example.com`) in every external
+   configuration: the GitHub App webhook, OIDC audience, Supabase redirect URLs, LTI
+   registrations and Google OAuth. Never use `*.onrender.com`.
+2. **One Dockerfile**; Render runs the Docker runtime, so production runs the same image.
+3. All configuration comes from environment variables; nothing in the code is Render-specific.
+4. Processes are stateless and handle `SIGTERM` gracefully; files go to Supabase Storage.
+5. Queue and schedules live in Postgres, so there's no Redis to migrate.
 
-### 10.2 Render Blueprint (outline)
-
-```yaml
-# render.yaml
-envVarGroups:
-  - name: hbe-shared
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: GITHUB_APP_ID
-        sync: false
-      - key: GITHUB_APP_PRIVATE_KEY
-        sync: false
-      - key: GITHUB_WEBHOOK_SECRET
-        sync: false
-services:
-  - type: web
-    name: hbe-web
-    runtime: node
-    buildCommand: pnpm install --frozen-lockfile && pnpm turbo build --filter=web
-    startCommand: pnpm --filter web start
-    healthCheckPath: /api/health
-    domains: [app.example.com]
-  - type: web
-    name: hbe-api
-    runtime: node
-    buildCommand: pnpm install --frozen-lockfile && pnpm turbo build --filter=api
-    startCommand: pnpm --filter api start
-    healthCheckPath: /healthz
-    domains: [api.example.com]
-    envVars:
-      - fromGroup: hbe-shared
-      - key: REDIS_URL
-        fromService: { type: keyvalue, name: hbe-queue, property: connectionString }
-  - type: worker
-    name: hbe-worker
-    runtime: node
-    startCommand: pnpm --filter worker start
-    envVars:
-      - fromGroup: hbe-shared
-  - type: cron
-    name: hbe-cron-deadlines
-    schedule: "0 * * * *"
-    startCommand: pnpm --filter cron run deadlines
-  - type: keyvalue
-    name: hbe-queue
-    plan: starter
-    maxmemoryPolicy: noeviction      # required for BullMQ
-    ipAllowList: []                   # private network only
-```
-
-Notes:
-- Use a **paid, always-on** instance type for `api`. Free web services spin down when idle,
-  which drops webhooks and grader callbacks.
-- Turn on Render's **build filters** (`buildFilter.paths`) so a web-only change doesn't redeploy the worker.
-- Database migrations run in CI (`supabase db push`) **before** the Render deploy, never from a
-  service start command. Keep migrations backwards-compatible (expand, then contract).
-
-### 10.3 Custom domain
-
-| Hostname | Points to | How |
-|----------|-----------|-----|
-| `example.com` | marketing / redirect to `app.` | Render: apex domain uses an `A`/`ALIAS` record as Render instructs |
-| `app.example.com` | `hbe-web` | `CNAME` → `hbe-web.onrender.com` |
-| `api.example.com` | `hbe-api` | `CNAME` → `hbe-api.onrender.com` |
-| `auth.example.com` (optional) | Supabase | Supabase Custom Domain add-on, so OAuth consent and emails show your brand |
-
-Render issues and renews TLS certificates automatically once DNS checks out. Then update:
-Supabase Auth **Site URL** and **Redirect URLs** (`https://app.example.com/**`), the GitHub App
-webhook and callback URLs, the OIDC `aud` the API expects, CORS origins in `api`, and the email
-templates. Set HSTS once everything is on HTTPS.
-
-### 10.4 CI/CD (GitHub Actions on this repo)
+### 10.1 CI/CD (GitHub Actions on this repo)
 
 1. PR: lint, typecheck, unit tests (`packages/core` has high coverage), migration lint
    (`supabase db lint`), RLS policy tests (pgTAP), and API integration tests against a local Supabase stack.
 2. Merge to `main`: apply migrations to staging, Render auto-deploys staging, run smoke E2E tests.
-3. Promote: tag a release, apply migrations to production, then deploy production (Render deploy hook).
+3. Promote: tag a release, apply migrations to production, then deploy production (a Render
+   deploy hook in the demo; on EC2, push the image to ECR and roll it out via SSM).
 4. Grader suites are published to the private grader repo by a workflow, with version tags
    (`suite/a3-v4`). Assignments pin a suite version, so a re-grade is reproducible.
 
@@ -689,7 +632,7 @@ templates. Set HSTS once everything is on HTTPS.
 
 - **Observability**: structured JSON logs (pino) with `request_id`, `run_id`, `delivery_id`;
   Sentry for web/api/worker; OpenTelemetry traces exported to Grafana Cloud or Honeycomb;
-  BullMQ dashboard (bull-board, admin-only); alerts on webhook lag, queue depth, failed-run
+  queue view in the super admin console (pg-boss tables); alerts on webhook lag, queue depth, failed-run
   rate, Actions minutes burn, and Supabase connection saturation.
 - **Database connections**: services use Supavisor (transaction mode, port 6543) with small
   pools; the worker uses session mode only where it needs `LISTEN` or advisory locks.
@@ -701,8 +644,12 @@ templates. Set HSTS once everything is on HTTPS.
   membership. Retention rules are in §12.
 - **Audit log**: append-only `audit_logs` for role changes, grade overrides, releases,
   impersonation, settings changes, and deletions.
-- **Privacy**: student data is education-record data (FERPA/GDPR/DPDP, depending on region). The
-  platform needs data-processing agreements with Supabase/Render/GitHub, export and deletion
+- **Privacy**: the platform is hosted in **Singapore**, so the baseline is Singapore's **PDPA**
+  (Personal Data Protection Act), plus any stricter rules an institution's own country imposes.
+  Student repos live on GitHub (outside Singapore), and GitHub-hosted runners also run outside
+  Singapore; the privacy notice must disclose this. Moving grading to EC2 runners in Singapore
+  keeps test execution in-region. The platform needs data-processing agreements with
+  Supabase/Render/AWS/GitHub, export and deletion
   on request, minimal PII, retention limits, and no student data in logs or Sentry breadcrumbs.
 - **Accessibility**: WCAG 2.1 AA; keyboard-navigable diff/review UI; colour-blind-safe status colours.
 
@@ -716,19 +663,23 @@ archived or the LMS course is gone.
 
 ### 12.1 What is stored, and for how long
 
-| Record | Where | Retention (defaults; institution can lengthen) |
-|--------|-------|------------------------------------------------|
-| Submission metadata, runs, test results, rubric scores, feedback, grades, process snapshots | Postgres | **Permanent** (for as long as the institution is active, plus its contractual period) |
-| **Source snapshot** of each graded SHA: `git bundle` (history up to that SHA) and `.tar.gz` of the tree, with its SHA-256 | Storage `submission-archive` | **Permanent** |
-| **Grade report**: canonical JSON and rendered PDF, versioned | Storage `grade-reports` + `grade_reports` table | **Permanent**; every version is kept |
-| Artifacts of the final graded run (logs, screenshots, traces, evidence) | Storage `run-artifacts` | **Permanent** |
-| Artifacts of non-final runs | Storage `run-artifacts` | 180 days (metadata and results stay permanently) |
+**Retention rule:** records are kept for as long as the institution's contract is active, and
+for **2 years after the contract ends**. Then they are purged (§12.5).
+
+| Record | Where | Retention |
+|--------|-------|-----------|
+| Submission metadata, runs, test results, rubric scores, feedback, grades, process snapshots | Postgres | Contract + 2 years |
+| **Source snapshot** of each graded SHA: `git bundle` (history up to that SHA) and `.tar.gz` of the tree, with its SHA-256 | Storage `submission-archive` | Contract + 2 years |
+| **Grade report**: canonical JSON and rendered PDF, versioned | Storage `grade-reports` + `grade_reports` table | Contract + 2 years; every version is kept |
+| Artifacts of the final graded run (logs, screenshots, traces, evidence) | Storage `run-artifacts` | Contract + 2 years |
+| Artifacts of non-final runs | Storage `run-artifacts` | 180 days (14 in demo); metadata and results follow the retention rule |
 | Raw webhook payloads | Postgres `github_events` | 90 days |
 
-Snapshots are taken by the worker at three points: when a run is used for a grade, at the
-effective deadline (the `final_sha`), and when a teacher explicitly re-grades. The worker
-fetches the repo with a read-only installation token, creates the bundle, hashes it and
-uploads it. Re-grading an old submission can use the snapshot instead of GitHub.
+Snapshots are created **inside the grader job**, which already has the checkout. The job
+creates the bundle and tarball, hashes them, and uploads them through a signed URL. This costs
+the app host no CPU, memory or disk, which matters on the 512 MB free instance. A snapshot is
+kept whenever a run is used for a grade: the deadline run on `final_sha`, and any re-grade.
+Re-grading an old submission can use the snapshot instead of GitHub.
 
 ### 12.2 Grade report contents
 
@@ -744,8 +695,8 @@ A report contains:
 - late penalty, extensions, overrides with reasons, the final score, and the LMS sync status
 - generation timestamp, report version and the SHA-256 of the JSON (tamper evidence)
 
-PDFs are rendered in the worker with `@react-pdf/renderer` (pure JS, so no headless browser on
-Render). Teachers, admins and the student (after release) can download any version.
+PDFs are rendered in the worker with `@react-pdf/renderer`, which is pure JS, so the app host
+needs no headless browser. Teachers, admins and the student (after release) can download any version.
 
 ### 12.3 Performance views
 
@@ -761,18 +712,28 @@ Render). Teachers, admins and the student (after release) can download any versi
 - Postgres: Supabase Pro daily backups plus **PITR** in production.
 - Supabase database backups do **not** contain Storage objects. A nightly cron job therefore
   replicates `submission-archive`, `grade-reports` and final-run artifacts to an external
-  S3-compatible bucket (Cloudflare R2 or Backblaze B2) with **object lock** (write-once).
+  bucket: Cloudflare R2 for the demo, then **S3 ap-southeast-1 with Object Lock in governance
+  mode** in production. Governance mode protects objects from accidental or malicious deletion,
+  but still lets the retention purge remove them once their retention ends.
 - Quarterly restore drill: restore a database snapshot plus the objects for one course and
   check the report hashes.
 - When a course is archived, its GitHub repos are archived (read-only) too, and the platform
   keeps working from the snapshots.
 
-### 12.5 Deletion requests vs academic records
+### 12.5 End of contract, purging and erasure requests
 
-The institution is the data controller. Erasure requests are handled by an institution admin
-workflow that either **anonymises** the student (removing PII from the profile and reports, and
-replacing it with a pseudonymous ID in grade records) or deletes the records outright,
-following the institution's policy. Either way, the action is audited.
+- **Contract end**: an institution admin or super admin sets `contract_ended_at`. The
+  institution becomes read-only, and `purge_after = contract_ended_at + 2 years`.
+- **Before the purge**: 90 days and 30 days before `purge_after`, institution admins are
+  emailed and offered a **full export**: a ZIP with all grade report PDFs and JSON, source
+  snapshots, and CSVs of grades and activity.
+- **Purge**: a monthly scheduled job deletes the institution's Storage objects (primary and
+  replica), then its database rows. It writes a purge certificate (counts and hashes) to the
+  platform audit log, which keeps no student PII.
+- **Erasure requests during the contract**: the institution is the data controller. An
+  institution admin either **anonymises** the student (removing PII from the profile and
+  reports, and replacing it with a pseudonymous ID in grade records) or deletes the records
+  outright, following the institution's policy. Either way, the action is audited.
 
 ---
 

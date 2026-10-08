@@ -53,7 +53,7 @@ erDiagram
 ### Tenancy, identity & access
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `institutions` | name, slug unique, status (`active`/`suspended`), data_region, limits jsonb (max users, runs/day, concurrency, storage), settings jsonb (branding, retention_years, process-policy defaults) | Created by a super admin. |
+| `institutions` | name, slug unique, status (`active`/`read_only`/`suspended`/`purged`), limits jsonb (max users, runs/day, runner minutes/month, concurrency, storage), settings jsonb (branding, process-policy defaults), contract_started_at, **contract_ended_at**, **purge_after** (= contract_ended_at + 2 years), export_notices jsonb | Created by a super admin. All data is in Singapore, so there's no per-tenant region. |
 | `profiles` | `id` = `auth.users.id`, full_name, email, avatar_url, github_user_id bigint unique, github_login, status, anonymised_at | Global (a person can be in several institutions). Created by a trigger on `auth.users` insert. |
 | `user_roles` | user_id, role (`super_admin`) | Platform-level role only. |
 | `institution_memberships` | institution_id, user_id, role (`admin`/`teacher`/`student`), external_id (student number), status | unique(institution_id, user_id). Read by the Custom Access Token Hook. |
@@ -95,7 +95,7 @@ erDiagram
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `submissions` | institution_id, assignment_id, user_id or team_id, repository_id, status (`provisioning`/`active`/`submitted`/`graded`), final_sha | One per student/team per assignment. |
-| `evaluation_runs` | institution_id, submission_id, sha, stack_profile_id, grader_suite_id, trigger, status (`queued`/`dispatched`/`running`/`completed`/`failed`/`infra_error`/`cancelled`), gh_workflow_run_id, score, summary jsonb, artifacts_prefix, artifacts_expire_at (null = permanent), queued_at, started_at, finished_at, requested_by | |
+| `evaluation_runs` | institution_id, submission_id, sha, stack_profile_id, grader_suite_id, trigger, status (`queued`/`dispatched`/`running`/`completed`/`failed`/`infra_error`/`cancelled`), gh_workflow_run_id, score, summary jsonb, artifacts_prefix, artifacts_expire_at (null = keep for the institution's retention period), queued_at, started_at, finished_at, requested_by | |
 | `test_results` | institution_id, run_id, stage, test_key, title, category, status, weight, duration_ms, expected, actual, message, hint, evidence jsonb, **staff_notes** | Students read through the `student_test_results` view, which leaves out `staff_notes`. |
 | `process_snapshots` | institution_id, submission_id, user_id, computed_at, policy_version, score, breakdown jsonb, is_final | Frozen at the deadline; recomputed while the assignment is open. |
 | `feedback` | institution_id, submission_id, author_id, body_md, file_path, line, sha, github_comment_id, released | |
@@ -103,12 +103,12 @@ erDiagram
 | `grades` | institution_id, submission_id, user_id, version int, evaluation_run_id, process_snapshot_id, components jsonb, late_penalty, computed_score, override_score, override_reason, is_current, released_at | **Append-only**; a new version on every change; one `is_current` per (submission, user). |
 | `regrade_requests` | institution_id, submission_id, requested_by, message, status, resolved_by, resolution | |
 
-### Records (permanent)
+### Records (kept for the contract + 2 years)
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `submission_snapshots` | institution_id, submission_id, sha, reason (`graded_run`/`deadline`/`regrade`), bundle_path, tarball_path, size_bytes, sha256, replicated_at | No UPDATE/DELETE grants; deletion only through the retention/erasure workflow. |
 | `grade_reports` | institution_id, grade_id, version, json_path, pdf_path, sha256, generated_at, generated_by | Immutable; one row per report version. |
-| `retention_actions` | institution_id, subject_user_id, action (`anonymise`/`delete`), requested_by, approved_by, executed_at, scope jsonb | Audit of erasure handling. |
+| `retention_actions` | institution_id, subject_user_id (nullable for an institution-wide purge), action (`anonymise`/`delete`/`export`/`purge`), requested_by, approved_by, executed_at, scope jsonb, certificate jsonb | Audit of erasure, export and purge handling. |
 
 ### LMS
 | Table | Key columns | Notes |
@@ -125,7 +125,8 @@ erDiagram
 | `notifications` | institution_id, user_id, type, payload jsonb, read_at | Realtime-subscribed. |
 | `institution_settings` / `platform_settings` | key, value jsonb, updated_by | Per tenant / global. |
 | `audit_logs` | institution_id (nullable for platform actions), actor_id, action, entity, entity_id, before jsonb, after jsonb, ip, at | Append-only. |
-| `usage_counters` | institution_id, period (month), runs, actions_minutes, storage_bytes | For limits and reporting. |
+| `usage_counters` | institution_id, period (month), runs, runner_minutes, storage_bytes | The platform pays for compute; these drive quotas and plan limits. |
+| `pgboss.*` | (managed by pg-boss) | Job queue and schedules, in their own schema; not exposed through the API. |
 
 ## 3. RLS pattern
 
