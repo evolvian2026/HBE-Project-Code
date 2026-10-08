@@ -6,6 +6,7 @@ import {
   type InstallationClient,
   type RepoInfo,
 } from "./client.ts";
+import { LocalGitRepos } from "./local-git.ts";
 
 /**
  * In-memory GitHub for tests and local development without a GitHub App.
@@ -36,8 +37,20 @@ export class FakeGitHub implements GitHubClient {
   /** Repository ids are unique across instances, as on GitHub. */
   private static nextId = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
 
-  /** `permissive`: every template exists (local development without a GitHub App). */
-  constructor(private readonly options: { permissive?: boolean } = {}) {}
+  private readonly git: LocalGitRepos | null;
+
+  /**
+   * `permissive`: every template exists (local development without a GitHub App).
+   * `gitRoot`: code is read from git repositories at `<gitRoot>/<owner>/<name>`.
+   */
+  constructor(private readonly options: { permissive?: boolean; gitRoot?: string } = {}) {
+    this.git = options.gitRoot ? new LocalGitRepos(options.gitRoot) : null;
+  }
+
+  private localGit(): LocalGitRepos {
+    if (!this.git) throw new GitHubError(404, "Code is not available without GITHUB_FAKE_GIT_ROOT", false);
+    return this.git;
+  }
 
   forInstallation(installationId: number): InstallationClient {
     const fail = () => {
@@ -89,6 +102,26 @@ export class FakeGitHub implements GitHubClient {
         const id = FakeGitHub.nextId++;
         this.checkRuns.push({ ...check, owner, repo, id });
         return id;
+      },
+      getTree: async (owner, repo, sha) => {
+        this.calls.push(`getTree ${owner}/${repo}@${sha.slice(0, 7)}`);
+        fail();
+        return this.localGit().tree(owner, repo, sha);
+      },
+      getBlob: async (owner, repo, blobSha) => {
+        this.calls.push(`getBlob ${owner}/${repo} ${blobSha.slice(0, 7)}`);
+        fail();
+        return this.localGit().blob(owner, repo, blobSha);
+      },
+      compare: async (owner, repo, base, head) => {
+        this.calls.push(`compare ${owner}/${repo} ${base.slice(0, 7)}...${head.slice(0, 7)}`);
+        fail();
+        return this.localGit().compare(owner, repo, base, head);
+      },
+      rootCommit: async (owner, repo, ref) => {
+        this.calls.push(`rootCommit ${owner}/${repo}`);
+        fail();
+        return this.localGit().rootCommit(owner, repo, ref);
       },
       addCollaborator: async (owner, repo, username, permission) => {
         this.calls.push(`addCollaborator ${owner}/${repo} ${username}`);

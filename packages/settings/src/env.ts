@@ -44,6 +44,8 @@ export const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  /** With GITHUB_FAKE: student code is read from git repositories at <root>/<owner>/<name>. */
+  GITHUB_FAKE_GIT_ROOT: optional,
   GRADER_REPO: z
     .string()
     .regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo")
@@ -114,6 +116,10 @@ const rules: Rule[] = [
   {
     when: (e) => e.GRADER_CALLBACK_AUTH === "token",
     check: (e) => (e.HBE_ENV === "local" ? undefined : "GRADER_CALLBACK_AUTH=token is only allowed when HBE_ENV=local"),
+  },
+  {
+    when: (e) => Boolean(e.GITHUB_FAKE_GIT_ROOT),
+    check: (e) => (e.GITHUB_FAKE ? undefined : "GITHUB_FAKE_GIT_ROOT only works with GITHUB_FAKE=true"),
   },
   {
     when: (e) => e.GITHUB_FAKE,

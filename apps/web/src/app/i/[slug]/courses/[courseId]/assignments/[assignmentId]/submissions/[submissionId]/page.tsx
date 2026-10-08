@@ -66,7 +66,7 @@ export default async function SubmissionPage({ params }: Props) {
     repository: { owner: string; name: string } | null;
   };
 
-  const [snapshot, commits, prs, issues, extension, policyRow, runs, archive] = await Promise.all([
+  const [snapshot, commits, prs, issues, extension, policyRow, runs, archive, reviewComments] = await Promise.all([
     supabase
       .from("process_snapshots")
       .select("breakdown, computed_at, is_final")
@@ -117,7 +117,21 @@ export default async function SubmissionPage({ params }: Props) {
           .eq("sha", s.final_sha)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    // Staff always; the student once grades are released (RLS).
+    supabase
+      .from("review_comments")
+      .select("id, sha, path, line, body")
+      .eq("submission_id", s.id)
+      .order("path")
+      .order("line"),
   ]);
+  const codeComments = (reviewComments.data ?? []) as {
+    id: string;
+    sha: string;
+    path: string;
+    line: number;
+    body: string;
+  }[];
   const runList = (runs.data ?? []) as RunSummary[];
 
   // Grading (staff): rubric, feedback and every grade version.
@@ -192,7 +206,19 @@ export default async function SubmissionPage({ params }: Props) {
           ) : (
             "no repository yet"
           )}
-          {" · due "}
+          {" · "}
+          {isCourseStaff && s.repository && (
+            <>
+              <Link
+                href={`/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${s.id}/code`}
+                className="text-accent hover:underline"
+              >
+                Review code
+              </Link>
+              {" · "}
+            </>
+          )}
+          {"due "}
           {formatInZone(deadline, course.timezone)}
           {extension.data && " (extended)"}
         </p>
@@ -376,6 +402,28 @@ export default async function SubmissionPage({ params }: Props) {
         </div>
 
         <div className="space-y-6 lg:col-span-3">
+          {codeComments.length > 0 && (
+            <Card title="Code review" description={`${codeComments.length} comment(s) on your code`}>
+              <ul className="divide-y divide-border text-sm" data-testid="code-comments">
+                {codeComments.map((c) => (
+                  <li key={c.id} className="py-2">
+                    <a
+                      href={
+                        isCourseStaff
+                          ? `/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${s.id}/code?sha=${c.sha}&path=${encodeURIComponent(c.path)}&line=${c.line}#L${c.line}`
+                          : `${repoUrl}/blob/${c.sha}/${c.path}#L${c.line}`
+                      }
+                      className="font-mono text-xs text-accent hover:underline"
+                    >
+                      {c.path}:{c.line}
+                    </a>
+                    <p className="whitespace-pre-wrap">{c.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           <Card title="Test runs" description={a.suite ? a.suite.title : "No automated tests for this assignment"}>
             <AutoRefresh active={runList.some((r) => isActive(r.status))} />
             {runList.length === 0 ? (

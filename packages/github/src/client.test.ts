@@ -192,3 +192,69 @@ describe("GitHubAppClient", () => {
     expect(((await attempt("c")) as GitHubError).retryable).toBe(true);
   });
 });
+
+describe("reading code", () => {
+  const routes = {
+    "POST /app/installations/7/access_tokens": () => ({
+      status: 201,
+      json: { token: "ghs_x", expires_at: "2099-01-01T00:00:00Z" },
+    }),
+    "GET /repos/o/r/git/trees/abc?recursive=1": () => ({
+      status: 200,
+      json: {
+        sha: "tree1",
+        truncated: false,
+        tree: [
+          { path: "src", type: "tree", sha: "t2" },
+          { path: "src/app.js", type: "blob", size: 12, sha: "b1" },
+        ],
+      },
+    }),
+    "GET /repos/o/r/git/blobs/b1": () => ({
+      status: 200,
+      json: { content: Buffer.from("console.log()").toString("base64"), encoding: "base64" },
+    }),
+    "GET /repos/o/r/compare/base1...head1?per_page=100": () => ({
+      status: 200,
+      json: {
+        total_commits: 3,
+        files: [
+          { filename: "a.js", status: "modified", additions: 2, deletions: 1, patch: "@@ -1 +1,2 @@" },
+          { filename: "b.js", previous_filename: "old.js", status: "renamed", additions: 0, deletions: 0 },
+        ],
+      },
+    }),
+    "GET /repos/o/r/commits?sha=main&per_page=1": () => ({
+      status: 200,
+      json: [{ sha: "newest" }],
+      headers: {
+        link: '<https://api.github.test/repos/o/r/commits?sha=main&per_page=1&page=2>; rel="next", <https://api.github.test/repos/o/r/commits?sha=main&per_page=1&page=34>; rel="last"',
+      },
+    }),
+    "GET /repos/o/r/commits?sha=main&per_page=1&page=34": () => ({ status: 200, json: [{ sha: "oldest" }] }),
+  };
+
+  it("lists trees, reads blobs, compares commits and finds the first commit", async () => {
+    const { impl } = mockFetch(routes);
+    const gh = new GitHubAppClient({ appId: "1", privateKey: pkcs1, apiUrl: "https://api.github.test", fetch: impl });
+    const repo = gh.forInstallation(7);
+    expect(await repo.getTree("o", "r", "abc")).toEqual({
+      sha: "tree1",
+      truncated: false,
+      entries: [
+        { path: "src", type: "tree", size: null, sha: "t2" },
+        { path: "src/app.js", type: "blob", size: 12, sha: "b1" },
+      ],
+    });
+    expect((await repo.getBlob("o", "r", "b1")).toString()).toBe("console.log()");
+    expect(await repo.compare("o", "r", "base1", "head1")).toEqual({
+      totalCommits: 3,
+      truncated: false,
+      files: [
+        { filename: "a.js", status: "modified", additions: 2, deletions: 1, patch: "@@ -1 +1,2 @@" },
+        { filename: "b.js", previousFilename: "old.js", status: "renamed", additions: 0, deletions: 0 },
+      ],
+    });
+    expect(await repo.rootCommit("o", "r", "main")).toBe("oldest");
+  });
+});

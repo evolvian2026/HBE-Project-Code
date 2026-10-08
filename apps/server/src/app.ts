@@ -2,14 +2,17 @@ import cors from "@fastify/cors";
 import { ForbiddenError } from "@hbe/core";
 import type { Db } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
+import type { GitHubClient } from "@hbe/github";
 import type { Settings } from "@hbe/settings";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
 import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
+import { createGitHubClient, lazyGitHubClient } from "./github.ts";
 import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
+import { codeRoutes } from "./routes/code.ts";
 import { gradingRoutes } from "./routes/grading.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
@@ -29,6 +32,8 @@ export interface AppDeps {
   graderAuth?: GraderAuth;
   /** Defaults to Supabase Storage. */
   store?: ObjectStore;
+  /** Defaults to the configured GitHub App (or the local fake). */
+  github?: GitHubClient;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -82,6 +87,10 @@ export async function buildApp(
       store: deps.store ?? supabaseObjectStore(deps.settings),
     });
     await app.register(gradingRoutes, apiDeps);
+    await app.register(codeRoutes, {
+      ...apiDeps,
+      github: deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings)),
+    });
   }
 
   return app;

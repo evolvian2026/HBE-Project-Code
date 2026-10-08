@@ -255,6 +255,8 @@ export interface RepositoriesTable {
   archived: Generated<boolean>;
   head_sha: string | null;
   head_pushed_at: Timestamp | null;
+  /** The commit the student started from (the template's), cached. */
+  start_sha: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }
@@ -378,6 +380,19 @@ export interface NotificationsTable {
   dedupe_key: string | null;
   created_at: DefaultTimestamp;
   read_at: Timestamp | null;
+}
+
+export interface ReviewCommentsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  sha: string;
+  path: string;
+  line: number;
+  body: string;
+  author_id: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
 }
 
 export interface CommitsTable {
@@ -551,6 +566,7 @@ export interface Database {
   grade_reports: GradeReportsTable;
   submission_snapshots: SubmissionSnapshotsTable;
   notifications: NotificationsTable;
+  review_comments: ReviewCommentsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

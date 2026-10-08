@@ -288,3 +288,43 @@ export async function releaseAssignmentGrades(_prev: ActionState, formData: Form
     details: skipped.map((s) => `${s.student}: needs ${s.pending.join(", ")}`),
   };
 }
+
+const commentSchema = submissionIdsSchema.extend({
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
+  path: z.string().min(1).max(1000),
+  line: z.coerce.number().int().positive(),
+  body: z.string().trim().min(1, "Write a comment").max(5000),
+});
+
+const codePath = (v: { slug: string; courseId: string; assignmentId: string; submissionId: string }) =>
+  `/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}/submissions/${v.submissionId}/code`;
+
+/** An inline comment on a line of the student's code (course staff; RLS checks it). */
+export async function addReviewComment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = commentSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const v = parsed.data;
+  const { ctx } = await requireCourse(v.slug, v.courseId);
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("review_comments").insert({
+    institution_id: ctx.institution.id,
+    submission_id: v.submissionId,
+    sha: v.sha,
+    path: v.path,
+    line: v.line,
+    body: v.body,
+  });
+  if (error) return { ok: false, message: friendlyError(error) };
+  revalidatePath(codePath(v));
+  redirect(`${codePath(v)}?sha=${v.sha}&path=${encodeURIComponent(v.path)}#L${v.line}`);
+}
+
+export async function deleteReviewComment(formData: FormData) {
+  const v = submissionIdsSchema
+    .extend({ id: z.string().uuid(), sha: z.string(), path: z.string() })
+    .parse(Object.fromEntries(formData));
+  const supabase = await createSupabaseServerClient();
+  await supabase.from("review_comments").delete().eq("id", v.id);
+  revalidatePath(codePath(v));
+  redirect(`${codePath(v)}?sha=${v.sha}&path=${encodeURIComponent(v.path)}`);
+}

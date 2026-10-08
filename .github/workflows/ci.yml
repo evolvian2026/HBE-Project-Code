@@ -83,6 +83,7 @@ jobs:
           GITHUB_APP_PRIVATE_KEY_BASE64=eA==
           GITHUB_APP_SLUG=hbe-ci
           GITHUB_FAKE=true
+          GITHUB_FAKE_GIT_ROOT=${RUNNER_TEMP}/fake-github
           GITHUB_WEBHOOK_SECRET=ci-secret
           GRADER_REPO=hbe-ci/hbe-grader
           GRADER_CALLBACK_AUTH=token
@@ -101,6 +102,7 @@ jobs:
         run: pnpm test:e2e
         env:
           E2E_WEBHOOK_SECRET: ci-secret
+          E2E_FAKE_GIT_ROOT: ${{ runner.temp }}/fake-github
 
       - name: Upload Playwright report and app log
         if: failure()

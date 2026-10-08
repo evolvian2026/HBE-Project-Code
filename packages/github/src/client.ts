@@ -24,6 +24,38 @@ export interface CommitDetails {
   files: { filename: string; additions: number; deletions: number; patch?: string }[];
 }
 
+export interface TreeEntry {
+  path: string;
+  type: "blob" | "tree" | "commit";
+  /** Bytes, for files. */
+  size: number | null;
+  sha: string;
+}
+
+export interface CommitTree {
+  sha: string;
+  entries: TreeEntry[];
+  /** GitHub stops listing very large trees. */
+  truncated: boolean;
+}
+
+export interface FileChangeDetail {
+  filename: string;
+  previousFilename?: string;
+  status: "added" | "removed" | "modified" | "renamed" | "copied" | "changed" | "unchanged";
+  additions: number;
+  deletions: number;
+  /** Unified diff; absent for binary or very large files. */
+  patch?: string;
+}
+
+export interface Comparison {
+  totalCommits: number;
+  files: FileChangeDetail[];
+  /** GitHub lists at most 300 files. */
+  truncated: boolean;
+}
+
 export interface RepoInfo {
   id: number;
   owner: string;
@@ -59,6 +91,14 @@ export interface InstallationClient {
     username: string,
     permission: "push" | "pull",
   ): Promise<"invited" | "added">;
+  /** Every file and folder at a commit. */
+  getTree(owner: string, repo: string, sha: string): Promise<CommitTree>;
+  /** A file's bytes, by the blob sha from getTree. */
+  getBlob(owner: string, repo: string, blobSha: string): Promise<Buffer>;
+  /** What changed between two commits. */
+  compare(owner: string, repo: string, base: string, head: string): Promise<Comparison>;
+  /** The first commit reachable from `ref`: for a repository made from a template, where the student started. */
+  rootCommit(owner: string, repo: string, ref: string): Promise<string>;
 }
 
 export interface CheckRunInput {
@@ -189,6 +229,62 @@ export class GitHubAppClient implements GitHubClient {
           output: { title: check.title.slice(0, 255), summary: check.summary.slice(0, 65_000) },
         });
         return res.id;
+      },
+      getTree: async (owner, repo, sha) => {
+        const t = await call<{
+          sha: string;
+          truncated: boolean;
+          tree: { path: string; type: TreeEntry["type"]; size?: number; sha: string }[];
+        }>("GET", `/repos/${enc(owner)}/${enc(repo)}/git/trees/${enc(sha)}?recursive=1`);
+        return {
+          sha: t.sha,
+          truncated: t.truncated,
+          entries: t.tree.map((e) => ({ path: e.path, type: e.type, size: e.size ?? null, sha: e.sha })),
+        };
+      },
+      getBlob: async (owner, repo, blobSha) => {
+        const b = await call<{ content: string; encoding: string }>(
+          "GET",
+          `/repos/${enc(owner)}/${enc(repo)}/git/blobs/${enc(blobSha)}`,
+        );
+        return Buffer.from(b.content, b.encoding === "base64" ? "base64" : "utf8");
+      },
+      compare: async (owner, repo, base, head) => {
+        const c = await call<{
+          total_commits: number;
+          files?: {
+            filename: string;
+            previous_filename?: string;
+            status: FileChangeDetail["status"];
+            additions: number;
+            deletions: number;
+            patch?: string;
+          }[];
+        }>("GET", `/repos/${enc(owner)}/${enc(repo)}/compare/${enc(base)}...${enc(head)}?per_page=100`);
+        const files = c.files ?? [];
+        return {
+          totalCommits: c.total_commits,
+          truncated: files.length >= 300,
+          files: files.map((f) => ({
+            filename: f.filename,
+            ...(f.previous_filename ? { previousFilename: f.previous_filename } : {}),
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            ...(f.patch !== undefined ? { patch: f.patch } : {}),
+          })),
+        };
+      },
+      rootCommit: async (owner, repo, ref) => {
+        // One commit per page: the Link header's last page is the oldest commit.
+        const path = `/repos/${enc(owner)}/${enc(repo)}/commits?sha=${enc(ref)}&per_page=1`;
+        const first = await this.send("GET", path, await this.installationToken(installationId));
+        const last = /<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="last"/.exec(first.headers.get("link") ?? "")?.[1];
+        const page = last
+          ? await call<{ sha: string }[]>("GET", `${path}&page=${last}`)
+          : ((await first.json()) as { sha: string }[]);
+        if (!page[0]) throw new GitHubError(404, `No commits on ${ref}`, false);
+        return page[0].sha;
       },
       addCollaborator: async (owner, repo, username, permission) => {
         const result = await call<unknown>("PUT", `/repos/${enc(owner)}/${enc(repo)}/collaborators/${enc(username)}`, {
