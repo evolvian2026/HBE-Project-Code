@@ -6,6 +6,8 @@ export interface QueuePayloads {
   "github-event": { eventId: number };
   /** Re-enqueue deliveries that were stored but never processed. */
   "github-events-sweep": Record<string, never>;
+  /** Send pending rows of email_outbox. */
+  "email-outbox": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -20,6 +22,7 @@ interface QueueDefinition {
 export const QUEUES: Record<QueueName, QueueDefinition> = {
   "github-event": { retryLimit: 5, retryDelay: 10, retryBackoff: true, expireInSeconds: 300 },
   "github-events-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
+  "email-outbox": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

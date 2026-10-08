@@ -130,6 +130,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'github_installations', count(*) from public.github_installations where institution_id = p_institution
   union all select 'github_link_requests', count(*) from public.github_link_requests where institution_id = p_institution
   union all select 'github_events', count(*) from public.github_events where institution_id = p_institution
+  union all select 'email_outbox', count(*) from public.email_outbox where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

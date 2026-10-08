@@ -40,3 +40,16 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.goto(await waitForMagicLink(email, sentAfter));
   await expect(page).not.toHaveURL(/\/login/);
 }
+
+/** Creates an institution and a pending admin invitation directly in the database (test setup). */
+export async function createInstitutionWithAdmin(slug: string, name: string, adminEmail: string): Promise<string> {
+  const [inst] = await sql<{ id: string }>(
+    "insert into public.institutions (name, slug) values ($1, $2) returning id",
+    [name, slug],
+  );
+  await sql("insert into public.invitations (institution_id, email, role) values ($1, $2, 'admin')", [
+    inst!.id,
+    adminEmail,
+  ]);
+  return inst!.id;
+}

@@ -159,6 +159,19 @@ export interface GithubEventsTable {
   error: string | null;
 }
 
+export interface EmailOutboxTable {
+  id: Generated<number>;
+  institution_id: string | null;
+  to_email: string;
+  template: "invitation";
+  payload: Json;
+  status: Generated<"pending" | "sent" | "failed">;
+  attempts: Generated<number>;
+  last_error: string | null;
+  created_at: DefaultTimestamp;
+  sent_at: Timestamp | null;
+}
+
 export interface Database {
   institutions: InstitutionsTable;
   profiles: ProfilesTable;
@@ -171,6 +184,7 @@ export interface Database {
   github_installations: GithubInstallationsTable;
   github_link_requests: GithubLinkRequestsTable;
   github_events: GithubEventsTable;
+  email_outbox: EmailOutboxTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;
