@@ -6,6 +6,7 @@ import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "./g
 import { provisionSubmission, sweepProvisioning } from "./provisioning.ts";
 import { computeSubmissionProcess, fetchCommitDetails } from "./activity.ts";
 import { recomputeGrade } from "../grading.ts";
+import { remindDeadlines } from "../notifications.ts";
 import { generateGradeReport } from "../reports/index.ts";
 import type { ObjectStore } from "../storage.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
@@ -74,5 +75,9 @@ export async function startWorker(
   await queue.work("grade-report", async (job) => {
     await generateGradeReport(deps, job.data.gradeId);
   });
+  await queue.work("deadline-reminder", async () => {
+    await remindDeadlines(deps.db);
+  });
+  await queue.schedule("deadline-reminder", "7 * * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

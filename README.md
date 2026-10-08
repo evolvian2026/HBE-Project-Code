@@ -25,7 +25,7 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
 **Phase 0 (foundations) is built; Phase 1 (the MVP vertical slice) is in progress.** Working today:
 
 - Multi-institution database with row-level security on every table, composite foreign keys that
-  block cross-institution links, an audit log, and 121 database tests proving the isolation.
+  block cross-institution links, an audit log, and 161 database tests proving the isolation.
 - Sign-in with GitHub or an emailed magic link; invitations accepted automatically on first sign-in.
 - Super admin console; institution admins manage members (single or CSV invitations), courses,
   staff and their GitHub organisation. Admin powers require two-factor authentication.
@@ -38,10 +38,18 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
   offline network and is tested by black-box hidden tests with random data. Students see each
   failure with what was expected, a hint, the request and response and their app's logs, also as
   a check on their commit.
+- **Deadlines and grades**: the graded commit is fixed at the cutoff by GitHub's push time (late
+  windows and extensions included) and graded by a deadline run. Staff score the rubric, write
+  feedback, override with a reason and release; every change is a new grade version.
+- **Records**: every released grade version gets a report (JSON with its SHA-256, and a PDF), and
+  the graded commit's source is archived (git bundle and tarball), all in private Storage.
+  Students have "My grades"; staff have student profiles, a course progress matrix with at-risk
+  signals, and a CSV grade export. In-app notifications cover test results, grades, extensions
+  and deadlines.
 - One Docker image running the web, api and worker roles, validated by end-to-end browser tests.
 
-Next: rubric scoring, grade release, grade reports and records, dashboards. See
-[docs/ROADMAP.md](docs/ROADMAP.md).
+Next: the submission review screen, regrade requests and the remaining grader stages, then the
+demo deployment and LMS integration (Phase 2). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 
@@ -66,7 +74,7 @@ Prerequisites: Node 22 (`.nvmrc`), Docker, and pnpm (`corepack enable`).
 
 ```bash
 pnpm install
-pnpm db:start                                  # local Supabase: Postgres, Auth, REST, Mailpit
+pnpm db:start                                  # local Supabase: Postgres, Auth, REST, Storage, Mailpit
 pnpm env:local                                 # writes .env.local with the local stack's keys
 pnpm dev                                       # web on :3000, api + worker on :4000
 ```

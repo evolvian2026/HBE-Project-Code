@@ -190,7 +190,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | Test execution | GitHub Actions (hosted → self-hosted ephemeral runners), Docker Compose, Playwright, Supertest/Hurl for API tests | Self-managed Firecracker/gVisor sandbox (later, if needed) |
 | Email | Resend or Postmark (also used as Supabase SMTP) | SES |
 | LMS | LTI 1.3 Advantage via `jose` (Canvas, Moodle); `googleapis` Classroom client | ltijs |
-| Reports | `@react-pdf/renderer` (PDF), canonical JSON + SHA-256 | Headless Chromium |
+| Reports | PDFKit (PDF, ADR 0015), canonical JSON + SHA-256 | Headless Chromium |
 | Archive backup | Cloudflare R2 free (demo) → S3 ap-southeast-1 with Object Lock (production) | Backblaze B2 |
 | Observability | pino, Sentry, OpenTelemetry → Grafana Cloud/Honeycomb | Datadog |
 | Hosting | **Demo:** Render free web service (Singapore), all roles in one container. **Production:** AWS EC2 ap-southeast-1 with Docker Compose + Caddy, later ALB + Auto Scaling group; Terraform; ECR; SSM | ECS Fargate, Render paid |

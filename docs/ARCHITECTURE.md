@@ -725,8 +725,22 @@ A report contains:
 - late penalty, extensions, overrides with reasons, the final score, and the LMS sync status
 - generation timestamp, report version and the SHA-256 of the JSON (tamper evidence)
 
-PDFs are rendered in the worker with `@react-pdf/renderer`, which is pure JS, so the app host
+PDFs are rendered in the worker with PDFKit ([ADR 0015](adr/0015-grade-report-pdfs-with-pdfkit.md)), which is pure JS, so the app host
 needs no headless browser. Teachers, admins and the student (after release) can download any version.
+
+As built (Phase 1):
+
+- Reports and snapshots live in private Storage buckets (`grade-reports`, `submission-archive`),
+  created by migration. Only the platform writes them; downloads are 60-second signed URLs made
+  with the **user's own session**, so Storage's row-level policy (the record must be visible to
+  that user) decides. Override reasons and staff notes are never written into reports.
+- A report is generated for every released grade version, numbered per submission in release
+  order. The snapshot of the graded commit is uploaded by the grader job (git bundle of the
+  history plus a tarball of the tree, through signed upload URLs) and its hashes are recorded.
+- Students have a **My grades** page; staff open a **student profile** with the same record
+  across every course they may see. Course staff get a students × assignments matrix, at-risk
+  signals and a CSV export.
+- Not built yet: replication to the external bucket (§12.4) and the purge workflow (§12.5).
 
 ### 12.3 Performance views
 

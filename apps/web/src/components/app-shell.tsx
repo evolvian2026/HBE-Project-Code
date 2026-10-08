@@ -6,10 +6,13 @@ import { InstitutionSwitcher } from "./institution-switcher";
 export function AppShell({
   session,
   current,
+  notifications,
   children,
 }: {
   session: SessionContext;
   current?: string;
+  /** Unread notifications of the current institution, and where they are listed. */
+  notifications?: { unread: number; href: string };
   children: ReactNode;
 }) {
   return (
@@ -29,6 +32,20 @@ export function AppShell({
             </Link>
           )}
           <div className="ml-auto flex items-center gap-3 text-sm">
+            {notifications && (
+              <Link
+                href={notifications.href}
+                className="flex items-center gap-1 text-muted hover:text-text"
+                aria-label={`Notifications, ${notifications.unread} unread`}
+              >
+                Notifications
+                {notifications.unread > 0 && (
+                  <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-white tabular-nums">
+                    {notifications.unread}
+                  </span>
+                )}
+              </Link>
+            )}
             <Link href="/account/security" className="hidden text-muted hover:text-text sm:inline">
               {session.email ?? session.githubLogin}
             </Link>

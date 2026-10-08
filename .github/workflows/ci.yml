@@ -49,7 +49,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Start local Supabase (Postgres, Auth, REST, Mailpit)
+      - name: Start local Supabase (Postgres, Auth, REST, Storage, Mailpit)
         run: pnpm db:start
 
       - name: Database tests (pgTAP) and schema lint

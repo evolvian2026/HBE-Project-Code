@@ -6,6 +6,7 @@ import type { Settings } from "@hbe/settings";
 import { randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import { hashToken, queueRun } from "../evaluation.ts";
+import { notify, submissionLinks } from "../notifications.ts";
 
 export interface EvaluationDeps {
   db: Db;
@@ -185,6 +186,9 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
       "s.id as submission_id",
       "s.final_sha",
       "s.finalized_at",
+      "s.user_id",
+      "e.trigger",
+      "e.requested_by",
       "a.id as assignment_id",
       "c.id as course_id",
       "i.slug",
@@ -231,6 +235,31 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
     })
     .where("id", "=", runId)
     .execute();
+
+  // The student hears about runs they asked for and graded runs (pushes have the GitHub check).
+  const forStudent =
+    run.trigger === "deadline" ||
+    run.trigger === "regrade" ||
+    (run.trigger === "manual" && run.requested_by === run.user_id);
+  if (forStudent) {
+    const links = await submissionLinks(db, run.submission_id);
+    if (links) {
+      await notify(db, {
+        institutionId: links.institution_id,
+        userId: run.user_id,
+        type: "run_finished",
+        title: `Test results for ${links.title}: ${
+          results.infra_error
+            ? "the grader hit a platform problem"
+            : score.blockedBy
+              ? `stopped at ${score.blockedBy}`
+              : `${score.passed}/${score.total} passed`
+        }`,
+        link: `${links.submission}/runs/${run.id}`,
+        dedupeKey: `run:${run.id}`,
+      });
+    }
+  }
 
   // The graded commit's run feeds the grade.
   if (run.status === "completed" && run.finalized_at && run.final_sha === run.sha) {

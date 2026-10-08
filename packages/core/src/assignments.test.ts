@@ -8,7 +8,7 @@ import {
   submissionCutoff,
   type PublishCheckInput,
 } from "./assignments.ts";
-import { formatInZone, utcToZonedLocal, zonedLocalToUtc } from "./time.ts";
+import { formatInZone, timeAgo, utcToZonedLocal, zonedLocalToUtc } from "./time.ts";
 
 describe("time zones", () => {
   it("converts Singapore wall-clock time (UTC+8, no DST)", () => {
@@ -100,5 +100,15 @@ describe("deadlines", () => {
     expect(lateDays(at(24 * 60), deadline, policy)).toBe(1);
     expect(lateDays(at(24 * 60 + 1), deadline, policy)).toBe(2);
     expect(lateDays(at(10 * 24 * 60), deadline, policy)).toBe(3);
+  });
+});
+
+describe("timeAgo", () => {
+  const now = new Date("2026-10-10T12:00:00Z");
+  it("describes how long ago something happened", () => {
+    expect(timeAgo(new Date("2026-10-10T11:59:40Z"), now)).toBe("just now");
+    expect(timeAgo(new Date("2026-10-10T11:55:00Z"), now)).toBe("5 minutes ago");
+    expect(timeAgo(new Date("2026-10-10T09:00:00Z"), now)).toBe("3 hours ago");
+    expect(timeAgo(new Date("2026-10-09T12:00:00Z"), now)).toBe("yesterday");
   });
 });

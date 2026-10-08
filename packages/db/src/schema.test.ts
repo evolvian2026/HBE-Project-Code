@@ -284,6 +284,18 @@ const declared: Record<string, string[]> = {
     "tarball_size",
     "created_at",
   ],
+  notifications: [
+    "id",
+    "institution_id",
+    "user_id",
+    "type",
+    "title",
+    "body",
+    "link",
+    "dedupe_key",
+    "created_at",
+    "read_at",
+  ],
   branch_pushes: [
     "id",
     "institution_id",

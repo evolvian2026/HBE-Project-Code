@@ -18,5 +18,6 @@ Short records of significant decisions. Status of all: **Accepted** (2026-10-08)
 | [0012](0012-authorisation-reads-database.md) | Authorisation reads memberships from the database, not token claims |
 | [0013](0013-installation-linking-by-webhook.md) | GitHub organisations are linked by the signed webhook |
 | [0014](0014-dependency-majors.md) | Pin the newest release of well-understood major versions |
+| [0015](0015-grade-report-pdfs-with-pdfkit.md) | Render grade report PDFs with PDFKit |
 
 To add one: copy the format, take the next number, and link it here.

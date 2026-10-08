@@ -365,6 +365,21 @@ export interface SubmissionSnapshotsTable {
   created_at: DefaultTimestamp;
 }
 
+export type NotificationType = "run_finished" | "grade_released" | "deadline_soon" | "extension_granted";
+
+export interface NotificationsTable {
+  id: Generated<string>;
+  institution_id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link: string | null;
+  dedupe_key: string | null;
+  created_at: DefaultTimestamp;
+  read_at: Timestamp | null;
+}
+
 export interface CommitsTable {
   id: Generated<string>;
   institution_id: string;
@@ -535,6 +550,7 @@ export interface Database {
   grades: GradesTable;
   grade_reports: GradeReportsTable;
   submission_snapshots: SubmissionSnapshotsTable;
+  notifications: NotificationsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

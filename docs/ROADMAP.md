@@ -33,21 +33,25 @@ each other's data (proven by tests); webhooks land in the DB.
 
 ## Phase 1: MVP vertical slice (6–8 weeks) — in progress
 
-Built so far (slices 1A–1F): institution administration (members, single and CSV invitations,
+Built (slices 1A–1G): institution administration (members, single and CSV invitations,
 courses, staff, GitHub organisation); two-factor authentication for admins, enforced in the
 database; stack profiles (MERN, Django + React, and an API-only Node profile for the sample
 suite); assignments with weights, late policy, rubric and hidden test suite; repository
-provisioning from templates; activity tracking and the process score with explanations; and
-automated test runs: push, pull request and on-request triggers with debounce, daily quotas,
-concurrency caps and a monthly minutes budget; the grader repository's `evaluate.yml` and a
-dependency-free Compose harness with a sandboxed, offline app network; black-box API tests with
-random data; OIDC-authenticated results; check runs; run history and run detail pages with
-expected vs actual, hints, evidence and app logs (staff notes for staff only).
+provisioning from templates; activity tracking and the process score with explanations;
+automated test runs (push, pull request and on-request triggers, debounce, quotas, concurrency
+caps, a monthly minutes budget, a sandboxed offline Compose harness, black-box API tests with
+random data, OIDC-authenticated results, check runs, run pages with full failure detail);
+deadlines (graded commit by push time, late window, extensions, deadline runs with retries);
+rubric scoring, feedback, versioned grades with overrides and release; grade reports (JSON +
+PDF) for every released version and source snapshots of graded commits in Storage; student
+"My grades" and staff student profiles; the course matrix with at-risk signals; CSV export; and
+in-app notifications.
 
-Still to do in Phase 1: rubric scoring, feedback and grade computation and release; records
-(source snapshots, grade reports, history); teacher matrix dashboard; notifications; deadline
-runs; CSV export. Deferred grader pieces: Playwright browser-test stages, the profiles' lint and
-student-test stages, and uploading logs and traces to Storage.
+Still to do in Phase 1: the submission review screen with file tree and diffs (FR-6.1) and
+inline comments (FR-6.2); regrade requests (FR-6.7); email notifications; the profiles' lint
+and student-test stages and Playwright browser-test stages in the grader; uploading run logs
+and traces to Storage; template repositories for the global stack profiles; deploying the
+demo environment and running a pilot course.
 
 - Institution admin: invite users (single + CSV), create courses, assign staff, connect a GitHub org
 - **Stack profiles v1**: two global profiles (e.g. MERN and Django + React), with adapters and

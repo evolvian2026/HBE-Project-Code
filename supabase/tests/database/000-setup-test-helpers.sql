@@ -185,6 +185,9 @@ begin
                                            tarball_path, tarball_sha256, tarball_size)
     select s.institution_id, s.id, repeat('b', 40), s.id || '.bundle', repeat('c', 64), 10, s.id || '.tar.gz', repeat('d', 64), 10
     from public.submissions s where s.repository_id is not null;
+  insert into public.notifications (institution_id, user_id, type, title, link, dedupe_key) values
+    (tests.id('inst_a'), tests.id('student_a'), 'grade_released', 'Your grade for Todo API is out', '/i/alpha', 'seed-a'),
+    (tests.id('inst_b'), tests.id('student_b'), 'grade_released', 'Your grade for Shop is out', '/i/beta', 'seed-b');
   insert into storage.objects (bucket_id, name)
     select 'grade-reports', json_path from public.grade_reports
     union all select 'submission-archive', bundle_path from public.submission_snapshots;
@@ -230,6 +233,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'submission_overview', count(*) from public.submission_overview where institution_id = p_institution
   union all select 'grade_reports', count(*) from public.grade_reports where institution_id = p_institution
   union all select 'submission_snapshots', count(*) from public.submission_snapshots where institution_id = p_institution
+  union all select 'notifications', count(*) from public.notifications where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

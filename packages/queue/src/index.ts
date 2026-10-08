@@ -28,6 +28,8 @@ export interface QueuePayloads {
   "compute-grade": { submissionId: string };
   /** Write the grade report (JSON + PDF) of a released grade version. */
   "grade-report": { gradeId: string };
+  /** Remind students whose deadline is within 24 hours. */
+  "deadline-reminder": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -54,6 +56,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "deadline-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
   "compute-grade": { retryLimit: 3, retryDelay: 10, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
   "grade-report": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
+  "deadline-reminder": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

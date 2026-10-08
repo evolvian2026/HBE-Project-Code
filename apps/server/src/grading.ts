@@ -1,9 +1,36 @@
 import { computeGrade, type LatePolicy, type Weights } from "@hbe/core";
 import { sql, withActor, type Db, type Json } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
+import { notify, submissionLinks } from "./notifications.ts";
 
-/** Queues the grade report of a released grade version (after the version is committed). */
-export async function queueReport(queue: JobQueue | undefined, gradeId: string): Promise<void> {
+/**
+ * After a grade version is released (and committed): tell the student, and queue its report.
+ */
+export async function announceRelease(db: Db, queue: JobQueue | undefined, gradeId: string): Promise<void> {
+  const grade = await db
+    .selectFrom("grades")
+    .select(["submission_id", "final_score"])
+    .where("id", "=", gradeId)
+    .executeTakeFirst();
+  const links = grade && (await submissionLinks(db, grade.submission_id));
+  if (grade && links) {
+    const earlier = await db
+      .selectFrom("grades")
+      .select("id")
+      .where("submission_id", "=", grade.submission_id)
+      .where("id", "!=", gradeId)
+      .where("released_at", "is not", null)
+      .executeTakeFirst();
+    await notify(db, {
+      institutionId: links.institution_id,
+      userId: links.user_id,
+      type: "grade_released",
+      title: earlier ? `Your grade for ${links.title} was updated` : `Your grade for ${links.title} is out`,
+      body: "See your grade, rubric scores and feedback.",
+      link: links.assignment,
+      dedupeKey: `grade:${gradeId}`,
+    });
+  }
   await queue?.send("grade-report", { gradeId }, { singletonKey: `report-${gradeId}` });
 }
 
@@ -157,7 +184,7 @@ export async function recomputeGrade(
     if (inserted.released_at) releasedVersion = inserted.id;
     return inserted;
   });
-  if (releasedVersion) await queueReport(opts.queue, releasedVersion);
+  if (releasedVersion) await announceRelease(db, opts.queue, releasedVersion);
   return grade;
 }
 
@@ -220,6 +247,6 @@ export async function releaseGrades(
     }
     return result;
   });
-  for (const id of releasedGrades) await queueReport(opts.queue, id);
+  for (const id of releasedGrades) await announceRelease(db, opts.queue, id);
   return result;
 }

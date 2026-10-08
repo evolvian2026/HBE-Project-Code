@@ -100,14 +100,15 @@ erDiagram
 | `process_snapshots` | institution_id, submission_id, user_id, computed_at, policy_version, score, breakdown jsonb, is_final | Frozen at the deadline; recomputed while the assignment is open. |
 | `feedback` | institution_id, submission_id, author_id, body_md, file_path, line, sha, github_comment_id, released | |
 | `rubric_scores` | institution_id, submission_id, criterion_id, points, comment, scored_by | unique(submission_id, criterion_id) |
-| `grades` | institution_id, submission_id, user_id, version int, evaluation_run_id, process_snapshot_id, components jsonb, late_penalty, computed_score, override_score, override_reason, is_current, released_at | **Append-only**; a new version on every change; one `is_current` per (submission, user). |
+| `grades` | institution_id, submission_id, user_id, version int, evaluation_run_id, components jsonb (per component score/weight/points, what is still pending, raw), late_days, late_penalty, computed_score, override_score, override_reason, final_score, complete, is_current, released_at, created_by | **Append-only**; a new version only when something changed; one `is_current` per submission. Students see released versions only; `override_reason` is not granted to them (staff read it through `grade_override_reasons()`). |
+| `submission_overview` (view) | one row per submission: latest finished run, last activity, current grade | `security_invoker`: every underlying table's RLS and column privileges apply. Feeds dashboards, history and the CSV export. |
 | `regrade_requests` | institution_id, submission_id, requested_by, message, status, resolved_by, resolution | |
 
 ### Records (kept for the contract + 2 years)
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `submission_snapshots` | institution_id, submission_id, sha, reason (`graded_run`/`deadline`/`regrade`), bundle_path, tarball_path, size_bytes, sha256, replicated_at | No UPDATE/DELETE grants; deletion only through the retention/erasure workflow. |
-| `grade_reports` | institution_id, grade_id, version, json_path, pdf_path, sha256, generated_at, generated_by | Immutable; one row per report version. |
+| `submission_snapshots` | institution_id, submission_id, run_id, sha, bundle_path, bundle_sha256, bundle_size, tarball_path, tarball_sha256, tarball_size | `unique(submission_id, sha)`. No writes through the Data API; deletion only through the retention/erasure workflow. (`replicated_at` comes with external replication.) |
+| `grade_reports` | institution_id, submission_id, grade_id (unique), user_id, version, grade_version, json_path, pdf_path, sha256, pdf_sha256, generated_at | Immutable; one per released grade version. Students see reports of released versions; Storage objects are readable exactly when the row is. |
 | `retention_actions` | institution_id, subject_user_id (nullable for an institution-wide purge), action (`anonymise`/`delete`/`export`/`purge`), requested_by, approved_by, executed_at, scope jsonb, certificate jsonb | Audit of erasure, export and purge handling. |
 
 ### LMS
@@ -122,7 +123,7 @@ erDiagram
 ### Platform
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `notifications` | institution_id, user_id, type, payload jsonb, read_at | Realtime-subscribed. |
+| `notifications` | institution_id, user_id, type (`run_finished`/`grade_released`/`deadline_soon`/`extension_granted`), title, body, link, dedupe_key, read_at | Written by the platform (an extension trigger writes its own); users read their own and may only set `read_at`. `unique(user_id, dedupe_key)` makes retries harmless. |
 | `institution_settings` / `platform_settings` | key, value jsonb, updated_by | Per tenant / global. |
 | `audit_logs` | institution_id (nullable for platform actions), actor_id, action, entity, entity_id, before jsonb, after jsonb, ip, at | Append-only. |
 | `usage_counters` | institution_id, period (month), runs, runner_minutes, storage_bytes | The platform pays for compute; these drive quotas and plan limits. |

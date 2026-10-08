@@ -3,6 +3,7 @@ import { AppShell, PageTitle } from "@/components/app-shell";
 import { InstitutionNav } from "@/components/institution-nav";
 import { Badge, roleTone } from "@/components/ui";
 import { requireMembership } from "@/lib/institution";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function InstitutionLayout({
   params,
@@ -13,6 +14,12 @@ export default async function InstitutionLayout({
 }) {
   const { slug } = await params;
   const ctx = await requireMembership(slug);
+  const supabase = await createSupabaseServerClient();
+  const { count: unread } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("institution_id", ctx.institution.id)
+    .is("read_at", null);
   const tabs = [
     { href: "", label: "Overview" },
     { href: "/courses", label: ctx.role === "student" ? "My courses" : "Courses" },
@@ -20,7 +27,11 @@ export default async function InstitutionLayout({
     ...(ctx.isStaff ? [{ href: "/members", label: "Members" }] : []),
   ];
   return (
-    <AppShell session={ctx.session} current={slug}>
+    <AppShell
+      session={ctx.session}
+      current={slug}
+      notifications={{ unread: unread ?? 0, href: `/i/${slug}/notifications` }}
+    >
       <PageTitle
         title={ctx.institution.name}
         subtitle={

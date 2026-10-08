@@ -167,6 +167,14 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await expect(card.getByText("Clear structure; name things consistently.")).toBeVisible();
   await expect(card.getByRole("strong")).toHaveText("README");
 
+  // The student was notified: the graded run's results, then the grade. Opening one marks it read.
+  await student.getByRole("link", { name: "Notifications, 2 unread" }).click();
+  const list = student.getByTestId("notifications");
+  await expect(list.getByText("Test results for Todo API: 1/2 passed")).toBeVisible();
+  await list.getByText("Your grade for Todo API is out").click();
+  await expect(student).toHaveURL(new RegExp(`/assignments/${assignment!.id}$`));
+  await expect(student.getByRole("link", { name: "Notifications, 1 unread" })).toBeVisible();
+
   // Release wrote a grade report the student can download (from private Storage).
   const reports = async () =>
     (
