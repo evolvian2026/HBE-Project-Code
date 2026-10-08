@@ -16,6 +16,7 @@ export default async function InstitutionLayout({
   const tabs = [
     { href: "", label: "Overview" },
     { href: "/courses", label: ctx.role === "student" ? "My courses" : "Courses" },
+    ...(ctx.role === "student" ? [{ href: "/grades", label: "My grades" }] : []),
     ...(ctx.isStaff ? [{ href: "/members", label: "Members" }] : []),
   ];
   return (

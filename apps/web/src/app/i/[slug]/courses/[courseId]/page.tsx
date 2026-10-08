@@ -262,7 +262,13 @@ export default async function CoursePage({ params }: Props) {
                       {group.map((m) => (
                         <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                           <span>
-                            {m.profile?.full_name ?? m.profile?.email ?? "Unknown"}
+                            {role === "student" ? (
+                              <Link href={`/i/${slug}/students/${m.user_id}`} className="hover:text-accent">
+                                {m.profile?.full_name ?? m.profile?.email ?? "Unknown"}
+                              </Link>
+                            ) : (
+                              (m.profile?.full_name ?? m.profile?.email ?? "Unknown")
+                            )}
                             <span className="text-muted">
                               {m.profile?.github_login
                                 ? ` · @${m.profile.github_login}`

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Button, Card, EmptyState, roleTone } from "@/components/ui";
 import { requireMembership } from "@/lib/institution";
@@ -108,7 +109,13 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-medium">
-                    {m.profile?.full_name ?? m.profile?.email ?? "Unknown"}
+                    {m.role === "student" ? (
+                      <Link href={`/i/${slug}/students/${m.user_id}`} className="hover:text-accent">
+                        {m.profile?.full_name ?? m.profile?.email ?? "Unknown"}
+                      </Link>
+                    ) : (
+                      (m.profile?.full_name ?? m.profile?.email ?? "Unknown")
+                    )}
                     {m.user_id === session.userId && <span className="text-xs text-muted">(you)</span>}
                     {m.status !== "active" && <Badge tone="warning">deactivated</Badge>}
                   </p>

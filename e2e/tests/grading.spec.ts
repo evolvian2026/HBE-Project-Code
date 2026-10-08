@@ -231,6 +231,16 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await student.goto(`/i/${slug}`);
   await expect(student.locator("section").filter({ hasText: "My assignments" }).getByText("grade 55")).toBeVisible();
 
+  // History: the student's record lists the grade and both report versions; staff see it on the profile.
+  await student.getByRole("link", { name: "My grades" }).click();
+  const history = student.getByTestId("performance").getByRole("row").filter({ hasText: "Todo API" });
+  await expect(history).toContainText("55");
+  await expect(history.getByRole("link", { name: "v1" })).toBeVisible();
+  await expect(history.getByRole("link", { name: "v2" })).toBeVisible();
+  await teacher.goto(submissionUrl);
+  await teacher.getByRole("heading", { level: 2 }).getByRole("link").click();
+  await expect(teacher.getByTestId("performance").getByRole("row").filter({ hasText: "Todo API" })).toContainText("55");
+
   await studentCtx.close();
   await teacherCtx.close();
 });

@@ -174,7 +174,15 @@ export default async function SubmissionPage({ params }: Props) {
             {a.title}
           </Link>
         </p>
-        <h2 className="mt-1 text-xl font-semibold">{name}</h2>
+        <h2 className="mt-1 text-xl font-semibold">
+          {isCourseStaff ? (
+            <Link href={`/i/${slug}/students/${s.user_id}`} className="hover:text-accent">
+              {name}
+            </Link>
+          ) : (
+            name
+          )}
+        </h2>
         <p className="mt-1 text-sm text-muted">
           {s.profile?.github_login && `@${s.profile.github_login} · `}
           {repoUrl ? (
