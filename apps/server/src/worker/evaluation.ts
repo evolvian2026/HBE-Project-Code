@@ -5,7 +5,7 @@ import type { JobQueue } from "@hbe/queue";
 import type { Settings } from "@hbe/settings";
 import { randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
-import { hashToken } from "../evaluation.ts";
+import { hashToken, queueRun } from "../evaluation.ts";
 
 export interface EvaluationDeps {
   db: Db;
@@ -193,6 +193,7 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
     .where("e.id", "=", runId)
     .executeTakeFirst();
   if (!run || (run.status !== "completed" && run.status !== "infra_error")) return null;
+  if (run.status === "infra_error") await retryGradedRun(deps, runId);
 
   const tests = await db.selectFrom("test_results").selectAll().where("run_id", "=", runId).execute();
   const stages = ((run.summary as { stages?: StageResult[] } | null)?.stages ?? []).map((stage) => ({
@@ -254,6 +255,52 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
   return score.score;
 }
 
+const GRADED_RUN_ATTEMPTS = 3;
+
+/** A graded run (deadline or re-grade) that hit a platform error is tried again, a few times. */
+export async function retryGradedRun(
+  deps: Pick<EvaluationDeps, "db" | "queue" | "settings" | "log">,
+  runId: string,
+): Promise<boolean> {
+  const { db, log } = deps;
+  const run = await db
+    .selectFrom("evaluation_runs")
+    .select(["submission_id", "sha", "trigger", "requested_by"])
+    .where("id", "=", runId)
+    .executeTakeFirst();
+  if (!run || (run.trigger !== "deadline" && run.trigger !== "regrade")) return false;
+  // Already retried (this can be called again when a job is retried).
+  const newer = await db
+    .selectFrom("evaluation_runs")
+    .select("id")
+    .where("submission_id", "=", run.submission_id)
+    .where("sha", "=", run.sha)
+    .where("trigger", "=", run.trigger)
+    // Compared in SQL: JavaScript dates would drop the microseconds.
+    .where("queued_at", ">", (eb) => eb.selectFrom("evaluation_runs").select("queued_at").where("id", "=", runId))
+    .executeTakeFirst();
+  if (newer) return false;
+  const { n } = await db
+    .selectFrom("evaluation_runs")
+    .select((eb) => eb.fn.countAll<number>().as("n"))
+    .where("submission_id", "=", run.submission_id)
+    .where("sha", "=", run.sha)
+    .where("trigger", "=", run.trigger)
+    .where("status", "=", "infra_error")
+    .executeTakeFirstOrThrow();
+  if (Number(n) >= GRADED_RUN_ATTEMPTS) {
+    log.error({ runId, submissionId: run.submission_id }, "graded run keeps failing for platform reasons");
+    return false;
+  }
+  await queueRun(deps, {
+    submissionId: run.submission_id,
+    sha: run.sha,
+    trigger: run.trigger,
+    requestedBy: run.requested_by,
+  });
+  return true;
+}
+
 /**
  * Keeps runs moving: runs whose grader never started or never finished become infra errors
  * (never graded); queued runs whose dispatch job was lost are queued again, and runs that
@@ -272,6 +319,7 @@ export async function reapRuns(deps: Pick<EvaluationDeps, "db" | "queue" | "sett
        or (status = 'queued' and queued_at < now() - interval '24 hours')
     returning id`.execute(db);
   if (rows.length) log.warn({ count: rows.length }, "reaped stuck evaluation runs");
+  for (const { id } of rows) await retryGradedRun(deps, id);
 
   // Deduplicated per run, so a run whose dispatch job is still pending is not queued twice.
   const stale = await db

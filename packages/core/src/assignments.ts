@@ -24,6 +24,7 @@ export interface PublishCheckInput {
   courseInstallation: { suspended: boolean; deleted: boolean } | null;
   rubricCriteriaCount: number;
   weights: Weights;
+  hasGraderSuite: boolean;
   now?: Date;
 }
 
@@ -45,6 +46,9 @@ export function publishProblems(a: PublishCheckInput): string[] {
   if (a.weights.rubric > 0 && a.rubricCriteriaCount === 0) {
     problems.push("Add rubric criteria, or set the rubric weight to 0.");
   }
+  if (a.weights.automated > 0 && !a.hasGraderSuite) {
+    problems.push("Choose a hidden test suite, or set the automated tests weight to 0.");
+  }
   return problems;
 }
 
@@ -62,4 +66,22 @@ export function slugifyAssignment(title: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40)
     .replace(/-+$/g, "");
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * When a submission's graded commit is fixed: the (extended) deadline plus the grace period,
+ * plus the late window when late work is accepted. The graded commit is the default branch's
+ * head as of then, by GitHub's push time.
+ */
+export function submissionCutoff(deadline: Date, policy: LatePolicy): Date {
+  return new Date(deadline.getTime() + policy.grace_minutes * 60_000 + policy.max_days * DAY_MS);
+}
+
+/** Started days late for a push (0 within the grace period), at most the late window. */
+export function lateDays(pushedAt: Date, deadline: Date, policy: LatePolicy): number {
+  const late = pushedAt.getTime() - deadline.getTime();
+  if (late <= policy.grace_minutes * 60_000) return 0;
+  return Math.min(policy.max_days, Math.ceil(late / DAY_MS));
 }

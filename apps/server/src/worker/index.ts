@@ -5,6 +5,7 @@ import type { GitHubClient } from "@hbe/github";
 import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "./github-events.ts";
 import { provisionSubmission, sweepProvisioning } from "./provisioning.ts";
 import { computeSubmissionProcess, fetchCommitDetails } from "./activity.ts";
+import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
@@ -57,5 +58,9 @@ export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, s
     await reapRuns(deps);
   });
   await queue.schedule("run-reaper", "*/5 * * * *", {});
+  await queue.work("deadline-sweep", async () => {
+    await finalizeDueSubmissions(deps);
+  });
+  await queue.schedule("deadline-sweep", "* * * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

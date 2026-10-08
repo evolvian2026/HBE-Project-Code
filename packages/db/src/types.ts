@@ -182,7 +182,7 @@ export interface PlatformSettingsTable {
 
 export type AssignmentStatus = "draft" | "published" | "closed";
 export type SubmissionStatus =
-  "waiting_for_github" | "provisioning" | "active" | "provisioning_failed" | "submitted" | "graded";
+  "waiting_for_github" | "provisioning" | "active" | "provisioning_failed" | "submitted" | "missing" | "graded";
 
 export interface StackProfilesTable {
   id: Generated<string>;
@@ -269,8 +269,25 @@ export interface SubmissionsTable {
   status_detail: string | null;
   provisioning_attempts: Generated<number>;
   final_sha: string | null;
+  /** GitHub's push time of the graded commit. */
+  submitted_at: Timestamp | null;
+  late_days: number | null;
+  finalized_at: Timestamp | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+/** Pushes to a repository's default branch, by GitHub's push time. */
+export interface BranchPushesTable {
+  id: Generated<number>;
+  institution_id: string;
+  repository_id: string;
+  sha: string;
+  pushed_at: Timestamp;
+  pusher_github_id: number | null;
+  by_bot: Generated<boolean>;
+  forced: Generated<boolean>;
+  received_at: DefaultTimestamp;
 }
 
 export interface CommitsTable {
@@ -437,6 +454,7 @@ export interface Database {
   grader_suites: GraderSuitesTable;
   evaluation_runs: EvaluationRunsTable;
   test_results: TestResultsTable;
+  branch_pushes: BranchPushesTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

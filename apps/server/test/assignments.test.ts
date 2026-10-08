@@ -1,3 +1,4 @@
+import { sql } from "@hbe/db";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
@@ -86,6 +87,7 @@ async function draft(overrides: Record<string, unknown> = {}): Promise<string> {
       template_repo: "hbe-templates/mern-starter",
       due_at: new Date(Date.now() + 14 * 86_400_000),
       weights: JSON.stringify({ automated: 85, rubric: 0, process: 15 }),
+      grader_suite_id: sql<string>`(select id from grader_suites where key = 'todo-api' and institution_id is null)`,
       ...overrides,
     })
     .returning("id")
@@ -104,12 +106,14 @@ describe("POST /v1/assignments/:id/publish", () => {
     const id = await draft({
       template_repo: null,
       weights: JSON.stringify({ automated: 60, rubric: 25, process: 15 }),
+      grader_suite_id: null,
     });
     const res = await app.inject({ method: "POST", url: `/v1/assignments/${id}/publish`, headers: as(instructor) });
     expect(res.statusCode).toBe(422);
     expect(res.json().problems).toEqual([
       "Set the template repository students start from.",
       "Add rubric criteria, or set the rubric weight to 0.",
+      "Choose a hidden test suite, or set the automated tests weight to 0.",
     ]);
   });
 

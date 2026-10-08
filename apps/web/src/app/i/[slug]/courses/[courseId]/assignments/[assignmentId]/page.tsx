@@ -1,4 +1,4 @@
-import { formatInZone, utcToZonedLocal, type ProcessResult } from "@hbe/core";
+import { formatInZone, submissionCutoff, utcToZonedLocal, type ProcessResult } from "@hbe/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
@@ -26,6 +26,7 @@ const SUBMISSION_LABEL: Record<
   active: { label: "repository ready", tone: "success" },
   provisioning_failed: { label: "repository failed", tone: "danger" },
   submitted: { label: "submitted", tone: "success" },
+  missing: { label: "nothing submitted", tone: "danger" },
   graded: { label: "graded", tone: "success" },
 };
 
@@ -59,7 +60,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     supabase
       .from("submissions")
       .select(
-        "id, user_id, status, status_detail, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
+        "id, user_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
       )
       .eq("assignment_id", a.id),
     supabase
@@ -99,6 +100,10 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     user_id: string;
     status: string;
     status_detail: string | null;
+    final_sha: string | null;
+    submitted_at: string | null;
+    late_days: number | null;
+    finalized_at: string | null;
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
     repository: { owner: string; name: string } | null;
   };
@@ -114,6 +119,11 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     (r) => r.trigger === "manual" && utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
   ).length;
   const runsLeft = Math.max(0, a.run_quota_per_day - manualToday);
+  const pastDeadline = Date.now() > new Date(effectiveDue).getTime() + a.late_policy.grace_minutes * 60_000;
+  const cutoff = submissionCutoff(new Date(effectiveDue), a.late_policy);
+  const gradedRun = mine ? myRuns.find((r) => r.trigger === "deadline" || r.trigger === "regrade") : undefined;
+  const lateLabel = (days: number) =>
+    `${days} day${days === 1 ? "" : "s"} late · −${Math.min(100, days * a.late_policy.per_day_percent)}%`;
 
   return (
     <div className="space-y-6">
@@ -198,8 +208,66 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         </Card>
       )}
 
-      {mine && mine.status === "active" && (
-        <Card title="Your progress" description="Updated as you push. Counts toward your grade.">
+      {mine?.finalized_at && (
+        <Card title="Your submission">
+          {mine.final_sha ? (
+            <div className="space-y-2 text-sm">
+              <p className="flex flex-wrap items-center gap-2">
+                Graded commit{" "}
+                {mine.repository ? (
+                  <a
+                    href={`https://github.com/${mine.repository.owner}/${mine.repository.name}/commit/${mine.final_sha}`}
+                    className="font-mono text-accent hover:underline"
+                  >
+                    {mine.final_sha.slice(0, 7)}
+                  </a>
+                ) : (
+                  <span className="font-mono">{mine.final_sha.slice(0, 7)}</span>
+                )}
+                , pushed {mine.submitted_at && formatInZone(mine.submitted_at, course.timezone)}
+                {mine.late_days ? (
+                  <Badge tone="warning">{lateLabel(mine.late_days)}</Badge>
+                ) : (
+                  <Badge tone="success">on time</Badge>
+                )}
+              </p>
+              {gradedRun && (
+                <p>
+                  <Link
+                    href={`${base}/assignments/${a.id}/submissions/${mine.id}/runs/${gradedRun.id}`}
+                    className="text-accent hover:underline"
+                  >
+                    Graded test run
+                  </Link>
+                  {runOutcome(gradedRun) && <span className="text-muted"> · {runOutcome(gradedRun)}</span>}
+                </p>
+              )}
+            </div>
+          ) : (
+            <Alert tone="error">
+              Nothing was pushed to your repository&apos;s default branch before the cutoff (
+              {formatInZone(cutoff, course.timezone)}). Talk to your instructor if you need an extension.
+            </Alert>
+          )}
+        </Card>
+      )}
+
+      {mine && !mine.finalized_at && pastDeadline && a.status === "published" && (
+        <Alert tone="info">
+          The deadline has passed. Pushes until {formatInZone(cutoff, course.timezone)} are accepted as late work, at −
+          {a.late_policy.per_day_percent}% for each started day; your latest push before then is graded.
+        </Alert>
+      )}
+
+      {mine && mine.repository && ["active", "submitted", "graded"].includes(mine.status) && (
+        <Card
+          title="Your progress"
+          description={
+            mine.finalized_at
+              ? "Final: activity up to your deadline."
+              : "Updated as you push. Counts toward your grade."
+          }
+        >
           {processBySubmission.get(mine.id) ? (
             <ProcessBreakdown result={processBySubmission.get(mine.id)!.breakdown} weightInGrade={a.weights.process} />
           ) : (
@@ -322,6 +390,9 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center justify-end gap-3">
+                      {s.status === "submitted" && s.late_days ? (
+                        <span className="text-xs text-warning">{lateLabel(s.late_days)}</span>
+                      ) : null}
                       {s.status === "provisioning_failed" && s.status_detail && (
                         <span className="max-w-md text-xs text-danger">{s.status_detail}</span>
                       )}

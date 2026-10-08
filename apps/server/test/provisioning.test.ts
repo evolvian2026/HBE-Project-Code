@@ -1,3 +1,4 @@
+import { sql } from "@hbe/db";
 import { FakeGitHub, GitHubError } from "@hbe/github";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -88,6 +89,7 @@ beforeAll(async () => {
         template_repo: "hbe-templates/mern-starter",
         due_at: new Date(Date.now() + 7 * 86_400_000),
         weights: JSON.stringify({ automated: 85, rubric: 0, process: 15 }),
+        grader_suite_id: sql<string>`(select id from grader_suites where key = 'todo-api' and institution_id is null)`,
       })
       .returning("id")
       .executeTakeFirstOrThrow()

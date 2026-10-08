@@ -22,6 +22,8 @@ export interface QueuePayloads {
   "score-run": { runId: string };
   /** Mark runs whose grader never started or never finished. */
   "run-reaper": Record<string, never>;
+  /** Fix the graded commit of submissions whose cutoff has passed. */
+  "deadline-sweep": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -45,6 +47,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "dispatch-run": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
   "score-run": { retryLimit: 5, retryDelay: 15, retryBackoff: true, expireInSeconds: 120 },
   "run-reaper": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
+  "deadline-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

@@ -159,6 +159,8 @@ begin
     from public.evaluation_runs r;
   insert into public.grader_suites (institution_id, key, version, title, path)
     values (tests.id('inst_b'), 'beta-suite', 1, 'Beta suite', 'suites/beta');
+  insert into public.branch_pushes (institution_id, repository_id, sha, pushed_at)
+    select r.institution_id, r.id, repeat('b', 40), now() - interval '1 day' from public.repositories r;
 
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
@@ -194,6 +196,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'grader_suites', count(*) from public.grader_suites where institution_id = p_institution
   union all select 'evaluation_runs', count(*) from public.evaluation_runs where institution_id = p_institution
   union all select 'test_results', count(*) from public.test_results where institution_id = p_institution
+  union all select 'branch_pushes', count(*) from public.branch_pushes where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

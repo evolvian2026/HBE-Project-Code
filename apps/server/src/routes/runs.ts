@@ -54,7 +54,8 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
 
   /**
    * Students start a run on the head of their default branch (within the daily quota, if the
-   * assignment allows manual runs); course staff on any commit, without a quota.
+   * assignment allows manual runs); course staff on any commit, without a quota. After the
+   * cutoff, staff runs are re-grades (of the graded commit unless another is given).
    */
   app.post<{ Params: { submissionId: string } }>("/v1/submissions/:submissionId/runs", async (req, reply) => {
     const actor = await authenticate(req, db, verifier);
@@ -87,6 +88,8 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
         "r.id as repo_id",
         "r.default_branch",
         "r.head_sha",
+        "s.final_sha",
+        "s.finalized_at",
       ])
       .where("s.id", "=", submissionId)
       .executeTakeFirst();
@@ -106,9 +109,24 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
       s.user_id === actor.userId && actor.memberships.get(s.institution_id)?.institutionStatus === "active";
     if (!isOwner && !isStaff) throw new ForbiddenError();
 
+    if (!s.grader_suite_id) throw new HttpError(409, "no_tests", "This assignment has no automated tests.");
+
+    // After the cutoff the graded commit is fixed: only staff re-grade (any commit, by default the graded one).
+    if (s.finalized_at) {
+      if (!isStaff) throw new HttpError(409, "closed", "The deadline has passed, so your graded commit is fixed.");
+      const sha = body.sha ?? s.final_sha;
+      if (!sha) throw new HttpError(409, "nothing_submitted", "Nothing was pushed before the cutoff.");
+      const { runId } = await queueRun(deps, {
+        submissionId: s.id,
+        sha,
+        trigger: "regrade",
+        requestedBy: actor.userId,
+      });
+      return reply.code(201).send({ runId });
+    }
+
     if (s.assignment_status !== "published")
       throw new HttpError(409, "not_open", "This assignment is not open for test runs.");
-    if (!s.grader_suite_id) throw new HttpError(409, "no_tests", "This assignment has no automated tests.");
     if (s.status !== "active" || !s.repo_id)
       throw new HttpError(409, "no_repository", "The repository isn't ready yet.");
 

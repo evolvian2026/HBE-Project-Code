@@ -391,8 +391,14 @@ and adapter. No platform code changes are needed.
 - `on_push` to the default branch (debounced: newest SHA wins within a 5-minute window)
 - `on_pull_request` (opened / synchronize): result posted as a Check Run on the PR
 - `manual` (student "Run tests" button; quota per day, e.g. 10)
-- `on_deadline`: final graded run on the last commit **before the deadline**, so later pushes
-  can't change the graded SHA
+- `on_deadline`: final graded run on the **graded commit**: the head of the default branch as
+  of the cutoff, by GitHub's push time (commit dates can be faked; pushes by bots don't count).
+  The cutoff is the student's deadline (with any extension) plus the grace period, plus the
+  late window when the assignment accepts late work. A push after the deadline and grace period
+  is late by the number of started days, and the late penalty applies. After the cutoff,
+  pending automatic runs are cancelled, students can no longer start runs, and the process
+  score is frozen. A graded run that hits a platform error is retried up to three times.
+- Extensions: an extension whose cutoff is still ahead reopens a finalized submission.
 - teacher re-run (any SHA, any suite version)
 
 Concurrency guard: at most one active run per (submission, trigger type); per-course and

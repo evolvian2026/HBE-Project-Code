@@ -108,6 +108,20 @@ export async function handlePush(deps: ActivityDeps, event: PushEvent): Promise<
   // A new head on the default branch (also a fast-forward with no new commits) gets tested.
   if (branch !== repo.default_branch || event.deleted || !event.after || !/^[0-9a-f]{40}$/.test(event.after)) return;
   const pushedAt = event.repository.pushed_at ? new Date(event.repository.pushed_at * 1000) : new Date();
+  // The push history decides which commit is graded at the deadline.
+  await deps.db
+    .insertInto("branch_pushes")
+    .values({
+      institution_id: repo.institution_id,
+      repository_id: repo.id,
+      sha: event.after,
+      pushed_at: pushedAt,
+      pusher_github_id: event.sender?.id ?? null,
+      by_bot: event.sender?.type === "Bot",
+      forced: event.forced ?? false,
+    })
+    .onConflict((oc) => oc.columns(["repository_id", "pushed_at", "sha"]).doNothing())
+    .execute();
   const moved = await deps.db
     .updateTable("repositories")
     .set({ head_sha: event.after, head_pushed_at: pushedAt })
@@ -306,10 +320,14 @@ export async function fetchCommitDetails(
   return pending.length;
 }
 
-/** Recomputes and stores a submission's process score (unless frozen at the deadline). */
+/**
+ * Recomputes and stores a submission's process score, unless it is already frozen.
+ * `final` freezes it (at the deadline): later activity no longer changes it.
+ */
 export async function computeSubmissionProcess(
   { db, log }: Pick<ActivityDeps, "db" | "log">,
   submissionId: string,
+  { final = false }: { final?: boolean } = {},
 ): Promise<number | null> {
   const s = await db
     .selectFrom("submissions as s")
@@ -376,6 +394,7 @@ export async function computeSubmissionProcess(
       score: String(result.score),
       breakdown,
       policy: JSON.stringify(policy),
+      is_final: final,
     })
     .onConflict((oc) =>
       oc
@@ -385,6 +404,7 @@ export async function computeSubmissionProcess(
           breakdown,
           policy: JSON.stringify(policy),
           computed_at: new Date(),
+          is_final: final,
         })
         .where("process_snapshots.is_final", "=", false),
     )

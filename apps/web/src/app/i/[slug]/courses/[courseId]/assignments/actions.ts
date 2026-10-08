@@ -183,3 +183,43 @@ export async function startRun(_prev: ActionState, formData: FormData): Promise<
   revalidatePath(`/i/${slug}/courses/${courseId}/assignments/${assignmentId}`, "layout");
   redirect(`${submission}/runs/${result.data.runId}`);
 }
+
+const extensionSchema = idsSchema.extend({
+  submissionId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  dueAt: localDateTime,
+  reason: z.string().trim().max(500).optional(),
+});
+
+/** Gives one student a later deadline (audited). A cutoff still ahead reopens their submission. */
+export async function saveExtension(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = extensionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const v = parsed.data;
+  const { course, canManage, ctx } = await requireCourse(v.slug, v.courseId);
+  if (!canManage) return { ok: false, message: "Only the course's instructors and institution admins can do that." };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("assignment_extensions").upsert(
+    {
+      institution_id: ctx.institution.id,
+      assignment_id: v.assignmentId,
+      user_id: v.studentId,
+      due_at: zonedLocalToUtc(v.dueAt, course.timezone).toISOString(),
+      reason: v.reason || null,
+      granted_by: ctx.session.userId,
+    },
+    { onConflict: "assignment_id,user_id" },
+  );
+  if (error) return { ok: false, message: friendlyError(error) };
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
+  return { ok: true, message: "Extension saved." };
+}
+
+export async function removeExtension(formData: FormData) {
+  const v = idsSchema
+    .extend({ submissionId: z.string().uuid(), studentId: z.string().uuid() })
+    .parse(Object.fromEntries(formData));
+  const supabase = await createSupabaseServerClient();
+  await supabase.from("assignment_extensions").delete().eq("assignment_id", v.assignmentId).eq("user_id", v.studentId);
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
+}

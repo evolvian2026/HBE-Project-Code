@@ -53,6 +53,7 @@ export async function assignmentRoutes(app: FastifyInstance, { db, verifier, que
         "a.release_at",
         "a.template_repo",
         "a.weights",
+        "a.grader_suite_id",
         "p.status as profile_status",
         "c.archived_at as course_archived_at",
         "g.id as installation_id",
@@ -83,6 +84,7 @@ export async function assignmentRoutes(app: FastifyInstance, { db, verifier, que
         : null,
       rubricCriteriaCount: Number(a.criteria_count ?? 0),
       weights: a.weights as unknown as Weights,
+      hasGraderSuite: a.grader_suite_id !== null,
     });
     if (problems.length) throw new HttpError(422, "not_ready", problems.join(" "), { problems });
 

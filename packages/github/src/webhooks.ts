@@ -100,6 +100,8 @@ export const pushEventSchema = z.object({
   /** The pushed branch's new head commit. */
   after: z.string().optional(),
   deleted: z.boolean().optional(),
+  forced: z.boolean().optional(),
+  sender: z.object({ id: z.number().int(), login: z.string(), type: z.string().optional() }).passthrough().optional(),
   /** pushed_at: Unix time of the push, used to order deliveries. */
   repository: repoRef.extend({ pushed_at: z.number().optional() }),
   commits: z
