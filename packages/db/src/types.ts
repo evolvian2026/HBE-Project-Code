@@ -212,6 +212,7 @@ export interface AssignmentsTable {
   process_policy: Generated<Json>;
   triggers: Generated<Json>;
   run_quota_per_day: Generated<number>;
+  grader_suite_id: string | null;
   status: Generated<AssignmentStatus>;
   published_at: Timestamp | null;
   grades_released_at: Timestamp | null;
@@ -252,6 +253,8 @@ export interface RepositoriesTable {
   default_branch: Generated<string>;
   private: Generated<boolean>;
   archived: Generated<boolean>;
+  head_sha: string | null;
+  head_pushed_at: Timestamp | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }
@@ -349,6 +352,63 @@ export interface ProcessSnapshotsTable {
   computed_at: DefaultTimestamp;
 }
 
+export type RunStatus = "queued" | "dispatched" | "running" | "completed" | "failed" | "infra_error" | "cancelled";
+
+export interface GraderSuitesTable {
+  id: Generated<string>;
+  institution_id: string | null;
+  key: string;
+  version: number;
+  title: string;
+  path: string;
+  git_ref: Generated<string>;
+  stack_profile_id: string | null;
+  manifest: Generated<Json>;
+  status: Generated<"active" | "retired">;
+  created_at: DefaultTimestamp;
+}
+
+export interface EvaluationRunsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  sha: string;
+  trigger: "push" | "pull_request" | "manual" | "deadline" | "regrade";
+  status: Generated<RunStatus>;
+  grader_suite_id: string | null;
+  stack_profile_id: string | null;
+  score: string | null; // numeric
+  summary: Json | null;
+  error: string | null;
+  requested_by: string | null;
+  callback_token_hash: string | null;
+  gh_workflow_run_id: number | null;
+  check_run_id: number | null;
+  queued_at: DefaultTimestamp;
+  dispatched_at: Timestamp | null;
+  started_at: Timestamp | null;
+  finished_at: Timestamp | null;
+}
+
+export interface TestResultsTable {
+  id: Generated<string>;
+  institution_id: string;
+  run_id: string;
+  stage: string;
+  test_key: string;
+  title: string;
+  category: string | null;
+  status: "passed" | "failed" | "skipped" | "error";
+  weight: Generated<string>; // numeric
+  duration_ms: number | null;
+  expected: string | null;
+  actual: string | null;
+  message: string | null;
+  hint: string | null;
+  evidence: Json | null;
+  staff_notes: string | null;
+}
+
 export interface Database {
   institutions: InstitutionsTable;
   profiles: ProfilesTable;
@@ -374,6 +434,9 @@ export interface Database {
   pr_reviews: PrReviewsTable;
   issues: IssuesTable;
   process_snapshots: ProcessSnapshotsTable;
+  grader_suites: GraderSuitesTable;
+  evaluation_runs: EvaluationRunsTable;
+  test_results: TestResultsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

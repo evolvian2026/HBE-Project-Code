@@ -62,6 +62,9 @@ importers:
       fastify:
         specifier: 5.12.5
         version: 5.12.5
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       kysely:
         specifier: 0.28.17
         version: 0.28.17
@@ -175,6 +178,8 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  grader: {}
 
   packages/core:
     devDependencies:

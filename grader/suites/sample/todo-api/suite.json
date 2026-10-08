@@ -1,0 +1,7 @@
+{
+  "key": "todo-api",
+  "version": 1,
+  "title": "Todo API (sample suite)",
+  "stack_profile": "node22-api",
+  "stages": [{ "key": "api", "file": "api.test.mjs" }]
+}

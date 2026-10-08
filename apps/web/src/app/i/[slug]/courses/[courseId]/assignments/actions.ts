@@ -27,6 +27,10 @@ const assignmentSchema = z
       .trim()
       .regex(ASSIGNMENT_SLUG_PATTERN, "Short name: lowercase letters, digits and hyphens (2–40)"),
     stackProfileId: z.string().uuid("Choose a stack profile"),
+    graderSuiteId: z.union([z.string().uuid(), z.literal("")]).transform((v) => v || null),
+    onPush: z.literal("on").optional(),
+    onPullRequest: z.literal("on").optional(),
+    manualRuns: z.literal("on").optional(),
     templateRepo: z
       .string()
       .trim()
@@ -63,6 +67,8 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
     title: v.title,
     slug: v.assignmentSlug,
     stack_profile_id: v.stackProfileId,
+    grader_suite_id: v.graderSuiteId,
+    triggers: { on_push: Boolean(v.onPush), on_pull_request: Boolean(v.onPullRequest), manual: Boolean(v.manualRuns) },
     template_repo: v.templateRepo,
     due_at: dueAt.toISOString(),
     release_at: releaseAt?.toISOString() ?? null,
@@ -164,4 +170,16 @@ export async function retryProvisioning(formData: FormData) {
     .parse(Object.fromEntries(formData));
   await apiFetch(`/v1/submissions/${submissionId}/retry-provisioning`, { method: "POST" });
   revalidatePath(`/i/${slug}/courses/${courseId}/assignments/${assignmentId}`);
+}
+
+/** Starts a test run (students: on their latest push, within the daily quota). */
+export async function startRun(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { slug, courseId, assignmentId, submissionId } = idsSchema
+    .extend({ submissionId: z.string().uuid() })
+    .parse(Object.fromEntries(formData));
+  const result = await apiFetch<{ runId: string }>(`/v1/submissions/${submissionId}/runs`, { method: "POST" });
+  if (!result.ok) return { ok: false, message: result.message };
+  const submission = `/i/${slug}/courses/${courseId}/assignments/${assignmentId}/submissions/${submissionId}`;
+  revalidatePath(`/i/${slug}/courses/${courseId}/assignments/${assignmentId}`, "layout");
+  redirect(`${submission}/runs/${result.data.runId}`);
 }

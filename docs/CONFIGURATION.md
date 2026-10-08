@@ -112,6 +112,12 @@ message.
 | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | — | From the GitHub App (docs/GITHUB_APP_SETUP.md) |
 | `GITHUB_API_URL` | `https://api.github.com` | Change only for GitHub Enterprise Server |
 | `GITHUB_FAKE` | `false` | `true` uses an in-memory GitHub so repository creation can be tried without an App. **Refused unless `HBE_ENV=local`.** |
+| `GRADER_REPO` | — | `owner/name` of the private grader repository (its `evaluate.yml` workflow is dispatched for every test run) |
+| `GRADER_WORKFLOW`, `GRADER_REF` | `evaluate.yml`, `main` | The workflow file and branch; OIDC tokens must come from exactly this workflow on this branch |
+| `GRADER_CALLBACK_AUTH` | `oidc` | How the grader authenticates its callbacks. `oidc`: GitHub Actions OIDC tokens (no shared secrets). `token`: a random per-run token, so the harness can be run by hand. **`token` is refused unless `HBE_ENV=local`.** |
+
+Evaluation limits (runs per day, concurrency, the monthly Actions-minutes budget, push debounce,
+job timeout) are in the `evaluation` section of the plan profile.
 
 ## 6. Platform settings in the database
 

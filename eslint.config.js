@@ -27,4 +27,18 @@ export default tseslint.config(
     files: ["packages/settings/**", "**/*.test.ts", "**/test/**", "e2e/**", "**/*.config.{js,ts,mjs}", "apps/web/**"],
     rules: { "no-restricted-properties": "off" },
   },
+  {
+    // The grader runs on Actions runners, outside the platform's configuration system.
+    files: ["grader/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        AbortSignal: "readonly",
+        Buffer: "readonly",
+        clearTimeout: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+    rules: { "no-restricted-properties": "off" },
+  },
 );

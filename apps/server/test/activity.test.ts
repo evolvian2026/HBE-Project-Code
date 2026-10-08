@@ -4,14 +4,15 @@ import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { computeSubmissionProcess, fetchCommitDetails } from "../src/worker/activity.ts";
 import { processGithubEvent } from "../src/worker/github-events.ts";
-import { FakeQueue, Fixtures, randomGithubId, testDb, unique } from "./helpers.ts";
+import { FakeQueue, Fixtures, randomGithubId, testDb, testSettings, unique } from "./helpers.ts";
 
 const db = testDb();
 const fixtures = new Fixtures(db);
 const queue = new FakeQueue();
 const github = new FakeGitHub();
 const log = Fastify({ logger: false }).log;
-const deps = { db, queue, github, log };
+const settings = testSettings();
+const deps = { db, queue, github, log, settings };
 
 const studentGithubId = randomGithubId();
 const githubRepoId = randomGithubId();
@@ -264,7 +265,11 @@ describe("activity tracking", () => {
       .where("repository_id", "=", repositoryId)
       .executeTakeFirstOrThrow();
     expect(issue).toMatchObject({ state: "closed", author_profile_id: student });
-    expect(queue.sent).toContainEqual({ name: "process-score", data: { submissionId } });
+    expect(queue.sent).toContainEqual({
+      name: "process-score",
+      data: { submissionId },
+      options: { singletonKey: `process-${submissionId}` },
+    });
   });
 
   it("computes the process score with explanations", async () => {

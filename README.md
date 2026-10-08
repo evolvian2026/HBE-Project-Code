@@ -22,18 +22,26 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
 
 ## Status
 
-**Phase 0 (foundations) is built.** Working today:
+**Phase 0 (foundations) is built; Phase 1 (the MVP vertical slice) is in progress.** Working today:
 
 - Multi-institution database with row-level security on every table, composite foreign keys that
-  block cross-institution links, an audit log, and 66 database tests proving the isolation.
+  block cross-institution links, an audit log, and 121 database tests proving the isolation.
 - Sign-in with GitHub or an emailed magic link; invitations accepted automatically on first sign-in.
-- Super admin console: create institutions and invite their first admin.
-- Institution pages per role, with an institution switcher.
-- GitHub webhooks: verified, stored, queued and processed; GitHub organisations linked to an
-  institution securely (see [ADR 0013](docs/adr/0013-installation-linking-by-webhook.md)).
+- Super admin console; institution admins manage members (single or CSV invitations), courses,
+  staff and their GitHub organisation. Admin powers require two-factor authentication.
+- Teachers create assignments locked to a stack profile, with grade weights, late policy, rubric
+  and a hidden test suite. Publishing creates each student's private repository from a template.
+- Commits, pull requests, reviews and issues are tracked from webhooks into a **process score**
+  that explains every point lost.
+- **Automated grading**: tests run on push, on pull requests or on request (with a daily quota) in
+  a private grader repository on GitHub Actions. The student's app runs with Docker Compose on an
+  offline network and is tested by black-box hidden tests with random data. Students see each
+  failure with what was expected, a hint, the request and response and their app's logs, also as
+  a check on their commit.
 - One Docker image running the web, api and worker roles, validated by end-to-end browser tests.
 
-Next is Phase 1 (assignments, repository provisioning, grading). See [docs/ROADMAP.md](docs/ROADMAP.md).
+Next: rubric scoring, grade release, grade reports and records, dashboards. See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 
@@ -43,8 +51,9 @@ apps/server       One entry point for every role: Fastify api, pg-boss worker, a
 packages/settings Typed config loader: plan profile + environment (docs/CONFIGURATION.md)
 packages/db       Kysely database access and table types
 packages/queue    Typed job queue and schedules on pg-boss
-packages/github   Webhook signature verification and payload parsing
+packages/github   GitHub App client, webhook verification and payload parsing, in-memory fake
 packages/core     Permission rules and shared domain helpers
+grader/           Grader harness, hidden test suites and the evaluate workflow (its own repo when deployed)
 supabase/         Config, SQL migrations and pgTAP database tests
 e2e/              Playwright end-to-end tests
 config/           Plan profiles (free/paid) and env templates per environment
@@ -92,10 +101,11 @@ credential goes, and how to forward webhooks are in [docs/GITHUB_APP_SETUP.md](d
 | Command | What it runs | Needs |
 |---------|--------------|-------|
 | `pnpm lint` · `pnpm format:check` · `pnpm typecheck` | ESLint, Prettier, TypeScript | — |
-| `pnpm test` | Unit tests (settings, github, core) | — |
+| `pnpm test` | Unit tests (settings, github, core, grader) | — |
 | `pnpm db:test` | pgTAP: tenant isolation, permissions, integrity, auth hook, invitations | `pnpm db:start` |
 | `pnpm test:integration` | db schema, queue, and the server against the real database | `pnpm db:start` |
-| `pnpm test:e2e` | Playwright: real sign-in emails, onboarding, access control | `pnpm db:start` and the app running on :3000 |
+| `pnpm --filter @hbe/grader test:docker` | The grader harness grading fixture apps | Docker |
+| `pnpm test:e2e` | Playwright: real sign-in emails, onboarding, access control, grading | `pnpm db:start`, the app running on :3000, and Docker |
 
 For the end-to-end tests, run the app the way the demo runs it (one process, all roles). Make a
 copy of `.env.local` with `ROLES=web,api,worker`, `PORT=3000` and `API_URL=http://localhost:3000`, then:

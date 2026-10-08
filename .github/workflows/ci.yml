@@ -85,6 +85,7 @@ jobs:
           GITHUB_FAKE=true
           GITHUB_WEBHOOK_SECRET=ci-secret
           GRADER_REPO=hbe-ci/hbe-grader
+          GRADER_CALLBACK_AUTH=token
           EMAIL_FROM=HBE CI <ci@localhost>
           TOKEN_ENCRYPTION_KEY=ci
           ENV
@@ -111,6 +112,18 @@ jobs:
             e2e/test-results
             ${{ runner.temp }}/app.log
           retention-days: 7
+
+  grader:
+    name: Grader harness (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Grade the fixture apps with the real harness
+        run: node --test --test-concurrency=1 grader/test/harness.docker.test.mjs
 
   docker:
     name: Docker image builds

@@ -97,7 +97,11 @@ const repoRef = z.object({ id: z.number().int(), full_name: z.string() }).passth
 /** `push`: commits on a branch (GitHub includes at most 20 in the payload). */
 export const pushEventSchema = z.object({
   ref: z.string(),
-  repository: repoRef,
+  /** The pushed branch's new head commit. */
+  after: z.string().optional(),
+  deleted: z.boolean().optional(),
+  /** pushed_at: Unix time of the push, used to order deliveries. */
+  repository: repoRef.extend({ pushed_at: z.number().optional() }),
   commits: z
     .array(
       z.object({
@@ -126,6 +130,7 @@ export const pullRequestEventSchema = z.object({
       created_at: z.string(),
       closed_at: z.string().nullable().optional(),
       user: z.object({ id: z.number().int(), login: z.string() }).passthrough(),
+      head: z.object({ sha: z.string() }).passthrough().optional(),
     })
     .passthrough(),
 });

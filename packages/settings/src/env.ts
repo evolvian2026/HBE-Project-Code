@@ -50,6 +50,8 @@ export const envSchema = z.object({
     .optional(),
   GRADER_WORKFLOW: z.string().default("evaluate.yml"),
   GRADER_REF: z.string().default("main"),
+  /** How grader callbacks authenticate: GitHub Actions OIDC, or (local only) a per-run token. */
+  GRADER_CALLBACK_AUTH: z.enum(["oidc", "token"]).default("oidc"),
 
   ARCHIVE_S3_ENDPOINT: optional,
   ARCHIVE_S3_REGION: z.string().default("auto"),
@@ -108,6 +110,10 @@ const rules: Rule[] = [
     when: deployed,
     check: (e) =>
       [e.APP_URL, e.API_URL].some((u) => !u.startsWith("https://")) ? "APP_URL and API_URL must use https" : undefined,
+  },
+  {
+    when: (e) => e.GRADER_CALLBACK_AUTH === "token",
+    check: (e) => (e.HBE_ENV === "local" ? undefined : "GRADER_CALLBACK_AUTH=token is only allowed when HBE_ENV=local"),
   },
   {
     when: (e) => e.GITHUB_FAKE,

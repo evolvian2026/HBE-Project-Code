@@ -11,6 +11,8 @@ export interface AssignmentFormValues {
   title: string;
   slug: string;
   stackProfileId: string;
+  graderSuiteId: string;
+  triggers: { on_push: boolean; on_pull_request: boolean; manual: boolean };
   templateRepo: string;
   dueAt: string;
   releaseAt: string;
@@ -28,12 +30,14 @@ export function AssignmentForm({
   courseId,
   timezone,
   profiles,
+  suites,
   values,
 }: {
   slug: string;
   courseId: string;
   timezone: string;
   profiles: { id: string; label: string; description: string | null }[];
+  suites: { id: string; label: string }[];
   values: AssignmentFormValues;
 }) {
   const [state, action, pending] = useActionState(saveAssignment, null);
@@ -112,6 +116,41 @@ export function AssignmentForm({
           hint="A GitHub template repository each student's repository is created from."
         />
       </section>
+
+      <fieldset className="rounded-md border border-border p-4">
+        <legend className="px-1 text-sm font-medium">Automated tests</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="font-medium">Hidden test suite</span>
+            <select name="graderSuiteId" defaultValue={values.graderSuiteId} className={selectClass}>
+              <option value="">No automated tests</option>
+              {suites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              Black-box tests run against each student&apos;s app. Students see failures, never the test code.
+            </span>
+          </label>
+          <div className="space-y-2 text-sm">
+            <span className="font-medium">Run the tests</span>
+            {(
+              [
+                ["onPush", "on_push", "When students push to the default branch"],
+                ["onPullRequest", "on_pull_request", "On pull requests"],
+                ["manualRuns", "manual", "When students ask (within the daily limit)"],
+              ] as const
+            ).map(([name, key, label]) => (
+              <label key={name} className="flex items-center gap-2">
+                <input type="checkbox" name={name} defaultChecked={values.triggers[key]} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </fieldset>
 
       <section className="grid gap-4 sm:grid-cols-3">
         <Field label={`Due (${timezone})`} name="dueAt" type="datetime-local" required defaultValue={values.dueAt} />

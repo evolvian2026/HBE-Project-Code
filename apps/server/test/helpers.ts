@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { createDb, sql, type Db } from "@hbe/db";
-import type { Job, JobQueue, QueueName, QueuePayloads } from "@hbe/queue";
+import type { Job, JobQueue, QueueName, QueuePayloads, SendOptions } from "@hbe/queue";
 import { loadSettings, type Settings } from "@hbe/settings";
 import type { TokenVerifier } from "../src/auth.ts";
 
@@ -37,11 +37,11 @@ export function testDb(): Db {
 
 /** Records sends instead of talking to pg-boss. */
 export class FakeQueue implements JobQueue {
-  sent: { name: QueueName; data: unknown }[] = [];
+  sent: { name: QueueName; data: unknown; options?: SendOptions }[] = [];
   async start() {}
   async stop() {}
-  async send<N extends QueueName>(name: N, data: QueuePayloads[N]): Promise<string> {
-    this.sent.push({ name, data });
+  async send<N extends QueueName>(name: N, data: QueuePayloads[N], options?: SendOptions): Promise<string> {
+    this.sent.push({ name, data, ...(options ? { options } : {}) });
     return randomUUID();
   }
   async work<N extends QueueName>(_name: N, _handler: (job: Job<N>) => Promise<void>) {}

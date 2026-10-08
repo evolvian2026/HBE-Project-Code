@@ -16,6 +16,12 @@ export interface QueuePayloads {
   "commit-details": { repositoryId: string };
   /** Recompute a submission's process score from its activity. */
   "process-score": { submissionId: string };
+  /** Start the grader workflow for a queued evaluation run. */
+  "dispatch-run": { runId: string };
+  /** Score a finished run and report it as a GitHub check run. */
+  "score-run": { runId: string };
+  /** Mark runs whose grader never started or never finished. */
+  "run-reaper": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -35,6 +41,10 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "provisioning-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
   "commit-details": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300 },
   "process-score": { retryLimit: 3, retryDelay: 10, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
+  // Always sent with singletonKey `dispatch-<runId>`: stately allows one pending job per run.
+  "dispatch-run": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
+  "score-run": { retryLimit: 5, retryDelay: 15, retryBackoff: true, expireInSeconds: 120 },
+  "run-reaper": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

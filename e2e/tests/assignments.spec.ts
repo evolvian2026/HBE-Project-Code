@@ -54,6 +54,10 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
   await teacher.getByLabel("Title").fill("Todo API");
   await expect(teacher.getByLabel("Short name")).toHaveValue("todo-api");
   await teacher.getByLabel("Template repository").fill("hbe-templates/mern-starter");
+  const suite = teacher.getByLabel("Hidden test suite");
+  const sample = await suite.locator("option", { hasText: "Todo API (sample suite)" }).getAttribute("value");
+  await suite.selectOption(sample!);
+  await teacher.getByLabel("On pull requests").uncheck();
   await teacher
     .getByLabel("Specification (Markdown)")
     .fill("## Goal\n\nBuild a **todo** API.\n\n- `GET /todos`\n- `POST /todos`");
@@ -61,6 +65,7 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
   await expect(teacher.getByRole("heading", { name: /Todo API/ })).toBeVisible();
   await expect(teacher.getByText("draft", { exact: true })).toBeVisible();
   await expect(teacher.getByRole("strong")).toHaveText("todo"); // Markdown rendered
+  await expect(teacher.getByText("Todo API (sample suite)")).toBeVisible();
 
   // Students can't see drafts.
   await student.goto(`/i/${slug}/courses/${course!.id}`);

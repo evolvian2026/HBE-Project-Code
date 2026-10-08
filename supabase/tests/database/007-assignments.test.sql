@@ -6,7 +6,7 @@ select tests.seed_two_institutions();
 
 -- Stack profiles ---------------------------------------------------------------
 select tests.authenticate_as(tests.id('student_a'));
-select is((select count(*)::int from public.stack_profiles where institution_id is null), 2, 'global stack profiles are visible to members');
+select is((select count(*)::int from public.stack_profiles where institution_id is null), 3, 'global stack profiles are visible to members');
 select is((select count(*)::int from public.stack_profiles where id = tests.id('profile_b')), 0, 'another institution''s profile is not');
 reset role;
 

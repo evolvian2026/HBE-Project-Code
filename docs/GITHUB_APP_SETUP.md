@@ -208,3 +208,33 @@ the environment variables listed in [CONFIGURATION.md](CONFIGURATION.md).
 upgrades the same Supabase project in place (CONFIGURATION.md §3.1), so none of these URLs
 change and every institution's installation keeps working. Create a separate production App only
 if production gets a fresh Supabase project, which changes the callback URL.
+
+## 7. The grader repository
+
+Test runs execute in a private repository that holds the harness and the hidden suites
+([grader/README.md](../grader/README.md)). Set it up once per environment:
+
+1. Create a **private** repository, for example `hbe-platform/hbe-grader`, in an organisation the
+   platform controls (not an institution's). Copy the contents of this repository's `grader/`
+   folder to its root and push to `main`.
+2. Install the platform's GitHub App on that organisation, with access to the grader repository.
+   The worker uses this installation to dispatch `evaluate.yml` (the App's **Actions: Read and
+   write** permission).
+3. In the grader repository, **Settings → Secrets and variables → Actions**:
+
+   | Kind | Name | Value |
+   |------|------|-------|
+   | Variable | `GRADER_APP_ID` | The App ID |
+   | Secret | `GRADER_APP_PRIVATE_KEY` | The App's private key (the `.pem` contents, not base64) |
+   | Variable | `HBE_RUNNER_LABELS` | Leave unset for GitHub-hosted runners; `["self-hosted","hbe-grader"]` for the EC2 runners |
+
+   The workflow uses the App key only to mint a read-only token for the one student repository
+   being graded. The platform's own secrets never reach the grader.
+4. In the platform's environment: `GRADER_REPO=hbe-platform/hbe-grader`, and keep the defaults
+   `GRADER_WORKFLOW=evaluate.yml`, `GRADER_REF=main`, `GRADER_CALLBACK_AUTH=oidc`. The API
+   accepts results only with an OIDC token from exactly that workflow on that branch, so protect
+   `main` in the grader repository (require pull requests and reviews).
+
+To check it: publish an assignment that uses the sample suite, push to a student repository, and
+watch **Actions** in the grader repository. The run's page in the platform fills in when the
+workflow finishes, and the student's commit gets an **HBE tests** check.

@@ -5,3 +5,4 @@ export * from "./slug.ts";
 export * from "./assignments.ts";
 export * from "./time.ts";
 export * from "./process.ts";
+export * from "./results.ts";

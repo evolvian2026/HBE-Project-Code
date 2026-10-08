@@ -8,12 +8,14 @@ import {
   type InstallationEvent,
 } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
+import type { Settings } from "@hbe/settings";
 import type { FastifyBaseLogger } from "fastify";
 import { handleIssue, handlePullRequest, handlePullRequestReview, handlePush } from "./activity.ts";
 
 export interface WorkerDeps {
   db: Db;
   queue: JobQueue;
+  settings: Settings;
   log: FastifyBaseLogger;
 }
 

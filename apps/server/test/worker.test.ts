@@ -3,12 +3,12 @@ import { sql, type Json } from "@hbe/db";
 import Fastify from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
 import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "../src/worker/github-events.ts";
-import { FakeQueue, Fixtures, randomGithubId, testDb } from "./helpers.ts";
+import { FakeQueue, Fixtures, randomGithubId, testDb, testSettings } from "./helpers.ts";
 
 const db = testDb();
 const fixtures = new Fixtures(db);
 const queue = new FakeQueue();
-const deps: WorkerDeps = { db, queue, log: Fastify({ logger: false }).log };
+const deps: WorkerDeps = { db, queue, settings: testSettings(), log: Fastify({ logger: false }).log };
 
 afterAll(async () => {
   await fixtures.cleanup();

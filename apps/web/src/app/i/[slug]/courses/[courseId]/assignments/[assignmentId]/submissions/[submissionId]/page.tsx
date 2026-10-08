@@ -2,9 +2,12 @@ import { classifyCommit, formatInZone, type ProcessPolicy, type ProcessResult } 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { isActive, RunList, type RunSummary } from "@/components/evaluation";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { loadAssignment } from "../../../data";
+import { RunTestsForm } from "../../forms";
 
 type Props = { params: Promise<{ slug: string; courseId: string; assignmentId: string; submissionId: string }> };
 
@@ -22,7 +25,7 @@ const REASON: Record<string, string> = {
 
 export default async function SubmissionPage({ params }: Props) {
   const { slug, courseId, assignmentId, submissionId } = await params;
-  const { course, supabase, assignment: a } = await loadAssignment(slug, courseId, assignmentId);
+  const { course, supabase, isCourseStaff, assignment: a } = await loadAssignment(slug, courseId, assignmentId);
   if (!/^[0-9a-f-]{36}$/.test(submissionId)) notFound();
 
   const { data: submission } = await supabase
@@ -43,7 +46,7 @@ export default async function SubmissionPage({ params }: Props) {
     repository: { owner: string; name: string } | null;
   };
 
-  const [snapshot, commits, prs, issues, extension, policyRow] = await Promise.all([
+  const [snapshot, commits, prs, issues, extension, policyRow, runs] = await Promise.all([
     supabase
       .from("process_snapshots")
       .select("breakdown, computed_at, is_final")
@@ -80,7 +83,14 @@ export default async function SubmissionPage({ params }: Props) {
       .eq("user_id", s.user_id)
       .maybeSingle(),
     supabase.from("assignments").select("process_policy").eq("id", a.id).single(),
+    supabase
+      .from("evaluation_runs")
+      .select("id, sha, trigger, status, score, summary, queued_at")
+      .eq("submission_id", s.id)
+      .order("queued_at", { ascending: false })
+      .limit(20),
   ]);
+  const runList = (runs.data ?? []) as RunSummary[];
   const policy = policyRow.data?.process_policy as ProcessPolicy;
   const deadline = new Date(extension.data?.due_at ?? a.due_at);
   const repoUrl = s.repository ? `https://github.com/${s.repository.owner}/${s.repository.name}` : null;
@@ -128,6 +138,26 @@ export default async function SubmissionPage({ params }: Props) {
         </div>
 
         <div className="space-y-6 lg:col-span-3">
+          <Card title="Test runs" description={a.suite ? a.suite.title : "No automated tests for this assignment"}>
+            <AutoRefresh active={runList.some((r) => isActive(r.status))} />
+            {runList.length === 0 ? (
+              <EmptyState title="No test runs yet">
+                {a.triggers.on_push ? "Tests run automatically when you push to the default branch." : undefined}
+              </EmptyState>
+            ) : (
+              <RunList
+                runs={runList}
+                timezone={course.timezone}
+                href={(id) => `/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${s.id}/runs/${id}`}
+              />
+            )}
+            {a.suite && a.status === "published" && s.status === "active" && (isCourseStaff || a.triggers.manual) && (
+              <div className="mt-4 border-t border-border pt-4">
+                <RunTestsForm slug={slug} courseId={course.id} assignmentId={a.id} submissionId={s.id} />
+              </div>
+            )}
+          </Card>
+
           <Card title="Commits" description={`${(commits.data ?? []).length} pushed`}>
             {(commits.data ?? []).length === 0 ? (
               <EmptyState title="No commits yet" />

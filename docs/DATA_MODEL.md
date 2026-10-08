@@ -82,7 +82,7 @@ erDiagram
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `github_installations` | institution_id, installation_id bigint unique, account_login, account_type, permissions jsonb, suspended_at | Maps each installation to exactly one institution. |
-| `repositories` | institution_id, github_repo_id bigint unique, installation_id, full_name, default_branch, private, archived | |
+| `repositories` | institution_id, github_repo_id bigint unique, installation_id, full_name, default_branch, private, archived, head_sha, head_pushed_at | `head_sha`: the default branch head from the latest push (ordered by `pushed_at`); manual test runs test it. |
 | `github_events` | institution_id (nullable until resolved), delivery_id text unique, event, action, installation_id, payload jsonb, received_at, processed_at, error | Raw inbox; pruned after 90 days. |
 | `commits` | institution_id, repository_id, sha, author_github_id, author_profile_id, co_author_profile_ids uuid[], message, authored_at, pushed_at, additions, deletions, files_changed, branch, **is_meaningful bool**, exclusion_reason | unique(repository_id, sha) |
 | `commit_claims` | institution_id, commit_id, claimed_by, status, reviewed_by | Students claiming unattributed commits. |
@@ -96,7 +96,7 @@ erDiagram
 |-------|-------------|-------|
 | `submissions` | institution_id, assignment_id, user_id or team_id, repository_id, status (`provisioning`/`active`/`submitted`/`graded`), final_sha | One per student/team per assignment. |
 | `evaluation_runs` | institution_id, submission_id, sha, stack_profile_id, grader_suite_id, trigger, status (`queued`/`dispatched`/`running`/`completed`/`failed`/`infra_error`/`cancelled`), gh_workflow_run_id, score, summary jsonb, artifacts_prefix, artifacts_expire_at (null = keep for the institution's retention period), queued_at, started_at, finished_at, requested_by | |
-| `test_results` | institution_id, run_id, stage, test_key, title, category, status, weight, duration_ms, expected, actual, message, hint, evidence jsonb, **staff_notes** | Students read through the `student_test_results` view, which leaves out `staff_notes`. |
+| `test_results` | institution_id, run_id, stage, test_key, title, category, status, weight, duration_ms, expected, actual, message, hint, evidence jsonb, **staff_notes** | `staff_notes` is not granted to `authenticated` (column privileges); course staff read it through `run_staff_notes(run_id)`. `evaluation_runs.callback_token_hash` (local development only) is withheld the same way. |
 | `process_snapshots` | institution_id, submission_id, user_id, computed_at, policy_version, score, breakdown jsonb, is_final | Frozen at the deadline; recomputed while the assignment is open. |
 | `feedback` | institution_id, submission_id, author_id, body_md, file_path, line, sha, github_comment_id, released | |
 | `rubric_scores` | institution_id, submission_id, criterion_id, points, comment, scored_by | unique(submission_id, criterion_id) |

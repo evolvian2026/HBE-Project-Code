@@ -1,0 +1,14 @@
+{
+  "name": "@hbe/grader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Grader harness, hidden test suites and fixtures. Deployed as the separate hbe-grader repository.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/compose.test.mjs",
+    "test:docker": "node --test --test-concurrency=1 test/harness.docker.test.mjs"
+  }
+}

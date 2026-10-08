@@ -9,11 +9,14 @@ import {
   type PushEvent,
 } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
+import type { Settings } from "@hbe/settings";
 import type { FastifyBaseLogger } from "fastify";
+import { queueRun } from "../evaluation.ts";
 
 export interface ActivityDeps {
   db: Db;
   queue: JobQueue;
+  settings: Settings;
   log: FastifyBaseLogger;
 }
 
@@ -22,7 +25,7 @@ async function trackedRepository(db: Db, githubRepoId: number) {
   return (
     (await db
       .selectFrom("repositories")
-      .select(["id", "institution_id", "owner", "name"])
+      .select(["id", "institution_id", "owner", "name", "default_branch"])
       .where("github_repo_id", "=", githubRepoId)
       .executeTakeFirst()) ?? null
   );
@@ -47,33 +50,76 @@ export async function refreshProcessScores(
   for (const { id } of subs) await queue.send("process-score", { submissionId: id }, { singletonKey: `process-${id}` });
 }
 
+/**
+ * Queues automatic test runs for the submissions using a repository, when their assignment
+ * is open, has a grader suite, and runs on this kind of event.
+ */
+export async function queueAutomaticRuns(
+  deps: Pick<ActivityDeps, "db" | "queue" | "settings">,
+  repositoryId: string,
+  trigger: "push" | "pull_request",
+  sha: string,
+): Promise<number> {
+  const subs = await deps.db
+    .selectFrom("submissions as s")
+    .innerJoin("assignments as a", "a.id", "s.assignment_id")
+    .select(["s.id", "a.triggers"])
+    .where("s.repository_id", "=", repositoryId)
+    .where("s.status", "=", "active")
+    .where("a.status", "=", "published")
+    .where("a.grader_suite_id", "is not", null)
+    .execute();
+  let queued = 0;
+  for (const s of subs) {
+    const triggers = s.triggers as { on_push?: boolean; on_pull_request?: boolean };
+    if (!(trigger === "push" ? triggers.on_push : triggers.on_pull_request)) continue;
+    await queueRun(deps, { submissionId: s.id, sha, trigger, requestedBy: null });
+    queued++;
+  }
+  return queued;
+}
+
 export async function handlePush(deps: ActivityDeps, event: PushEvent): Promise<void> {
   if (!event.ref.startsWith("refs/heads/")) return; // tags
   const repo = await trackedRepository(deps.db, event.repository.id);
   if (!repo) return;
   const branch = event.ref.slice("refs/heads/".length);
   const commits = event.commits.filter((c) => c.distinct);
-  if (commits.length === 0) return;
 
-  await deps.db
-    .insertInto("commits")
-    .values(
-      commits.map((c) => ({
-        institution_id: repo.institution_id,
-        repository_id: repo.id,
-        sha: c.id,
-        branch,
-        message: c.message.slice(0, 1000),
-        authored_at: new Date(c.timestamp),
-        author_login: c.author?.username ?? null,
-      })),
-    )
-    .onConflict((oc) => oc.columns(["repository_id", "sha"]).doNothing())
-    .execute();
-  await deps.queue.send("commit-details", { repositoryId: repo.id });
+  if (commits.length) {
+    await deps.db
+      .insertInto("commits")
+      .values(
+        commits.map((c) => ({
+          institution_id: repo.institution_id,
+          repository_id: repo.id,
+          sha: c.id,
+          branch,
+          message: c.message.slice(0, 1000),
+          authored_at: new Date(c.timestamp),
+          author_login: c.author?.username ?? null,
+        })),
+      )
+      .onConflict((oc) => oc.columns(["repository_id", "sha"]).doNothing())
+      .execute();
+    await deps.queue.send("commit-details", { repositoryId: repo.id });
+  }
+
+  // A new head on the default branch (also a fast-forward with no new commits) gets tested.
+  if (branch !== repo.default_branch || event.deleted || !event.after || !/^[0-9a-f]{40}$/.test(event.after)) return;
+  const pushedAt = event.repository.pushed_at ? new Date(event.repository.pushed_at * 1000) : new Date();
+  const moved = await deps.db
+    .updateTable("repositories")
+    .set({ head_sha: event.after, head_pushed_at: pushedAt })
+    .where("id", "=", repo.id)
+    .where((eb) => eb.or([eb("head_pushed_at", "is", null), eb("head_pushed_at", "<=", pushedAt)]))
+    .executeTakeFirst();
+  if (moved.numUpdatedRows === 0n) return; // an older delivery arriving late
+  await queueAutomaticRuns(deps, repo.id, "push", event.after);
 }
 
-export async function handlePullRequest({ db, ...deps }: ActivityDeps, event: PullRequestEvent): Promise<void> {
+export async function handlePullRequest(deps: ActivityDeps, event: PullRequestEvent): Promise<void> {
+  const { db } = deps;
   const repo = await trackedRepository(db, event.repository.id);
   if (!repo) return;
   const pr = event.pull_request;
@@ -107,7 +153,17 @@ export async function handlePullRequest({ db, ...deps }: ActivityDeps, event: Pu
       })),
     )
     .execute();
-  await refreshProcessScores({ db, queue: deps.queue }, repo.id);
+  await refreshProcessScores(deps, repo.id);
+
+  const sha = pr.head?.sha;
+  if (
+    ["opened", "reopened", "synchronize"].includes(event.action) &&
+    pr.state === "open" &&
+    sha &&
+    /^[0-9a-f]{40}$/.test(sha)
+  ) {
+    await queueAutomaticRuns(deps, repo.id, "pull_request", sha);
+  }
 }
 
 export async function handlePullRequestReview(

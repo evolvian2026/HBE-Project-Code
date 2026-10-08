@@ -7,7 +7,9 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import { ZodError } from "zod";
 import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
+import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
+import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
 import { meRoutes } from "./routes/me.ts";
@@ -21,6 +23,8 @@ export interface AppDeps {
   /** Null only for a web-only process. */
   queue: JobQueue | null;
   verifier: TokenVerifier;
+  /** Defaults to the configured grader callback authentication. */
+  graderAuth?: GraderAuth;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -68,6 +72,7 @@ export async function buildApp(
     await app.register(platformRoutes, apiDeps);
     await app.register(institutionRoutes, apiDeps);
     await app.register(assignmentRoutes, apiDeps);
+    await app.register(runRoutes, { ...apiDeps, graderAuth: deps.graderAuth ?? createGraderAuth(deps.settings) });
   }
 
   return app;

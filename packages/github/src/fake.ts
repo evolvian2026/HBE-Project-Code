@@ -1,5 +1,6 @@
 import {
   GitHubError,
+  type CheckRunInput,
   type CommitDetails,
   type GitHubClient,
   type InstallationClient,
@@ -20,6 +21,18 @@ export class FakeGitHub implements GitHubClient {
   readonly calls: string[] = [];
   /** Commit details keyed by "owner/repo@sha" (lowercase owner/repo). */
   readonly commits = new Map<string, CommitDetails>();
+  readonly dispatches: {
+    owner: string;
+    repo: string;
+    workflowFile: string;
+    ref: string;
+    inputs: Record<string, string>;
+  }[] = [];
+  readonly checkRuns: (CheckRunInput & { owner: string; repo: string; id: number })[] = [];
+
+  async installationIdForRepo(_owner: string, _repo: string): Promise<number> {
+    return 1;
+  }
   /** Repository ids are unique across instances, as on GitHub. */
   private static nextId = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
 
@@ -64,6 +77,18 @@ export class FakeGitHub implements GitHubClient {
         const commit = this.commits.get(`${owner}/${repo}@${sha}`.toLowerCase());
         if (!commit) throw new GitHubError(404, "No commit found for SHA", false);
         return commit;
+      },
+      dispatchWorkflow: async (owner, repo, workflowFile, ref, inputs) => {
+        this.calls.push(`dispatchWorkflow ${owner}/${repo} ${workflowFile}@${ref}`);
+        fail();
+        this.dispatches.push({ owner, repo, workflowFile, ref, inputs });
+      },
+      createCheckRun: async (owner, repo, check) => {
+        this.calls.push(`createCheckRun ${owner}/${repo} ${check.headSha.slice(0, 7)}`);
+        fail();
+        const id = FakeGitHub.nextId++;
+        this.checkRuns.push({ ...check, owner, repo, id });
+        return id;
       },
       addCollaborator: async (owner, repo, username, permission) => {
         this.calls.push(`addCollaborator ${owner}/${repo} ${username}`);

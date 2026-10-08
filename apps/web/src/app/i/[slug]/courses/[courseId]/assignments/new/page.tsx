@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
 import { requireCourse } from "@/lib/course";
-import { loadProfiles } from "../data";
+import { loadProfiles, loadSuites } from "../data";
 import { AssignmentForm } from "../form";
 
 export const metadata: Metadata = { title: "New assignment" };
@@ -12,7 +12,7 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
   const { slug, courseId } = await params;
   const { course, canManage, ctx } = await requireCourse(slug, courseId);
   if (!canManage) notFound();
-  const profiles = await loadProfiles(ctx.institution.id);
+  const [profiles, suites] = await Promise.all([loadProfiles(ctx.institution.id), loadSuites(ctx.institution.id)]);
   const twoWeeks = new Date(Date.now() + 14 * 86_400_000);
   twoWeeks.setUTCHours(15, 59, 0, 0); // 23:59 in UTC+8; adjusted to the course zone below
 
@@ -26,10 +26,13 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
         courseId={course.id}
         timezone={course.timezone}
         profiles={profiles}
+        suites={suites}
         values={{
           title: "",
           slug: "",
           stackProfileId: profiles[0]?.id ?? "",
+          graderSuiteId: "",
+          triggers: { on_push: true, on_pull_request: true, manual: true },
           templateRepo: "",
           dueAt: utcToZonedLocal(twoWeeks, course.timezone),
           releaseAt: "",

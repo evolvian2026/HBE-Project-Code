@@ -16,7 +16,9 @@ export interface AssignmentRow {
   weights: AssignmentFormValues["weights"];
   late_policy: AssignmentFormValues["late"];
   published_at: string | null;
+  triggers: { on_push: boolean; on_pull_request: boolean; manual: boolean };
   profile: { id: string; display_name: string; key: string; version: number } | null;
+  suite: { id: string; title: string; key: string; version: number } | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -28,7 +30,7 @@ export async function loadAssignment(slug: string, courseId: string, assignmentI
   const { data } = await supabase
     .from("assignments")
     .select(
-      "id, slug, title, spec_md, status, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, published_at, profile:stack_profiles(id, display_name, key, version)",
+      "id, slug, title, spec_md, status, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, published_at, triggers, profile:stack_profiles(id, display_name, key, version), suite:grader_suites(id, title, key, version)",
     )
     .eq("id", assignmentId)
     .eq("course_id", courseId)
@@ -49,5 +51,28 @@ export async function loadProfiles(institutionId: string) {
     id: p.id,
     label: `${p.display_name} · v${p.version}${p.institution_id ? "" : " (global)"}`,
     description: p.description,
+  }));
+}
+
+/** Active hidden test suites this institution may use (global ones and its own). */
+export async function loadSuites(institutionId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("grader_suites")
+    .select("id, title, key, version, institution_id, profile:stack_profiles(display_name)")
+    .eq("status", "active")
+    .or(`institution_id.is.null,institution_id.eq.${institutionId}`)
+    .order("title");
+  return (
+    (data ?? []) as unknown as {
+      id: string;
+      title: string;
+      version: number;
+      institution_id: string | null;
+      profile: { display_name: string } | null;
+    }[]
+  ).map((s) => ({
+    id: s.id,
+    label: `${s.title} · v${s.version}${s.profile ? ` · for ${s.profile.display_name}` : ""}${s.institution_id ? "" : " (global)"}`,
   }));
 }

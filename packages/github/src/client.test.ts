@@ -57,6 +57,45 @@ describe("appJwt", () => {
 });
 
 describe("GitHubAppClient", () => {
+  it("dispatches workflows, posts check runs and finds a repo's installation", async () => {
+    const { impl, calls } = mockFetch({
+      "GET /repos/hbe-platform/hbe-grader/installation": () => ({ status: 200, json: { id: 7 } }),
+      "POST /app/installations/7/access_tokens": () => ({
+        status: 201,
+        json: { token: "ghs_x", expires_at: "2099-01-01T00:00:00Z" },
+      }),
+      "POST /repos/hbe-platform/hbe-grader/actions/workflows/evaluate.yml/dispatches": () => ({ status: 204 }),
+      "POST /repos/alpha-cs/r/check-runs": () => ({ status: 201, json: { id: 555 } }),
+    });
+    const client = new GitHubAppClient({
+      appId: "1",
+      privateKey: pkcs1,
+      apiUrl: "https://api.github.test",
+      fetch: impl,
+    });
+    const id = await client.installationIdForRepo("hbe-platform", "hbe-grader");
+    expect(id).toBe(7);
+    await client.installationIdForRepo("hbe-platform", "hbe-grader"); // cached
+    const gh = client.forInstallation(id);
+    await gh.dispatchWorkflow("hbe-platform", "hbe-grader", "evaluate.yml", "main", { run_id: "r1" });
+    expect(
+      await gh.createCheckRun("alpha-cs", "r", {
+        name: "HBE tests",
+        headSha: "a".repeat(40),
+        conclusion: "failure",
+        title: "1/2",
+        summary: "s",
+      }),
+    ).toBe(555);
+    expect(calls.filter((c) => c.url.endsWith("/installation"))).toHaveLength(1);
+    expect(calls.find((c) => c.url.endsWith("/dispatches"))?.body).toEqual({ ref: "main", inputs: { run_id: "r1" } });
+    expect(calls.find((c) => c.url.endsWith("/check-runs"))?.body).toMatchObject({
+      status: "completed",
+      conclusion: "failure",
+      output: { title: "1/2" },
+    });
+  });
+
   const tokenRoute = {
     "POST /app/installations/7/access_tokens": () => ({
       status: 201,

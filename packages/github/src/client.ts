@@ -43,6 +43,15 @@ export interface InstallationClient {
     description: string;
   }): Promise<RepoInfo>;
   getCommit(owner: string, repo: string, sha: string): Promise<CommitDetails>;
+  /** Starts a workflow_dispatch run (GitHub returns no run id). */
+  dispatchWorkflow(
+    owner: string,
+    repo: string,
+    workflowFile: string,
+    ref: string,
+    inputs: Record<string, string>,
+  ): Promise<void>;
+  createCheckRun(owner: string, repo: string, check: CheckRunInput): Promise<number>;
   /** `invited`: GitHub emailed an invitation; `added`: they already had access (org member). */
   addCollaborator(
     owner: string,
@@ -52,8 +61,19 @@ export interface InstallationClient {
   ): Promise<"invited" | "added">;
 }
 
+export interface CheckRunInput {
+  name: string;
+  headSha: string;
+  conclusion: "success" | "failure" | "neutral";
+  title: string;
+  summary: string;
+  detailsUrl?: string;
+}
+
 export interface GitHubClient {
   forInstallation(installationId: number): InstallationClient;
+  /** The App's installation id for a repository (e.g. the grader repository). */
+  installationIdForRepo(owner: string, repo: string): Promise<number>;
 }
 
 export interface GitHubAppCredentials {
@@ -96,6 +116,22 @@ export class GitHubAppClient implements GitHubClient {
     this.now = creds.now ?? Date.now;
   }
 
+  private readonly repoInstallations = new Map<string, number>();
+
+  async installationIdForRepo(owner: string, repo: string): Promise<number> {
+    const key = `${owner}/${repo}`.toLowerCase();
+    const cached = this.repoInstallations.get(key);
+    if (cached) return cached;
+    const res = await this.send(
+      "GET",
+      `/repos/${enc(owner)}/${enc(repo)}/installation`,
+      appJwt(this.creds.appId, this.key, this.now()),
+    );
+    const { id } = (await res.json()) as { id: number };
+    this.repoInstallations.set(key, id);
+    return id;
+  }
+
   forInstallation(installationId: number): InstallationClient {
     const call = <T>(method: string, path: string, body?: unknown) =>
       this.request<T>(installationId, method, path, body);
@@ -135,6 +171,24 @@ export class GitHubAppClient implements GitHubClient {
             patch: f.patch,
           })),
         };
+      },
+      dispatchWorkflow: async (owner, repo, workflowFile, ref, inputs) => {
+        await call<null>(
+          "POST",
+          `/repos/${enc(owner)}/${enc(repo)}/actions/workflows/${enc(workflowFile)}/dispatches`,
+          { ref, inputs },
+        );
+      },
+      createCheckRun: async (owner, repo, check) => {
+        const res = await call<{ id: number }>("POST", `/repos/${enc(owner)}/${enc(repo)}/check-runs`, {
+          name: check.name,
+          head_sha: check.headSha,
+          status: "completed",
+          conclusion: check.conclusion,
+          details_url: check.detailsUrl,
+          output: { title: check.title.slice(0, 255), summary: check.summary.slice(0, 65_000) },
+        });
+        return res.id;
       },
       addCollaborator: async (owner, repo, username, permission) => {
         const result = await call<unknown>("PUT", `/repos/${enc(owner)}/${enc(repo)}/collaborators/${enc(username)}`, {

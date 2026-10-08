@@ -195,7 +195,13 @@ describe("repository provisioning", () => {
     });
     expect(res.statusCode).toBe(200);
     expect((await submissionOf("linus")).status).toBe("provisioning");
-    expect(queue.sent).toEqual([{ name: "provision-submission", data: { submissionId: sub.id } }]);
+    expect(queue.sent).toEqual([
+      {
+        name: "provision-submission",
+        data: { submissionId: sub.id },
+        options: { singletonKey: `provision-${sub.id}` },
+      },
+    ]);
     expect(await provisionSubmission(deps, sub.id)).toBe("active");
   });
 

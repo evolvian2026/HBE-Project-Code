@@ -1,24 +1,34 @@
-# Skeleton: shows how the grader is configured. The evaluation steps are filled in during Phase 1.
+# Evaluates one student commit. Dispatched by the platform's worker (workflow_dispatch); the
+# harness reports back to the API with a GitHub Actions OIDC token, so there are no shared
+# secrets with the platform.
 #
 # Moving from GitHub-hosted to self-hosted EC2 runners is a config change: set the repository
 # variable HBE_RUNNER_LABELS (Settings → Secrets and variables → Actions → Variables):
 #   demo:        (unset)                       → ["ubuntu-latest"]
 #   production:  ["self-hosted","hbe-grader"]
-# HBE_API_URL stays https://api.example.com in both.
+#
+# Repository settings this workflow needs (docs/GITHUB_APP_SETUP.md):
+#   variable GRADER_APP_ID, secret GRADER_APP_PRIVATE_KEY: the platform's GitHub App, used only
+#   to mint a read-only token for the one student repository being graded.
 name: evaluate
+run-name: "evaluate ${{ inputs.repo_owner }}/${{ inputs.repo_name }}@${{ inputs.sha }} (run ${{ inputs.run_id }})"
 
 on:
   workflow_dispatch:
     inputs:
       run_id: { required: true, type: string }
-      repo_owner: { required: true, type: string } # student repo owner (institution org)
-      repo_name: { required: true, type: string } # student repo name
+      repo_owner: { required: true, type: string } # student repository owner (institution org)
+      repo_name: { required: true, type: string }
       sha: { required: true, type: string }
-      suite: { required: true, type: string } # e.g. acme-uni/a3@v4
-      stack: { required: true, type: string } # e.g. mern-node20@3
+      suite_path: { required: true, type: string } # e.g. suites/sample/todo-api
+      suite_ref: { required: true, type: string } # git ref of this repository holding that suite
+      stack_profile: { required: true, type: string } # JSON: services, datastores, env_required…
+      api_url: { required: true, type: string } # also the OIDC audience
+      job_timeout_minutes: { required: false, type: string, default: "20" }
+      callback_token: { required: false, type: string, default: "" } # local development only
 
 permissions:
-  id-token: write # GitHub OIDC token for the results callback
+  id-token: write # OIDC token for the platform callbacks
   contents: read
 
 concurrency:
@@ -28,32 +38,67 @@ concurrency:
 jobs:
   evaluate:
     runs-on: ${{ fromJSON(vars.HBE_RUNNER_LABELS || '["ubuntu-latest"]') }}
-    timeout-minutes: ${{ fromJSON(vars.HBE_JOB_TIMEOUT_MINUTES || '20') }}
-    env:
-      HBE_API_URL: ${{ vars.HBE_API_URL }}
-      RUN_ID: ${{ inputs.run_id }}
+    timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes || '20') }}
     steps:
-      - name: Token scoped to the student repo (read-only)
+      - name: Token scoped to the student repository (read-only)
         id: student-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.GRADER_APP_ID }}
           private-key: ${{ secrets.GRADER_APP_PRIVATE_KEY }}
           owner: ${{ inputs.repo_owner }}
           repositories: ${{ inputs.repo_name }}
+          permission-contents: read
 
-      - name: Checkout harness and suite
+      - name: Check out the harness
         uses: actions/checkout@v4
-        with: { path: grader }
+        with:
+          path: grader
+          persist-credentials: false
 
-      - name: Checkout student code at the graded SHA
+      - name: Check out the hidden suite
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.suite_ref }}
+          path: suite-src
+          sparse-checkout: ${{ inputs.suite_path }}
+          persist-credentials: false
+
+      - name: Check out the student's commit
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repo_owner }}/${{ inputs.repo_name }}
           ref: ${{ inputs.sha }}
           token: ${{ steps.student-token.outputs.token }}
           path: submission
-          fetch-depth: 0 # full history is needed for the git bundle snapshot
+          persist-credentials: false # the build must not see a token in .git/config
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Evaluate
-        run: echo "TODO(phase-1) contract validation, build, stages, snapshot, upload, results callback"
+        # Inputs reach the script through the environment, never by template substitution.
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          SHA: ${{ inputs.sha }}
+          SUITE_PATH: ${{ inputs.suite_path }}
+          STACK_PROFILE: ${{ inputs.stack_profile }}
+          API_URL: ${{ inputs.api_url }}
+          TIMEOUT_MINUTES: ${{ inputs.job_timeout_minutes }}
+          HBE_CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: |
+          node grader/harness/run.mjs \
+            --run-id "$RUN_ID" --sha "$SHA" \
+            --submission submission --suite "suite-src/$SUITE_PATH" \
+            --profile "$STACK_PROFILE" --api-url "$API_URL" \
+            --timeout-minutes "$TIMEOUT_MINUTES" --out results.json
+
+      - name: Keep the results for staff
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ inputs.run_id }}
+          path: results.json
+          retention-days: 7
+          if-no-files-found: ignore

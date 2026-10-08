@@ -42,6 +42,10 @@ const can = {
   manageCourse: (a: Actor, institutionId: string, courseRole: string | null) =>
     (roleIn(a, institutionId) === "admin" || courseRole === "instructor") &&
     a.memberships.get(institutionId)?.institutionStatus === "active",
+  /** Course staff (instructors and TAs) or the institution's admins, e.g. to run a student's tests. */
+  actAsCourseStaff: (a: Actor, institutionId: string, courseRole: string | null) =>
+    (roleIn(a, institutionId) === "admin" || courseRole === "instructor" || courseRole === "ta") &&
+    a.memberships.get(institutionId)?.institutionStatus === "active",
 } as const;
 
 export type Permission = keyof typeof can;

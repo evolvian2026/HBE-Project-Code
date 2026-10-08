@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
-import { addCriterion, publishAssignment } from "../actions";
+import { addCriterion, publishAssignment, startRun } from "../actions";
 
 type Ids = { slug: string; courseId: string; assignmentId: string };
 
@@ -62,6 +62,20 @@ export function CriterionForm(ids: Ids) {
       <Button type="submit" variant="secondary" disabled={pending}>
         Add criterion
       </Button>
+    </form>
+  );
+}
+
+export function RunTestsForm({ submissionId, disabled, ...ids }: Ids & { submissionId: string; disabled?: boolean }) {
+  const [state, action, pending] = useActionState(startRun, null);
+  return (
+    <form action={action} className="space-y-3">
+      <Hidden {...ids} />
+      <input type="hidden" name="submissionId" value={submissionId} />
+      <Button type="submit" disabled={pending || disabled}>
+        {pending ? "Starting…" : "Run tests"}
+      </Button>
+      <FormStatus state={state} />
     </form>
   );
 }

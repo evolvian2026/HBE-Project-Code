@@ -43,7 +43,7 @@ async function start(): Promise<void> {
   await queue?.start();
   if (roles.has("worker") && db && queue) {
     await startWorker(
-      { db, queue, github: createGitHubClient(settings), log: app.log.child({ role: "worker" }) },
+      { db, queue, settings, github: createGitHubClient(settings), log: app.log.child({ role: "worker" }) },
       settings,
     );
   }

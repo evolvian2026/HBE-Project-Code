@@ -1,13 +1,15 @@
-import { formatInZone, type ProcessResult } from "@hbe/core";
+import { formatInZone, utcToZonedLocal, type ProcessResult } from "@hbe/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { isActive, RunList, runOutcome, type RunSummary } from "@/components/evaluation";
 import { MarkdownView } from "@/components/markdown";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
-import { CriterionForm, PublishForm } from "./forms";
+import { CriterionForm, PublishForm, RunTestsForm } from "./forms";
 
 type Props = {
   params: Promise<{ slug: string; courseId: string; assignmentId: string }>;
@@ -48,7 +50,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const ids = { slug, courseId: course.id, assignmentId: a.id };
   const base = `/i/${slug}/courses/${course.id}`;
 
-  const [criteria, submissions, extension, snapshots] = await Promise.all([
+  const [criteria, submissions, extension, snapshots, runs] = await Promise.all([
     supabase
       .from("assignment_criteria")
       .select("id, title, description, max_points")
@@ -70,7 +72,23 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       .from("process_snapshots")
       .select("submission_id, score, breakdown, submission:submissions!inner(assignment_id)")
       .eq("submission.assignment_id", a.id),
+    a.suite
+      ? supabase
+          .from("evaluation_runs")
+          .select(
+            "id, submission_id, sha, trigger, status, score, summary, queued_at, requested_by, submission:submissions!inner(assignment_id)",
+          )
+          .eq("submission.assignment_id", a.id)
+          .order("queued_at", { ascending: false })
+          .limit(1000)
+      : Promise.resolve({ data: [] as never[] }),
   ]);
+  type Run = RunSummary & { submission_id: string; requested_by: string | null };
+  const allRuns = (runs.data ?? []) as unknown as Run[];
+  /** Latest scored run per submission (runs are newest first). */
+  const latestScored = new Map<string, Run>();
+  for (const r of allRuns)
+    if (r.status === "completed" && !latestScored.has(r.submission_id)) latestScored.set(r.submission_id, r);
   const processBySubmission = new Map(
     ((snapshots.data ?? []) as unknown as { submission_id: string; score: string; breakdown: ProcessResult }[]).map(
       (p) => [p.submission_id, p],
@@ -90,6 +108,12 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const mine = subs.find((s) => s.user_id === ctx.session.userId);
   const totalPoints = (criteria.data ?? []).reduce((sum, c) => sum + Number(c.max_points), 0);
   const effectiveDue = extension.data?.due_at ?? a.due_at;
+  const myRuns = mine ? allRuns.filter((r) => r.submission_id === mine.id) : [];
+  const today = utcToZonedLocal(new Date(), course.timezone).slice(0, 10);
+  const manualToday = myRuns.filter(
+    (r) => r.trigger === "manual" && utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
+  ).length;
+  const runsLeft = Math.max(0, a.run_quota_per_day - manualToday);
 
   return (
     <div className="space-y-6">
@@ -189,6 +213,33 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         </Card>
       )}
 
+      {mine && mine.status === "active" && a.suite && a.status === "published" && (
+        <Card title="Automated tests" description={`${a.weights.automated}% of your grade`}>
+          <AutoRefresh active={myRuns.some((r) => isActive(r.status))} />
+          {myRuns.length === 0 ? (
+            <EmptyState title="No test runs yet">
+              {a.triggers.on_push
+                ? "Push to your default branch and the tests run automatically."
+                : "Start a run once you have pushed your work."}
+            </EmptyState>
+          ) : (
+            <RunList
+              runs={myRuns.slice(0, 5)}
+              timezone={course.timezone}
+              href={(id) => `${base}/assignments/${a.id}/submissions/${mine.id}/runs/${id}`}
+            />
+          )}
+          {a.triggers.manual && (
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3 border-t border-border pt-4">
+              <p className="text-sm text-muted">
+                {runsLeft} of {a.run_quota_per_day} test runs left today. Tests your latest push.
+              </p>
+              <RunTestsForm {...ids} submissionId={mine.id} disabled={runsLeft === 0} />
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card title="Specification">
         {a.spec_md.trim() ? <MarkdownView>{a.spec_md}</MarkdownView> : <EmptyState title="No specification yet" />}
       </Card>
@@ -208,6 +259,8 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
             </dd>
             <dt className="text-muted">Grace period</dt>
             <dd className="text-right">{a.late_policy.grace_minutes} min</dd>
+            <dt className="text-muted">Hidden tests</dt>
+            <dd className="text-right">{a.suite ? a.suite.title : "none"}</dd>
             <dt className="text-muted">Test runs</dt>
             <dd className="text-right">{a.run_quota_per_day} per day</dd>
           </dl>
@@ -282,6 +335,11 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                             Retry
                           </Button>
                         </form>
+                      )}
+                      {latestScored.get(s.id) && (
+                        <span className="tabular-nums text-muted" title="Latest test run">
+                          tests {runOutcome(latestScored.get(s.id)!)}
+                        </span>
                       )}
                       {processBySubmission.get(s.id) && (
                         <span className="tabular-nums text-muted" title="Process score">

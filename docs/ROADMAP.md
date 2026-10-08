@@ -31,7 +31,24 @@ management UI for institution admins, and deploying the free-tier demo environme
 **Exit:** two test institutions on the demo environment, with users in each who can't see
 each other's data (proven by tests); webhooks land in the DB.
 
-## Phase 1: MVP vertical slice (6–8 weeks)
+## Phase 1: MVP vertical slice (6–8 weeks) — in progress
+
+Built so far (slices 1A–1F): institution administration (members, single and CSV invitations,
+courses, staff, GitHub organisation); two-factor authentication for admins, enforced in the
+database; stack profiles (MERN, Django + React, and an API-only Node profile for the sample
+suite); assignments with weights, late policy, rubric and hidden test suite; repository
+provisioning from templates; activity tracking and the process score with explanations; and
+automated test runs: push, pull request and on-request triggers with debounce, daily quotas,
+concurrency caps and a monthly minutes budget; the grader repository's `evaluate.yml` and a
+dependency-free Compose harness with a sandboxed, offline app network; black-box API tests with
+random data; OIDC-authenticated results; check runs; run history and run detail pages with
+expected vs actual, hints, evidence and app logs (staff notes for staff only).
+
+Still to do in Phase 1: rubric scoring, feedback and grade computation and release; records
+(source snapshots, grade reports, history); teacher matrix dashboard; notifications; deadline
+runs; CSV export. Deferred grader pieces: Playwright browser-test stages, the profiles' lint and
+student-test stages, and uploading logs and traces to Storage.
+
 - Institution admin: invite users (single + CSV), create courses, assign staff, connect a GitHub org
 - **Stack profiles v1**: two global profiles (e.g. MERN and Django + React), with adapters and
   template repos; contract validator stage
