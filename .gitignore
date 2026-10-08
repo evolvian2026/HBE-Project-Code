@@ -11,3 +11,7 @@ coverage/
 *.pem
 deploy/aws/terraform/*.tfvars
 !deploy/aws/terraform/*.tfvars.example
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/

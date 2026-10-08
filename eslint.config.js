@@ -19,7 +19,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/settings/**", "**/*.test.ts", "**/test/**", "**/*.config.{js,ts,mjs}", "apps/web/**"],
+    files: ["packages/settings/**", "**/*.test.ts", "**/test/**", "e2e/**", "**/*.config.{js,ts,mjs}", "apps/web/**"],
     rules: { "no-restricted-properties": "off" },
   },
 );

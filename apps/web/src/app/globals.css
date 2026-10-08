@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --border: #dfe3e8;
+  --text: #121826;
+  --muted: #5a6474;
+  --accent: #1d5fd1;
+  --accent-hover: #174ea9;
+  --accent-fg: #ffffff;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --success: #067647;
+  --success-bg: #ecfdf3;
+  --warning: #93370d;
+  --warning-bg: #fffaeb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-2: #1d222b;
+    --border: #2d333d;
+    --text: #e7ebf0;
+    --muted: #9aa3b2;
+    --accent: #5b9bff;
+    --accent-hover: #7cb0ff;
+    --accent-fg: #0b1220;
+    --danger: #ff8a7a;
+    --danger-bg: #2a1614;
+    --success: #6ce0a3;
+    --success-bg: #0f2419;
+    --warning: #ffc46b;
+    --warning-bg: #2a2010;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
