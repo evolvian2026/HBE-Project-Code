@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import pg from "pg";
 
@@ -87,4 +87,45 @@ export async function passMfa(page: Page, secret: string): Promise<void> {
   await page.getByLabel("Code").fill(totp(secret));
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).not.toHaveURL(/\/auth\/mfa/);
+}
+
+const WEBHOOK_SECRET = process.env.E2E_WEBHOOK_SECRET ?? "local-secret";
+
+/** Sends a webhook signed like GitHub does. */
+export async function sendWebhook(baseURL: string, event: string, payload: unknown): Promise<void> {
+  const body = JSON.stringify(payload);
+  const res = await fetch(`${baseURL}/webhooks/github`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-github-event": event,
+      "x-github-delivery": randomUUID(),
+      "x-hub-signature-256": `sha256=${createHmac("sha256", WEBHOOK_SECRET).update(body).digest("hex")}`,
+    },
+    body,
+  });
+  expect(res.status).toBe(202);
+}
+
+/**
+ * Plays the grader for a run the worker dispatched to the in-memory GitHub: gives the run a
+ * known callback token, then reports `started` and the given results like the harness does.
+ */
+export async function reportRun(baseURL: string, runId: string, results: unknown): Promise<void> {
+  const token = randomBytes(24).toString("base64url");
+  await sql("update public.evaluation_runs set callback_token_hash = $2 where id = $1", [
+    runId,
+    createHash("sha256").update(token).digest("hex"),
+  ]);
+  for (const [path, body] of [
+    ["started", {}],
+    ["results", results],
+  ] as const) {
+    const res = await fetch(`${baseURL}/v1/runs/${runId}/${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(200);
+  }
 }

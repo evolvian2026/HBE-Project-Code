@@ -183,6 +183,8 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
       "e.error",
       "e.check_run_id",
       "s.id as submission_id",
+      "s.final_sha",
+      "s.finalized_at",
       "a.id as assignment_id",
       "c.id as course_id",
       "i.slug",
@@ -229,6 +231,15 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
     })
     .where("id", "=", runId)
     .execute();
+
+  // The graded commit's run feeds the grade.
+  if (run.status === "completed" && run.finalized_at && run.final_sha === run.sha) {
+    await deps.queue.send(
+      "compute-grade",
+      { submissionId: run.submission_id },
+      { singletonKey: `grade-${run.submission_id}` },
+    );
+  }
 
   if (!run.check_run_id) {
     const url = new URL(

@@ -4,12 +4,13 @@ import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { isActive, RunList, runOutcome, type RunSummary } from "@/components/evaluation";
+import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { MarkdownView } from "@/components/markdown";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
-import { CriterionForm, PublishForm, RunTestsForm } from "./forms";
+import { CriterionForm, PublishForm, ReleaseGradesForm, RunTestsForm } from "./forms";
 
 type Props = {
   params: Promise<{ slug: string; courseId: string; assignmentId: string }>;
@@ -51,7 +52,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const ids = { slug, courseId: course.id, assignmentId: a.id };
   const base = `/i/${slug}/courses/${course.id}`;
 
-  const [criteria, submissions, extension, snapshots, runs] = await Promise.all([
+  const [criteria, submissions, extension, snapshots, runs, grades] = await Promise.all([
     supabase
       .from("assignment_criteria")
       .select("id, title, description, max_points")
@@ -83,7 +84,16 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
           .order("queued_at", { ascending: false })
           .limit(1000)
       : Promise.resolve({ data: [] as never[] }),
+    // Staff see every current grade; students only their own, once released (RLS).
+    supabase
+      .from("grades")
+      .select(`${GRADE_COLUMNS}, submission_id, submission:submissions!inner(assignment_id)`)
+      .eq("is_current", true)
+      .eq("submission.assignment_id", a.id),
   ]);
+  const gradeBySubmission = new Map(
+    ((grades.data ?? []) as unknown as (GradeRow & { submission_id: string })[]).map((g) => [g.submission_id, g]),
+  );
   type Run = RunSummary & { submission_id: string; requested_by: string | null };
   const allRuns = (runs.data ?? []) as unknown as Run[];
   /** Latest scored run per submission (runs are newest first). */
@@ -122,6 +132,27 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const pastDeadline = Date.now() > new Date(effectiveDue).getTime() + a.late_policy.grace_minutes * 60_000;
   const cutoff = submissionCutoff(new Date(effectiveDue), a.late_policy);
   const gradedRun = mine ? myRuns.find((r) => r.trigger === "deadline" || r.trigger === "regrade") : undefined;
+  const myGrade = mine ? gradeBySubmission.get(mine.id) : undefined;
+  const [myScores, myFeedback] = myGrade
+    ? await Promise.all([
+        supabase.from("rubric_scores").select("criterion_id, points, comment").eq("submission_id", mine!.id),
+        supabase.from("feedback").select("body_md").eq("submission_id", mine!.id).maybeSingle(),
+      ])
+    : [null, null];
+  const myScoreByCriterion = new Map(
+    ((myScores?.data ?? []) as { criterion_id: string; points: string; comment: string | null }[]).map((r) => [
+      r.criterion_id,
+      r,
+    ]),
+  );
+  const finalizedCount = subs.filter((s) => s.finalized_at).length;
+  const gradeStats = [...gradeBySubmission.values()].reduce(
+    (acc, g) => ({
+      complete: acc.complete + (g.complete ? 1 : 0),
+      released: acc.released + (g.released_at ? 1 : 0),
+    }),
+    { complete: 0, released: 0 },
+  );
   const lateLabel = (days: number) =>
     `${days} day${days === 1 ? "" : "s"} late · −${Math.min(100, days * a.late_policy.per_day_percent)}%`;
 
@@ -205,6 +236,40 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
               {mine.status_detail ? `: ${mine.status_detail}` : "…"}
             </p>
           )}
+        </Card>
+      )}
+
+      {myGrade && (
+        <Card title="Your grade" description={`Released ${formatInZone(myGrade.released_at!, course.timezone)}`}>
+          <div className="grid gap-8 lg:grid-cols-2">
+            <GradeBreakdown grade={myGrade} />
+            <div className="space-y-4">
+              {(criteria.data ?? []).length > 0 && (
+                <ul className="divide-y divide-border text-sm">
+                  {(criteria.data ?? []).map((c) => {
+                    const score = myScoreByCriterion.get(c.id);
+                    return (
+                      <li key={c.id} className="py-2">
+                        <p className="flex justify-between gap-3">
+                          <span className="font-medium">{c.title}</span>
+                          <span className="tabular-nums">
+                            {score ? fmt(score.points) : "–"} / {fmt(c.max_points)}
+                          </span>
+                        </p>
+                        {score?.comment && <p className="mt-1 text-muted">{score.comment}</p>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {myFeedback?.data?.body_md.trim() && (
+                <div>
+                  <h3 className="mb-1 text-sm font-medium">Feedback</h3>
+                  <MarkdownView>{myFeedback.data.body_md}</MarkdownView>
+                </div>
+              )}
+            </div>
+          </div>
         </Card>
       )}
 
@@ -371,6 +436,15 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         </Card>
       </div>
 
+      {canManage && finalizedCount > 0 && (
+        <Card
+          title="Grades"
+          description={`${finalizedCount} of ${subs.length} submissions are past their cutoff · ${gradeStats.complete} graded · ${gradeStats.released} released`}
+        >
+          <ReleaseGradesForm {...ids} disabled={gradeStats.complete === gradeStats.released} />
+        </Card>
+      )}
+
       {isCourseStaff && a.status !== "draft" && (
         <Card title="Submissions" description={`${subs.length} students`}>
           {subs.length === 0 ? (
@@ -406,6 +480,13 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                             Retry
                           </Button>
                         </form>
+                      )}
+                      {gradeBySubmission.get(s.id) && (
+                        <span className="tabular-nums" title="Current grade">
+                          grade {fmt(gradeBySubmission.get(s.id)!.final_score)}
+                          {!gradeBySubmission.get(s.id)!.complete && " (incomplete)"}
+                          {gradeBySubmission.get(s.id)!.released_at && " · released"}
+                        </span>
                       )}
                       {latestScored.get(s.id) && (
                         <span className="tabular-nums text-muted" title="Latest test run">

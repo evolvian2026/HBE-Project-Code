@@ -24,6 +24,8 @@ export interface QueuePayloads {
   "run-reaper": Record<string, never>;
   /** Fix the graded commit of submissions whose cutoff has passed. */
   "deadline-sweep": Record<string, never>;
+  /** Recompute a finalized submission's grade (a new version if anything changed). */
+  "compute-grade": { submissionId: string };
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -48,6 +50,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "score-run": { retryLimit: 5, retryDelay: 15, retryBackoff: true, expireInSeconds: 120 },
   "run-reaper": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
   "deadline-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
+  "compute-grade": { retryLimit: 3, retryDelay: 10, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

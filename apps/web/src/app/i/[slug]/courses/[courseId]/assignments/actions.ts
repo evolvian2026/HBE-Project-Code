@@ -223,3 +223,68 @@ export async function removeExtension(formData: FormData) {
   await supabase.from("assignment_extensions").delete().eq("assignment_id", v.assignmentId).eq("user_id", v.studentId);
   revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
 }
+
+const submissionIdsSchema = idsSchema.extend({ submissionId: z.string().uuid() });
+const submissionPath = (v: z.infer<typeof submissionIdsSchema>) =>
+  `/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}/submissions/${v.submissionId}`;
+
+/** Rubric points and comments (fields points:<criterionId>, comment:<criterionId>) and feedback. */
+export async function saveReview(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = submissionIdsSchema.parse(Object.fromEntries(formData));
+  const scores: { criterionId: string; points: number | null; comment?: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    const id = key.startsWith("points:") ? key.slice("points:".length) : null;
+    if (!id || !z.string().uuid().safeParse(id).success) continue;
+    const raw = String(value).trim();
+    const points = raw === "" ? null : Number(raw);
+    if (points !== null && !Number.isFinite(points)) return { ok: false, message: "Points must be numbers." };
+    scores.push({ criterionId: id, points, comment: String(formData.get(`comment:${id}`) ?? "") });
+  }
+  const result = await apiFetch<{ grade: { final_score: number; complete: boolean } | null }>(
+    `/v1/submissions/${v.submissionId}/review`,
+    { method: "PUT", body: { scores, feedback: String(formData.get("feedback") ?? "") } },
+  );
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(submissionPath(v));
+  const g = result.data.grade;
+  return {
+    ok: true,
+    message: g ? `Saved. Grade: ${g.final_score}${g.complete ? "" : " (incomplete)"}.` : "Saved.",
+  };
+}
+
+export async function saveOverride(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = submissionIdsSchema
+    .extend({
+      score: z.union([z.coerce.number().min(0).max(100), z.literal("").transform(() => null)]),
+      reason: z.string().trim().max(1000).optional(),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!v.success) return { ok: false, message: v.error.issues[0]?.message ?? "Invalid input" };
+  const result = await apiFetch(`/v1/submissions/${v.data.submissionId}/override`, {
+    method: "POST",
+    body: { score: v.data.score, reason: v.data.reason },
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(submissionPath(v.data));
+  return { ok: true, message: v.data.score === null ? "Override removed." : "Grade overridden." };
+}
+
+/** Releases every complete grade of the assignment to its students. */
+export async function releaseAssignmentGrades(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = idsSchema.parse(Object.fromEntries(formData));
+  const result = await apiFetch<{
+    released: number;
+    skipped: { submissionId: string; student: string; pending: string[] }[];
+  }>(`/v1/assignments/${v.assignmentId}/release`, { method: "POST", body: {} });
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
+  const { released, skipped } = result.data;
+  return {
+    ok: skipped.length === 0,
+    message: `Released ${released} grade${released === 1 ? "" : "s"}.${
+      skipped.length ? ` ${skipped.length} not ready yet:` : ""
+    }`,
+    details: skipped.map((s) => `${s.student}: needs ${s.pending.join(", ")}`),
+  };
+}

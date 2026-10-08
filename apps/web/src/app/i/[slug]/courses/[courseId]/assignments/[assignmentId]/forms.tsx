@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
-import { addCriterion, publishAssignment, startRun } from "../actions";
+import { addCriterion, publishAssignment, releaseAssignmentGrades, startRun } from "../actions";
 
 type Ids = { slug: string; courseId: string; assignmentId: string };
 
@@ -76,6 +76,23 @@ export function RunTestsForm({ submissionId, disabled, ...ids }: Ids & { submiss
         {pending ? "Starting…" : "Run tests"}
       </Button>
       <FormStatus state={state} />
+    </form>
+  );
+}
+
+export function ReleaseGradesForm({ disabled, ...ids }: Ids & { disabled: boolean }) {
+  const [state, action, pending] = useActionState(releaseAssignmentGrades, null);
+  return (
+    <form action={action} className="space-y-3">
+      <Hidden {...ids} />
+      <p className="text-sm text-muted">
+        Students see their grade, rubric scores and feedback once released. Changes after that make a new version, which
+        students see at once.
+      </p>
+      <FormStatus state={state} />
+      <Button type="submit" disabled={pending || disabled}>
+        {pending ? "Releasing…" : "Release grades"}
+      </Button>
     </form>
   );
 }

@@ -273,8 +273,51 @@ export interface SubmissionsTable {
   submitted_at: Timestamp | null;
   late_days: number | null;
   finalized_at: Timestamp | null;
+  grade_released_at: Timestamp | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+export interface RubricScoresTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  criterion_id: string;
+  points: string; // numeric
+  comment: string | null;
+  scored_by: string | null;
+  scored_at: DefaultTimestamp;
+}
+
+export interface FeedbackTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  body_md: Generated<string>;
+  author_id: string | null;
+  updated_at: DefaultTimestamp;
+}
+
+/** Append-only grade versions; one is_current per submission. */
+export interface GradesTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  user_id: string;
+  version: number;
+  evaluation_run_id: string | null;
+  components: Json;
+  late_days: Generated<number>;
+  late_penalty: Generated<string>; // numeric
+  computed_score: string; // numeric
+  override_score: string | null; // numeric
+  override_reason: string | null;
+  final_score: string; // numeric
+  complete: boolean;
+  is_current: Generated<boolean>;
+  released_at: Timestamp | null;
+  created_by: string | null;
+  created_at: DefaultTimestamp;
 }
 
 /** Pushes to a repository's default branch, by GitHub's push time. */
@@ -455,6 +498,9 @@ export interface Database {
   evaluation_runs: EvaluationRunsTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;
+  rubric_scores: RubricScoresTable;
+  feedback: FeedbackTable;
+  grades: GradesTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

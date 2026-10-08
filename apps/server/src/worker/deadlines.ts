@@ -85,6 +85,8 @@ export async function finalizeDueSubmissions(deps: DeadlineDeps, now = new Date(
     if (push && s.grader_suite_id) {
       await queueRun(deps, { submissionId: s.id, sha: push.sha, trigger: "deadline", requestedBy: null });
     }
+    // A first grade version now (missing work is complete already); the graded run updates it.
+    await deps.queue.send("compute-grade", { submissionId: s.id }, { singletonKey: `grade-${s.id}` });
   }
   if (finalized) log.info({ finalized }, "submissions finalized at their deadline");
   return finalized;

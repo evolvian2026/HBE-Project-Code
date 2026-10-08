@@ -1,11 +1,10 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { signIn, sql } from "./support.ts";
+import { sendWebhook, signIn, sql } from "./support.ts";
 
 const suffix = Date.now().toString(36);
 const email = (who: string) => `${who}-${suffix}@e2e.test`;
 const slug = `act-${suffix}`;
-const WEBHOOK_SECRET = process.env.E2E_WEBHOOK_SECRET ?? "local-secret";
 const githubRepoId = Math.floor(Math.random() * 1e9);
 const studentGithubId = Math.floor(Math.random() * 1e9);
 
@@ -14,22 +13,6 @@ test.afterAll(async () => {
   await sql("delete from auth.users where email like $1", [`%-${suffix}@e2e.test`]);
   await sql("delete from public.github_installations where account_login = $1", [`org-${suffix}`]);
 });
-
-/** Sends a webhook signed like GitHub does. */
-async function sendWebhook(baseURL: string, event: string, payload: unknown) {
-  const body = JSON.stringify(payload);
-  const res = await fetch(`${baseURL}/webhooks/github`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-github-event": event,
-      "x-github-delivery": randomUUID(),
-      "x-hub-signature-256": `sha256=${createHmac("sha256", WEBHOOK_SECRET).update(body).digest("hex")}`,
-    },
-    body,
-  });
-  expect(res.status).toBe(202);
-}
 
 test("a student sees their process score and why each commit counted", async ({ page, baseURL }) => {
   // Setup: published assignment with an active repository for a student who linked GitHub.

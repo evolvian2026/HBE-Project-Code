@@ -5,6 +5,7 @@ import type { GitHubClient } from "@hbe/github";
 import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "./github-events.ts";
 import { provisionSubmission, sweepProvisioning } from "./provisioning.ts";
 import { computeSubmissionProcess, fetchCommitDetails } from "./activity.ts";
+import { recomputeGrade } from "../grading.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
@@ -62,5 +63,8 @@ export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, s
     await finalizeDueSubmissions(deps);
   });
   await queue.schedule("deadline-sweep", "* * * * *", {});
+  await queue.work("compute-grade", async (job) => {
+    await recomputeGrade(deps.db, job.data.submissionId, { actorId: null });
+  });
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

@@ -9,6 +9,7 @@ import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
 import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
+import { gradingRoutes } from "./routes/grading.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
@@ -73,6 +74,7 @@ export async function buildApp(
     await app.register(institutionRoutes, apiDeps);
     await app.register(assignmentRoutes, apiDeps);
     await app.register(runRoutes, { ...apiDeps, graderAuth: deps.graderAuth ?? createGraderAuth(deps.settings) });
+    await app.register(gradingRoutes, apiDeps);
   }
 
   return app;

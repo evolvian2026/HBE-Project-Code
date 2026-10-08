@@ -11,11 +11,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { isActive, RunList, type RunSummary } from "@/components/evaluation";
+import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { loadAssignment } from "../../../data";
 import { RunTestsForm } from "../../forms";
 import { ExtensionForm } from "./extension-form";
+import { OverrideForm, ReviewForm } from "./grading-forms";
 
 type Props = { params: Promise<{ slug: string; courseId: string; assignmentId: string; submissionId: string }> };
 
@@ -109,6 +111,36 @@ export default async function SubmissionPage({ params }: Props) {
       .limit(20),
   ]);
   const runList = (runs.data ?? []) as RunSummary[];
+
+  // Grading (staff): rubric, feedback and every grade version.
+  const [criteria, scores, feedback, grades, reasons] = isCourseStaff
+    ? await Promise.all([
+        supabase
+          .from("assignment_criteria")
+          .select("id, title, description, max_points")
+          .eq("assignment_id", a.id)
+          .order("position"),
+        supabase.from("rubric_scores").select("criterion_id, points, comment").eq("submission_id", s.id),
+        supabase.from("feedback").select("body_md").eq("submission_id", s.id).maybeSingle(),
+        supabase.from("grades").select(GRADE_COLUMNS).eq("submission_id", s.id).order("version", { ascending: false }),
+        supabase.rpc("grade_override_reasons", { p_submission: s.id }),
+      ])
+    : [null, null, null, null, null];
+  const gradeVersions = (grades?.data ?? []) as unknown as GradeRow[];
+  const currentGrade = gradeVersions[0];
+  const overrideReasons = new Map(
+    ((reasons?.data ?? []) as { version: number; override_reason: string | null }[]).map((r) => [
+      r.version,
+      r.override_reason,
+    ]),
+  );
+  const scoreByCriterion = new Map(
+    ((scores?.data ?? []) as { criterion_id: string; points: string; comment: string | null }[]).map((r) => [
+      r.criterion_id,
+      r,
+    ]),
+  );
+  const gradingIds = { slug, courseId: course.id, assignmentId: a.id, submissionId: s.id };
   const policy = policyRow.data?.process_policy as ProcessPolicy;
   const deadline = new Date(extension.data?.due_at ?? a.due_at);
   const repoUrl = s.repository ? `https://github.com/${s.repository.owner}/${s.repository.name}` : null;
@@ -163,6 +195,78 @@ export default async function SubmissionPage({ params }: Props) {
           </p>
         )}
       </div>
+
+      {isCourseStaff && (
+        <Card
+          title="Grading"
+          description={
+            currentGrade
+              ? `Version ${currentGrade.version} · ${formatInZone(currentGrade.created_at, course.timezone)}`
+              : "The grade is calculated once the graded commit is fixed at the cutoff."
+          }
+        >
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="space-y-6">
+              {currentGrade ? <GradeBreakdown grade={currentGrade} staff /> : <EmptyState title="No grade yet" />}
+              {canManage && s.finalized_at && (
+                <div className="border-t border-border pt-4">
+                  <h3 className="mb-2 text-sm font-medium">Override</h3>
+                  <OverrideForm
+                    ids={gradingIds}
+                    current={
+                      currentGrade?.override_score != null
+                        ? {
+                            score: Number(currentGrade.override_score),
+                            reason: overrideReasons.get(currentGrade.version) ?? "",
+                          }
+                        : null
+                    }
+                  />
+                </div>
+              )}
+              {gradeVersions.length > 1 && (
+                <details className="border-t border-border pt-4 text-sm">
+                  <summary className="cursor-pointer font-medium">Earlier versions</summary>
+                  <ul className="mt-2 space-y-1 text-muted">
+                    {gradeVersions.slice(1).map((g) => (
+                      <li key={g.id}>
+                        v{g.version} · {fmt(g.final_score)}
+                        {g.override_score !== null && ` (override: ${overrideReasons.get(g.version) ?? ""})`} ·{" "}
+                        {formatInZone(g.created_at, course.timezone)}
+                        {g.released_at && " · released"}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+            <div>
+              {(criteria?.data ?? []).length === 0 && (
+                <p className="mb-3 text-sm text-muted">This assignment has no rubric criteria.</p>
+              )}
+              <ReviewForm
+                ids={gradingIds}
+                feedback={feedback?.data?.body_md ?? ""}
+                criteria={(
+                  (criteria?.data ?? []) as {
+                    id: string;
+                    title: string;
+                    description: string | null;
+                    max_points: string;
+                  }[]
+                ).map((c) => ({
+                  id: c.id,
+                  title: c.title,
+                  description: c.description,
+                  maxPoints: Number(c.max_points),
+                  points: scoreByCriterion.has(c.id) ? Number(scoreByCriterion.get(c.id)!.points) : null,
+                  comment: scoreByCriterion.get(c.id)?.comment ?? null,
+                }))}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-2">

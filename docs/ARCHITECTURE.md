@@ -514,6 +514,22 @@ review, process snapshot and policy versions it was derived from. Staff override
 rows with a reason, so the result can always be audited. Every released grade also produces an
 immutable **grade report** (§12).
 
+As built:
+
+- The automated component is the graded commit's run (the deadline run or a staff re-grade;
+  any completed run on that commit as a fallback). Missing work scores 0 there without a run.
+- The late penalty is a percentage **of the grade earned**: `computed = raw × (1 − days × per_day%)`.
+- A grade is **complete** when every weighted component is in (the graded run; a score for every
+  rubric criterion). Only complete grades can be released.
+- Every recomputation that changes anything appends a version (`grades.version`); exactly one
+  is current. An override (instructors only, reason required, reason visible to staff only)
+  carries over to later versions until it is changed or removed.
+- Course staff (instructors and TAs) score the rubric and write feedback; instructors and
+  institution admins override and release. Students see their grade, rubric scores and
+  feedback only after release; versions created after release are released immediately.
+- All grading writes go through the API (audited with the acting user); the Data API is
+  read-only for these tables.
+
 ### 6.7 Capacity and cost: Actions minutes
 
 Planning load is about **100 students active at once** across all institutions. Rough guide:

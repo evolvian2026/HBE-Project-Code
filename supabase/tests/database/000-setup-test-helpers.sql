@@ -162,6 +162,18 @@ begin
   insert into public.branch_pushes (institution_id, repository_id, sha, pushed_at)
     select r.institution_id, r.id, repeat('b', 40), now() - interval '1 day' from public.repositories r;
 
+  -- Grading (unreleased): a rubric score, feedback and an overridden grade per student repository.
+  insert into public.rubric_scores (institution_id, submission_id, criterion_id, points, comment)
+    select s.institution_id, s.id, c.id, 5, 'Readable code'
+    from public.submissions s join public.assignment_criteria c on c.assignment_id = s.assignment_id
+    where s.repository_id is not null;
+  insert into public.feedback (institution_id, submission_id, body_md)
+    select s.institution_id, s.id, 'Good work' from public.submissions s where s.repository_id is not null;
+  insert into public.grades (institution_id, submission_id, user_id, version, components, computed_score,
+                             override_score, override_reason, final_score, complete)
+    select s.institution_id, s.id, s.user_id, 1, '{}', 70, 75, 'Bonus for documentation', 75, true
+    from public.submissions s where s.repository_id is not null;
+
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
     (tests.id('inst_b'), tests.id('admin_b'), 7002);
@@ -197,6 +209,9 @@ language sql security invoker set search_path = '' as $$
   union all select 'evaluation_runs', count(*) from public.evaluation_runs where institution_id = p_institution
   union all select 'test_results', count(*) from public.test_results where institution_id = p_institution
   union all select 'branch_pushes', count(*) from public.branch_pushes where institution_id = p_institution
+  union all select 'rubric_scores', count(*) from public.rubric_scores where institution_id = p_institution
+  union all select 'feedback', count(*) from public.feedback where institution_id = p_institution
+  union all select 'grades', count(*) from public.grades where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;
