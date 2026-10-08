@@ -13,7 +13,7 @@ select is(
   'Alpha University', 'the email payload names the institution');
 
 insert into public.invitations (institution_id, github_login, role) values (tests.id('inst_a'), 'some-login', 'student');
-select is((select count(*)::int from public.email_outbox where institution_id = tests.id('inst_a')), 1,
+select is((select count(*)::int from public.email_outbox where institution_id = tests.id('inst_a') and template = 'invitation'), 1,
   'a GitHub-login-only invitation queues no email');
 
 select throws_ok(

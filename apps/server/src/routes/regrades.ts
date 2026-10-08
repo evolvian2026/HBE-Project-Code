@@ -104,15 +104,19 @@ export async function regradeRoutes(app: FastifyInstance, deps: ApiDeps): Promis
         .where("role", "in", ["instructor", "ta"])
         .execute();
       for (const m of staff) {
-        await notify(db, {
-          institutionId: s.institution_id,
-          userId: m.user_id,
-          type: "regrade_requested",
-          title: `${s.full_name ?? s.email ?? "A student"} asked for a regrade of ${links?.title ?? "an assignment"}`,
-          body: body.message,
-          link: links?.submission ?? null,
-          dedupeKey: `regrade:${request.id}`,
-        });
+        await notify(
+          db,
+          {
+            institutionId: s.institution_id,
+            userId: m.user_id,
+            type: "regrade_requested",
+            title: `${s.full_name ?? s.email ?? "A student"} asked for a regrade of ${links?.title ?? "an assignment"}`,
+            body: body.message,
+            link: links?.submission ?? null,
+            dedupeKey: `regrade:${request.id}`,
+          },
+          deps.queue,
+        );
       }
       return reply.code(201).send({ request });
     },
@@ -143,15 +147,19 @@ export async function regradeRoutes(app: FastifyInstance, deps: ApiDeps): Promis
     if (!updated) throw conflict("not_open", "This request has already been answered or withdrawn.");
 
     const links = await submissionLinks(db, r.submission_id);
-    await notify(db, {
-      institutionId: r.institution_id,
-      userId: r.user_id,
-      type: "regrade_answered",
-      title: `Your regrade request for ${links?.title ?? "your assignment"} was ${body.outcome}`,
-      body: body.response,
-      link: links?.assignment ?? null,
-      dedupeKey: `regrade:${r.id}:answered`,
-    });
+    await notify(
+      db,
+      {
+        institutionId: r.institution_id,
+        userId: r.user_id,
+        type: "regrade_answered",
+        title: `Your regrade request for ${links?.title ?? "your assignment"} was ${body.outcome}`,
+        body: body.response,
+        link: links?.assignment ?? null,
+        dedupeKey: `regrade:${r.id}:answered`,
+      },
+      deps.queue,
+    );
     return { request: updated };
   });
 

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { reportRun, sendWebhook, signIn, sql } from "./support.ts";
+import { reportRun, sendWebhook, signIn, sql, waitForEmail } from "./support.ts";
 
 const suffix = Date.now().toString(36);
 const email = (who: string) => `${who}-${suffix}@e2e.test`;
@@ -174,6 +174,24 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await list.getByText("Your grade for Todo API is out").click();
   await expect(student).toHaveURL(new RegExp(`/assignments/${assignment!.id}$`));
   await expect(student.getByRole("link", { name: "Notifications, 1 unread" })).toBeVisible();
+
+  // The grade also came by email (test results don't, by default); the student opts in to those.
+  const mail = await waitForEmail(email("student"), "Your grade for Todo API is out");
+  expect(mail).toContain(`/i/${slug}/courses/${course!.id}/assignments/${assignment!.id}`);
+  expect(mail).toContain("/account/notifications");
+  await student.getByRole("link", { name: /Notifications, \d+ unread/ }).click();
+  await student.getByRole("link", { name: "Email settings" }).click();
+  await expect(student.getByLabel("Grades released or updated")).toBeChecked();
+  await expect(student.getByLabel(/^Test results/)).not.toBeChecked();
+  await student.getByLabel(/^Test results/).check();
+  await student.getByRole("button", { name: "Save" }).click();
+  await expect(student.getByText("Saved.")).toBeVisible();
+  const [prefs] = await sql<{ types: string[] }>(
+    "select email_notification_types as types from public.profiles where email = $1",
+    [email("student")],
+  );
+  expect(prefs!.types).toContain("run_finished");
+  await student.goto(assignmentUrl);
 
   // Release wrote a grade report the student can download (from private Storage).
   const reports = async () =>

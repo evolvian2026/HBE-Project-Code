@@ -54,7 +54,7 @@ erDiagram
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `institutions` | name, slug unique, status (`active`/`read_only`/`suspended`/`purged`), limits jsonb (max users, runs/day, runner minutes/month, concurrency, storage), settings jsonb (branding, process-policy defaults), contract_started_at, **contract_ended_at**, **purge_after** (= contract_ended_at + 2 years), export_notices jsonb | Created by a super admin. All data is in Singapore, so there's no per-tenant region. |
-| `profiles` | `id` = `auth.users.id`, full_name, email, avatar_url, github_user_id bigint unique, github_login, status, anonymised_at | Global (a person can be in several institutions). Created by a trigger on `auth.users` insert. |
+| `profiles` | `id` = `auth.users.id`, full_name, email, avatar_url, github_user_id bigint unique, github_login, status, anonymised_at, email_notification_types text[] | Global (a person can be in several institutions). Created by a trigger on `auth.users` insert. `email_notification_types`: which notifications the user also gets by email (default: all but `run_finished`); users edit it at `/account/notifications`. |
 | `user_roles` | user_id, role (`super_admin`) | Platform-level role only. |
 | `institution_memberships` | institution_id, user_id, role (`admin`/`teacher`/`student`), external_id (student number), status | unique(institution_id, user_id). Read by the Custom Access Token Hook. |
 | `invitations` | institution_id, email, github_login, role, course_id, course_role, token_hash, expires_at, accepted_at | |
@@ -125,6 +125,7 @@ erDiagram
 | Table | Key columns | Notes |
 |-------|-------------|-------|
 | `notifications` | institution_id, user_id, type (`run_finished`/`grade_released`/`deadline_soon`/`extension_granted`/`regrade_requested`/`regrade_answered`), title, body, link, dedupe_key, read_at | Written by the platform (an extension trigger writes its own); users read their own and may only set `read_at`. `unique(user_id, dedupe_key)` makes retries harmless. |
+| `email_outbox` | institution_id, to_email, template (`invitation`/`notification`), payload jsonb, status (`pending`/`sent`/`failed`), attempts, last_error, sent_at | Written in the same transaction as what needs an email (triggers on `invitations` and `notifications`; a notification only if its user wants that type by email and the institution is active). The worker sends pending rows (up to five attempts). No user access. |
 | `institution_settings` / `platform_settings` | key, value jsonb, updated_by | Per tenant / global. |
 | `audit_logs` | institution_id (nullable for platform actions), actor_id, action, entity, entity_id, before jsonb, after jsonb, ip, at | Append-only. |
 | `usage_counters` | institution_id, period (month), runs, runner_minutes, storage_bytes | The platform pays for compute; these drive quotas and plan limits. |

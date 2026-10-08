@@ -38,3 +38,39 @@ ${expires ? `<p style="color:#5a6474">The invitation expires on ${escapeHtml(exp
 
   return { to, subject: `You're invited to ${p.institution_name} on HBE Projects`, text, html };
 }
+
+export interface NotificationPayload {
+  notification_id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  institution_name: string;
+}
+
+/** An in-app notification, by email: what happened, a link to it, and how to stop these. */
+export function notificationEmail(to: string, p: NotificationPayload, appUrl: string): EmailMessage {
+  const openUrl = p.link ? new URL(p.link, appUrl).toString() : new URL("/", appUrl).toString();
+  const settingsUrl = new URL("/account/notifications", appUrl).toString();
+  const text = [
+    p.title,
+    ...(p.body ? ["", p.body] : []),
+    "",
+    `Open: ${openUrl}`,
+    "",
+    "—",
+    `${p.institution_name} on HBE Projects. Choose which emails you get: ${settingsUrl}`,
+  ].join("\n");
+  const html = `<p><strong>${escapeHtml(p.title)}</strong></p>
+${p.body ? `<p style="white-space:pre-wrap">${escapeHtml(p.body)}</p>` : ""}
+<p><a href="${escapeHtml(openUrl)}">Open in HBE Projects</a></p>
+<p style="color:#5a6474;font-size:12px">${escapeHtml(p.institution_name)} on HBE Projects ·
+<a href="${escapeHtml(settingsUrl)}" style="color:#5a6474">Choose which emails you get</a></p>`;
+  return {
+    to,
+    subject: p.title,
+    text,
+    html,
+    headers: { "List-Unsubscribe": `<${settingsUrl}>`, "X-Entity-Ref-ID": p.notification_id },
+  };
+}

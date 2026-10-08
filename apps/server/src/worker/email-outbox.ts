@@ -1,7 +1,12 @@
 import { sql, type Db } from "@hbe/db";
 import type { FastifyBaseLogger } from "fastify";
 import type { EmailSender } from "../email/sender.ts";
-import { invitationEmail, type InvitationPayload } from "../email/templates.ts";
+import {
+  invitationEmail,
+  notificationEmail,
+  type InvitationPayload,
+  type NotificationPayload,
+} from "../email/templates.ts";
 
 const BATCH = 20;
 const MAX_ATTEMPTS = 5;
@@ -28,7 +33,7 @@ export async function drainEmailOutbox({
     id: number;
     to_email: string;
     template: string;
-    payload: InvitationPayload;
+    payload: InvitationPayload | NotificationPayload;
     attempts: number;
   }>`
     update email_outbox set attempts = attempts + 1
@@ -44,8 +49,13 @@ export async function drainEmailOutbox({
   let failed = 0;
   for (const row of rows) {
     try {
-      if (row.template !== "invitation") throw new Error(`Unknown email template ${row.template}`);
-      await sender.send(invitationEmail(row.to_email, row.payload, appUrl));
+      if (row.template === "invitation") {
+        await sender.send(invitationEmail(row.to_email, row.payload as InvitationPayload, appUrl));
+      } else if (row.template === "notification") {
+        await sender.send(notificationEmail(row.to_email, row.payload as NotificationPayload, appUrl));
+      } else {
+        throw new Error(`Unknown email template ${row.template}`);
+      }
       await db
         .updateTable("email_outbox")
         .set({ status: "sent", sent_at: new Date(), last_error: null })

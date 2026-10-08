@@ -25,14 +25,19 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
       title="Notifications"
       description={unread ? `${unread} unread` : "All caught up"}
       actions={
-        unread > 0 && (
-          <form action={markAllNotificationsRead}>
-            <input type="hidden" name="slug" value={slug} />
-            <Button type="submit" variant="secondary">
-              Mark all as read
-            </Button>
-          </form>
-        )
+        <span className="flex items-center gap-3">
+          <a href="/account/notifications" className="text-sm text-accent hover:underline">
+            Email settings
+          </a>
+          {unread > 0 && (
+            <form action={markAllNotificationsRead}>
+              <input type="hidden" name="slug" value={slug} />
+              <Button type="submit" variant="secondary">
+                Mark all as read
+              </Button>
+            </form>
+          )}
+        </span>
       }
     >
       {items.length === 0 ? (

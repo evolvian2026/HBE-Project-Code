@@ -76,7 +76,7 @@ export async function startWorker(
     await generateGradeReport(deps, job.data.gradeId);
   });
   await queue.work("deadline-reminder", async () => {
-    await remindDeadlines(deps.db);
+    await remindDeadlines(deps.db, new Date(), queue);
   });
   await queue.schedule("deadline-reminder", "7 * * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");

@@ -37,6 +37,7 @@ export interface ProfilesTable {
   github_login: string | null;
   status: Generated<MembershipStatus>;
   anonymised_at: Timestamp | null;
+  email_notification_types: Generated<NotificationType[]>;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }
@@ -163,7 +164,7 @@ export interface EmailOutboxTable {
   id: Generated<number>;
   institution_id: string | null;
   to_email: string;
-  template: "invitation";
+  template: "invitation" | "notification";
   payload: Json;
   status: Generated<"pending" | "sent" | "failed">;
   attempts: Generated<number>;

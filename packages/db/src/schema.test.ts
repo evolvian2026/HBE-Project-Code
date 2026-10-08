@@ -370,6 +370,7 @@ const declared: Record<string, string[]> = {
     "github_login",
     "status",
     "anonymised_at",
+    "email_notification_types",
     "created_at",
     "updated_at",
   ],

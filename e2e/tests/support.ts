@@ -15,20 +15,42 @@ export async function sql<T = unknown>(text: string, values: unknown[] = []): Pr
   }
 }
 
-/** Polls Mailpit for the newest sign-in link sent to `email`. */
+interface MailpitSummary {
+  ID: string;
+  Created: string;
+  Subject: string;
+}
+
+async function mailpitSearch(query: string): Promise<MailpitSummary[]> {
+  const res = await fetch(`${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(query)}`);
+  return ((await res.json()) as { messages?: MailpitSummary[] }).messages ?? [];
+}
+
+const mailpitText = async (id: string) =>
+  ((await (await fetch(`${MAILPIT_URL}/api/v1/message/${id}`)).json()) as { Text: string }).Text;
+
+/** Polls Mailpit for the newest sign-in link sent to `email` (other emails, e.g. invitations, are skipped). */
 async function waitForMagicLink(email: string, sentAfter: number): Promise<string> {
   for (let attempt = 0; attempt < 40; attempt++) {
-    const res = await fetch(`${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`);
-    const { messages = [] } = (await res.json()) as { messages?: { ID: string; Created: string }[] };
-    const latest = messages.find((m) => Date.parse(m.Created) >= sentAfter - 1000);
-    if (latest) {
-      const message = (await (await fetch(`${MAILPIT_URL}/api/v1/message/${latest.ID}`)).json()) as { Text: string };
-      const link = message.Text.match(/https?:\/\/\S+\/auth\/v1\/verify\?\S+/)?.[0];
+    for (const m of await mailpitSearch(`to:"${email}"`)) {
+      if (Date.parse(m.Created) < sentAfter - 1000) continue;
+      const link = (await mailpitText(m.ID)).match(/https?:\/\/\S+\/auth\/v1\/verify\?\S+/)?.[0];
       if (link) return link.replace(/[)\]>.,]+$/, "");
     }
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`No sign-in email for ${email}`);
+}
+
+/** Waits for an email to `to` with this subject and returns its plain text. */
+export async function waitForEmail(to: string, subject: string, timeout = 90_000): Promise<string> {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    const match = (await mailpitSearch(`to:"${to}"`)).find((m) => m.Subject === subject);
+    if (match) return mailpitText(match.ID);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`No email "${subject}" for ${to}`);
 }
 
 /** Signs in through the real UI and email flow. */

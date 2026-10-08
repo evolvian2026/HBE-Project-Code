@@ -244,20 +244,24 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
   if (forStudent) {
     const links = await submissionLinks(db, run.submission_id);
     if (links) {
-      await notify(db, {
-        institutionId: links.institution_id,
-        userId: run.user_id,
-        type: "run_finished",
-        title: `Test results for ${links.title}: ${
-          results.infra_error
-            ? "the grader hit a platform problem"
-            : score.blockedBy
-              ? `stopped at ${score.blockedBy}`
-              : `${score.passed}/${score.total} passed`
-        }`,
-        link: `${links.submission}/runs/${run.id}`,
-        dedupeKey: `run:${run.id}`,
-      });
+      await notify(
+        db,
+        {
+          institutionId: links.institution_id,
+          userId: run.user_id,
+          type: "run_finished",
+          title: `Test results for ${links.title}: ${
+            results.infra_error
+              ? "the grader hit a platform problem"
+              : score.blockedBy
+                ? `stopped at ${score.blockedBy}`
+                : `${score.passed}/${score.total} passed`
+          }`,
+          link: `${links.submission}/runs/${run.id}`,
+          dedupeKey: `run:${run.id}`,
+        },
+        deps.queue,
+      );
     }
   }
 

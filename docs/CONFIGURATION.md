@@ -92,6 +92,13 @@ To roll back, unset the variable. Runs then go back to `ubuntu-latest`.
 `EMAIL_PROVIDER=ses`, `AWS_SES_REGION=ap-southeast-1`. Credentials come from the instance role.
 Supabase Auth's SMTP settings change separately, in its dashboard.
 
+The providers are `resend` (HTTP API; the demo default, since Render free blocks outbound SMTP),
+`ses`, `smtp` (`SMTP_URL`, e.g. `smtp://127.0.0.1:54325` for the local Mailpit, or
+`smtps://user:pass@host:465` for a relay) and `log` (logs instead of sending). Every email goes
+through the `email_outbox` table, which the worker drains every minute (and right after a
+notification), retrying up to five times. Users choose which notifications they also get by
+email at `/account/notifications`.
+
 ## 4. Tuning without a redeploy of code
 
 Any profile value can be overridden per environment, for example:

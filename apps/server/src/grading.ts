@@ -21,15 +21,19 @@ export async function announceRelease(db: Db, queue: JobQueue | undefined, grade
       .where("id", "!=", gradeId)
       .where("released_at", "is not", null)
       .executeTakeFirst();
-    await notify(db, {
-      institutionId: links.institution_id,
-      userId: links.user_id,
-      type: "grade_released",
-      title: earlier ? `Your grade for ${links.title} was updated` : `Your grade for ${links.title} is out`,
-      body: "See your grade, rubric scores and feedback.",
-      link: links.assignment,
-      dedupeKey: `grade:${gradeId}`,
-    });
+    await notify(
+      db,
+      {
+        institutionId: links.institution_id,
+        userId: links.user_id,
+        type: "grade_released",
+        title: earlier ? `Your grade for ${links.title} was updated` : `Your grade for ${links.title} is out`,
+        body: "See your grade, rubric scores and feedback.",
+        link: links.assignment,
+        dedupeKey: `grade:${gradeId}`,
+      },
+      queue,
+    );
   }
   await queue?.send("grade-report", { gradeId }, { singletonKey: `report-${gradeId}` });
 }

@@ -65,7 +65,7 @@ describe("grade reports", () => {
 
     const queue = new FakeQueue();
     await releaseGrades(db, s.assignmentId, { actorId: s.instructor, queue });
-    expect(queue.sent).toEqual([
+    expect(queue.sent.filter((j) => j.name === "grade-report")).toEqual([
       { name: "grade-report", data: { gradeId: current!.id }, options: { singletonKey: `report-${current!.id}` } },
     ]);
     expect(await generateGradeReport({ db, store, log }, current!.id)).toBe("created");
@@ -109,7 +109,7 @@ describe("grade reports", () => {
       override: { score: 88, reason: "Private: excellent viva" },
       queue,
     });
-    expect(queue.sent).toEqual([
+    expect(queue.sent.filter((j) => j.name === "grade-report")).toEqual([
       { name: "grade-report", data: { gradeId: changed!.id }, options: { singletonKey: `report-${changed!.id}` } },
     ]);
     await generateGradeReport({ db, store, log }, changed!.id);

@@ -62,8 +62,14 @@ export const envSchema = z.object({
   ARCHIVE_S3_SECRET_ACCESS_KEY: optional,
   ARCHIVE_OBJECT_LOCK: z.enum(["none", "governance", "compliance"]).default("none"),
 
-  EMAIL_PROVIDER: z.enum(["resend", "ses", "log"]).default("log"),
+  /** `smtp` suits local development (Mailpit) and any SMTP relay; `log` only logs. */
+  EMAIL_PROVIDER: z.enum(["resend", "ses", "smtp", "log"]).default("log"),
   EMAIL_FROM: optional,
+  /** e.g. smtp://127.0.0.1:54325 (local Mailpit) or smtps://user:pass@host:465 */
+  SMTP_URL: z
+    .string()
+    .regex(/^smtps?:\/\//, "must be an smtp:// or smtps:// URL")
+    .optional(),
   RESEND_API_KEY: optional,
   AWS_SES_REGION: optional,
 
@@ -102,6 +108,7 @@ const rules: Rule[] = [
   { when: (_, r) => r.has("worker"), check: required("GRADER_REPO", "EMAIL_FROM") },
   { when: (e, r) => r.has("worker") && e.EMAIL_PROVIDER === "resend", check: required("RESEND_API_KEY") },
   { when: (e, r) => r.has("worker") && e.EMAIL_PROVIDER === "ses", check: required("AWS_SES_REGION") },
+  { when: (e, r) => r.has("worker") && e.EMAIL_PROVIDER === "smtp", check: required("SMTP_URL") },
   { when: (e, r) => r.has("worker") && deployed(e), check: required("ARCHIVE_S3_BUCKET") },
   {
     // A custom endpoint (R2, B2) has no instance role, so it needs explicit keys.
