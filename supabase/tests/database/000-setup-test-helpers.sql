@@ -112,6 +112,33 @@ begin
     (tests.id('inst_a'), 'pending.a@test.local', 'student'),
     (tests.id('inst_b'), 'pending.b@test.local', 'student');
 
+  insert into tests.ids (name, id) values
+    ('assign_a1', 'aaaaaaaa-0000-4000-8000-0000000000a1'),
+    ('assign_b1', 'bbbbbbbb-0000-4000-8000-0000000000a1'),
+    ('profile_b', 'bbbbbbbb-0000-4000-8000-0000000000e1');
+  insert into public.stack_profiles (id, institution_id, key, version, display_name, definition)
+    values (tests.id('profile_b'), tests.id('inst_b'), 'beta-java', 1, 'Beta Java', '{}');
+  insert into public.assignments (id, institution_id, course_id, slug, title, stack_profile_id, due_at, status, published_at)
+    values
+    (tests.id('assign_a1'), tests.id('inst_a'), tests.id('course_a1'), 'todo-api', 'Todo API',
+     (select id from public.stack_profiles where key = 'mern-node20' and institution_id is null), now() + interval '14 days', 'published', now()),
+    (tests.id('assign_b1'), tests.id('inst_b'), tests.id('course_b1'), 'shop', 'Shop',
+     tests.id('profile_b'), now() + interval '14 days', 'published', now());
+  perform private.ensure_submissions(tests.id('assign_a1'));
+  perform private.ensure_submissions(tests.id('assign_b1'));
+  insert into public.assignment_criteria (institution_id, assignment_id, title, max_points) values
+    (tests.id('inst_a'), tests.id('assign_a1'), 'Code quality', 10),
+    (tests.id('inst_b'), tests.id('assign_b1'), 'Code quality', 10);
+  insert into public.repositories (institution_id, github_installation_id, owner, name) values
+    (tests.id('inst_a'), tests.id('gh_a'), 'alpha-cs', 'todo-api-student-a'),
+    (tests.id('inst_b'), tests.id('gh_b'), 'beta-cs', 'shop-student-b');
+  update public.submissions s set repository_id = r.id, status = 'active'
+    from public.repositories r where r.name in ('todo-api-student-a', 'shop-student-b')
+     and s.institution_id = r.institution_id;
+  insert into public.assignment_extensions (institution_id, assignment_id, user_id, due_at) values
+    (tests.id('inst_a'), tests.id('assign_a1'), tests.id('student_a'), now() + interval '20 days'),
+    (tests.id('inst_b'), tests.id('assign_b1'), tests.id('student_b'), now() + interval '20 days');
+
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
     (tests.id('inst_b'), tests.id('admin_b'), 7002);
@@ -132,6 +159,12 @@ language sql security invoker set search_path = '' as $$
   union all select 'github_link_requests', count(*) from public.github_link_requests where institution_id = p_institution
   union all select 'github_events', count(*) from public.github_events where institution_id = p_institution
   union all select 'email_outbox', count(*) from public.email_outbox where institution_id = p_institution
+  union all select 'stack_profiles', count(*) from public.stack_profiles where institution_id = p_institution
+  union all select 'assignments', count(*) from public.assignments where institution_id = p_institution
+  union all select 'assignment_criteria', count(*) from public.assignment_criteria where institution_id = p_institution
+  union all select 'assignment_extensions', count(*) from public.assignment_extensions where institution_id = p_institution
+  union all select 'repositories', count(*) from public.repositories where institution_id = p_institution
+  union all select 'submissions', count(*) from public.submissions where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

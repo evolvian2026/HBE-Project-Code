@@ -7,6 +7,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import { ZodError } from "zod";
 import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
+import { assignmentRoutes } from "./routes/assignments.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
 import { meRoutes } from "./routes/me.ts";
@@ -40,7 +41,7 @@ export async function buildApp(
 
   app.setErrorHandler((error, req, reply) => {
     if (error instanceof HttpError) {
-      return reply.code(error.statusCode).send({ error: error.code, message: error.message });
+      return reply.code(error.statusCode).send({ error: error.code, message: error.message, ...error.details });
     }
     if (error instanceof ForbiddenError) {
       return reply.code(403).send({ error: "forbidden", message: error.message });
@@ -66,6 +67,7 @@ export async function buildApp(
     await app.register(meRoutes, apiDeps);
     await app.register(platformRoutes, apiDeps);
     await app.register(institutionRoutes, apiDeps);
+    await app.register(assignmentRoutes, apiDeps);
   }
 
   return app;

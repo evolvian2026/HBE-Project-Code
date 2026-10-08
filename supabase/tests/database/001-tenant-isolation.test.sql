@@ -84,11 +84,17 @@ reset role;
 -- ---------------------------------------------------------------------------
 -- Super admin: platform data yes, tenant data no (needs a support-access grant)
 -- ---------------------------------------------------------------------------
+-- Totals as the database owner, so other data in a shared dev database doesn't matter.
+create temp table totals on commit drop as
+  select (select count(*)::int from public.institutions) as institutions,
+         (select count(*)::int from public.github_installations) as installations;
+grant select on totals to authenticated;
 select tests.authenticate_as(tests.id('super'));
-select is(count(*)::int, 2, 'super admin sees all institutions') from public.institutions;
+select is(count(*)::int, (select institutions from totals), 'super admin sees all institutions') from public.institutions;
 select is(count(*)::int, 0, 'super admin cannot read tenant memberships') from public.institution_memberships;
 select is(count(*)::int, 0, 'super admin cannot read tenant courses') from public.courses;
-select is(count(*)::int, 3, 'super admin sees every GitHub installation, linked or not') from public.github_installations;
+select is(count(*)::int, (select installations from totals), 'super admin sees every GitHub installation, linked or not')
+  from public.github_installations;
 reset role;
 
 -- ---------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 import { webConfig } from "./config";
 import { createSupabaseServerClient } from "./supabase/server";
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string; message: string };
+export type ApiResult<T> =
+  { ok: true; data: T } | { ok: false; status: number; error: string; message: string; problems?: string[] };
 
 /** Calls the api role as the signed-in user (server-side only). */
 export async function apiFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
@@ -22,9 +23,15 @@ export async function apiFetch<T>(path: string, init: { method?: string; body?: 
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     cache: "no-store",
   });
-  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string; problems?: string[] };
   if (!res.ok) {
-    return { ok: false, status: res.status, error: body.error ?? "error", message: body.message ?? res.statusText };
+    return {
+      ok: false,
+      status: res.status,
+      error: body.error ?? "error",
+      message: body.message ?? res.statusText,
+      problems: body.problems,
+    };
   }
   return { ok: true, data: body as T };
 }

@@ -1,6 +1,8 @@
+import { formatInZone } from "@hbe/core";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadMembers } from "../../members/data";
@@ -23,7 +25,7 @@ async function loadCourse(slug: string, courseId: string) {
   const supabase = await createSupabaseServerClient();
   const { data: course } = await supabase
     .from("courses")
-    .select("id, code, name, term, archived_at, github:github_installations(account_login)")
+    .select("id, code, name, term, timezone, archived_at, github:github_installations(account_login)")
     .eq("id", courseId)
     .eq("institution_id", ctx.institution.id)
     .maybeSingle();
@@ -36,6 +38,7 @@ async function loadCourse(slug: string, courseId: string) {
       code: string;
       name: string;
       term: string;
+      timezone: string;
       archived_at: string | null;
       github: { account_login: string } | null;
     },
@@ -52,6 +55,11 @@ export default async function CoursePage({ params }: Props) {
   const { slug, courseId } = await params;
   const { ctx, supabase, course } = await loadCourse(slug, courseId);
 
+  const { data: assignmentRows } = await supabase
+    .from("assignments")
+    .select("id, title, status, due_at")
+    .eq("course_id", course.id)
+    .order("due_at");
   const { data: memberships } = await supabase
     .from("course_memberships")
     .select("id, user_id, role, profile:profiles(full_name, email, github_login)")
@@ -104,9 +112,36 @@ export default async function CoursePage({ params }: Props) {
 
       <Card
         title="Assignments"
-        description="Projects, automated tests and grading arrive with the next part of Phase 1."
+        actions={
+          canManage && (
+            <ButtonLink href={`/i/${slug}/courses/${course.id}/assignments/new`} variant="secondary">
+              New assignment
+            </ButtonLink>
+          )
+        }
       >
-        <EmptyState title="No assignments yet" />
+        {(assignmentRows ?? []).length === 0 ? (
+          <EmptyState title="No assignments yet" />
+        ) : (
+          <ul className="divide-y divide-border">
+            {(assignmentRows ?? []).map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                <Link
+                  href={`/i/${slug}/courses/${course.id}/assignments/${a.id}`}
+                  className="font-medium hover:text-accent"
+                >
+                  {a.title}
+                </Link>
+                <span className="flex items-center gap-2 text-muted">
+                  due {formatInZone(a.due_at, course.timezone)}
+                  {isCourseStaff && a.status !== "published" && (
+                    <Badge tone={a.status === "draft" ? "warning" : "neutral"}>{a.status}</Badge>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       {isCourseStaff && (

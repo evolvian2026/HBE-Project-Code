@@ -180,6 +180,96 @@ export interface PlatformSettingsTable {
   updated_at: DefaultTimestamp;
 }
 
+export type AssignmentStatus = "draft" | "published" | "closed";
+export type SubmissionStatus =
+  "waiting_for_github" | "provisioning" | "active" | "provisioning_failed" | "submitted" | "graded";
+
+export interface StackProfilesTable {
+  id: Generated<string>;
+  institution_id: string | null;
+  key: string;
+  version: number;
+  display_name: string;
+  description: string | null;
+  definition: Json;
+  status: Generated<"active" | "retired">;
+  created_at: DefaultTimestamp;
+}
+
+export interface AssignmentsTable {
+  id: Generated<string>;
+  institution_id: string;
+  course_id: string;
+  slug: string;
+  title: string;
+  spec_md: Generated<string>;
+  stack_profile_id: string;
+  template_repo: string | null;
+  release_at: Timestamp | null;
+  due_at: Timestamp;
+  late_policy: Generated<Json>;
+  weights: Generated<Json>;
+  process_policy: Generated<Json>;
+  triggers: Generated<Json>;
+  run_quota_per_day: Generated<number>;
+  status: Generated<AssignmentStatus>;
+  published_at: Timestamp | null;
+  grades_released_at: Timestamp | null;
+  created_by: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface AssignmentCriteriaTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  title: string;
+  description: string | null;
+  max_points: string; // numeric
+  position: Generated<number>;
+  created_at: DefaultTimestamp;
+}
+
+export interface AssignmentExtensionsTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  user_id: string;
+  due_at: Timestamp;
+  reason: string | null;
+  granted_by: string | null;
+  created_at: DefaultTimestamp;
+}
+
+export interface RepositoriesTable {
+  id: Generated<string>;
+  institution_id: string;
+  github_installation_id: string;
+  owner: string;
+  name: string;
+  github_repo_id: number | null;
+  default_branch: Generated<string>;
+  private: Generated<boolean>;
+  archived: Generated<boolean>;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface SubmissionsTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  user_id: string;
+  repository_id: string | null;
+  status: Generated<SubmissionStatus>;
+  status_detail: string | null;
+  provisioning_attempts: Generated<number>;
+  final_sha: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
 export interface Database {
   institutions: InstitutionsTable;
   profiles: ProfilesTable;
@@ -194,6 +284,12 @@ export interface Database {
   github_events: GithubEventsTable;
   email_outbox: EmailOutboxTable;
   platform_settings: PlatformSettingsTable;
+  stack_profiles: StackProfilesTable;
+  assignments: AssignmentsTable;
+  assignment_criteria: AssignmentCriteriaTable;
+  assignment_extensions: AssignmentExtensionsTable;
+  repositories: RepositoriesTable;
+  submissions: SubmissionsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

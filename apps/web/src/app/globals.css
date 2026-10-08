@@ -61,3 +61,72 @@ body {
   background: var(--bg);
   color: var(--text);
 }
+
+/* Minimal typography for rendered Markdown (assignment specs, feedback). */
+.prose-hbe h1,
+.prose-hbe h2,
+.prose-hbe h3 {
+  font-weight: 600;
+  margin: 1.25em 0 0.5em;
+}
+.prose-hbe h1 {
+  font-size: 1.25rem;
+}
+.prose-hbe h2 {
+  font-size: 1.125rem;
+}
+.prose-hbe h3 {
+  font-size: 1rem;
+}
+.prose-hbe p,
+.prose-hbe ul,
+.prose-hbe ol,
+.prose-hbe pre,
+.prose-hbe table {
+  margin: 0.75em 0;
+}
+.prose-hbe ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-hbe ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.prose-hbe a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.prose-hbe code {
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+.prose-hbe pre {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+.prose-hbe pre code {
+  background: none;
+  padding: 0;
+}
+.prose-hbe table {
+  border-collapse: collapse;
+}
+.prose-hbe th,
+.prose-hbe td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+.prose-hbe blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+  color: var(--muted);
+}
+.prose-hbe > :first-child {
+  margin-top: 0;
+}

@@ -38,6 +38,10 @@ const can = {
   linkGithubInstallation: (a: Actor, institutionId: string) =>
     roleIn(a, institutionId) === "admin" && a.memberships.get(institutionId)?.institutionStatus === "active",
   mapGithubInstallationManually: (a: Actor) => a.isSuperAdmin,
+  /** Instructors of the course, or the institution's admins (active institutions only). */
+  manageCourse: (a: Actor, institutionId: string, courseRole: string | null) =>
+    (roleIn(a, institutionId) === "admin" || courseRole === "instructor") &&
+    a.memberships.get(institutionId)?.institutionStatus === "active",
 } as const;
 
 export type Permission = keyof typeof can;

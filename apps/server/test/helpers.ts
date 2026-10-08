@@ -119,19 +119,17 @@ export class Fixtures {
   }
 
   async cleanup(): Promise<void> {
+    // Order matters: institutions first (cascading to courses and repositories that
+    // reference installations), then installations, then users.
     if (this.deliveryIds.length)
       await this.db.deleteFrom("github_events").where("delivery_id", "in", this.deliveryIds).execute();
+    if (this.institutionIds.length) {
+      await this.db.deleteFrom("institutions").where("id", "in", this.institutionIds).execute();
+      await this.db.deleteFrom("audit_logs").where("institution_id", "in", this.institutionIds).execute();
+    }
     if (this.installationIds.length) {
       await this.db.deleteFrom("github_events").where("installation_id", "in", this.installationIds).execute();
       await this.db.deleteFrom("github_installations").where("installation_id", "in", this.installationIds).execute();
-    }
-    if (this.institutionIds.length) {
-      await this.db.deleteFrom("institutions").where("id", "in", this.institutionIds).execute();
-      await this.db
-        .deleteFrom("audit_logs")
-        .where("institution_id", "in", this.institutionIds)
-        .execute()
-        .catch(() => {});
     }
     if (this.userIds.length) await sql`delete from auth.users where id in (${sql.join(this.userIds)})`.execute(this.db);
   }

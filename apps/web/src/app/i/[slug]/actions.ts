@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
-import { webConfig } from "@/lib/config";
+import { safeNext, webConfig } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const ids = z.object({ institutionId: z.string().uuid(), slug: z.string().min(1).max(50) });
@@ -21,9 +21,10 @@ export async function connectGithubOrganisation(formData: FormData) {
 /** Adds a GitHub identity to the signed-in account (required before connecting an organisation). */
 export async function linkGithubAccount(formData: FormData) {
   const { slug } = ids.pick({ slug: true }).parse(Object.fromEntries(formData));
+  const next = safeNext(formData.get("next"));
   const supabase = await createSupabaseServerClient();
   const redirectTo = new URL("/auth/callback", webConfig().APP_URL);
-  redirectTo.searchParams.set("next", `/i/${slug}`);
+  redirectTo.searchParams.set("next", next === "/" ? `/i/${slug}` : next);
   const { data, error } = await supabase.auth.linkIdentity({
     provider: "github",
     options: { redirectTo: redirectTo.toString() },
