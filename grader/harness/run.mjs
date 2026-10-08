@@ -28,6 +28,9 @@ import { createToolchains } from "./lib/toolchain.mjs";
 
 const RUNNER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "runner");
 const TESTER_IMAGE = process.env.HBE_TESTER_IMAGE ?? "node:22-bookworm-slim";
+/** Browser stages: Playwright's image plus playwright-core (harness/browser/Dockerfile). */
+const BROWSER_IMAGE = "hbe-browser-tester:1.56.1";
+const BROWSER_DOCKERFILE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "browser");
 const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 const GATING = ["contract", "build", "health"];
 
@@ -123,7 +126,10 @@ async function stage(key, fn) {
 }
 
 /** A container on the app's network that runs the probes and hidden tests. */
-function tester(mode, config, timeoutMs) {
+function tester(mode, config, timeoutMs, { outDir } = {}) {
+  // Browser tests write screenshots and traces to outDir, as the runner's own user so the
+  // harness can read and delete them.
+  const browser = Boolean(outDir);
   return run(
     "docker",
     [
@@ -132,15 +138,17 @@ function tester(mode, config, timeoutMs) {
       "--network",
       network,
       "--memory",
-      "512m",
+      browser ? "2g" : "512m",
       "--pids-limit",
-      "256",
+      browser ? "1024" : "256",
+      ...(browser ? ["--shm-size", "1g", "--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`] : []),
+      ...(browser ? ["-e", "HOME=/tmp", "-v", `${outDir}:/out`] : []),
       "-v",
       `${RUNNER_DIR}:/runner:ro`,
       ...(mode === "tests" ? ["-v", `${suiteDir}:/suite:ro`] : []),
       "-e",
       `HBE_RUNNER_CONFIG=${JSON.stringify(config)}`,
-      TESTER_IMAGE,
+      browser ? BROWSER_IMAGE : TESTER_IMAGE,
       "node",
       "/runner/run-tests.mjs",
       mode,
@@ -148,6 +156,20 @@ function tester(mode, config, timeoutMs) {
     { timeoutMs, maxOutput: 4 * 1024 * 1024 },
   );
 }
+
+/** Builds the browser tester image unless this runner already has it. */
+async function ensureBrowserImage() {
+  if ((await run("docker", ["image", "inspect", BROWSER_IMAGE], { timeoutMs: 30_000 })).code === 0) return;
+  log(`building ${BROWSER_IMAGE}`);
+  const r = await run("docker", ["build", "-t", BROWSER_IMAGE, BROWSER_DOCKERFILE_DIR], {
+    timeoutMs: remaining(15 * 60_000),
+    maxOutput: 64 * 1024,
+  });
+  if (r.code !== 0) throw new InfraError(`Could not build the browser test image: ${tailLines(r.stderr, 5)}`);
+}
+
+/** Files to upload with the results (screenshots and traces of failed browser tests). */
+const artifacts = [];
 
 async function serviceLogs(services) {
   const r = await run("docker", compose("logs", "--no-color", "--tail", "80", ...services), { timeoutMs: 30_000 });
@@ -273,12 +295,18 @@ async function listTests(file) {
 }
 
 async function testStage(def) {
+  const browser = (def.kind ?? "api") === "browser";
+  let outDir;
+  const config = { suiteFile: `/suite/${def.file}`, services: serviceUrls, testTimeoutMs: browser ? 45_000 : 20_000 };
+  if (browser) {
+    await ensureBrowserImage();
+    outDir = path.join(workdir, `out-${def.key}`);
+    mkdirSync(outDir, { recursive: true });
+    const names = Object.keys(profile.services ?? {});
+    config.browser = { service: names.includes("frontend") ? "frontend" : names[0] };
+  }
   const limit = remaining(10 * 60_000);
-  const r = await tester(
-    "tests",
-    { suiteFile: `/suite/${def.file}`, services: serviceUrls, testTimeoutMs: 20_000 },
-    limit,
-  );
+  const r = await tester("tests", config, limit, { outDir });
   if (r.timedOut) {
     const tests = (await listTests(def.file)).map((t) => ({
       ...t,
@@ -298,7 +326,19 @@ async function testStage(def) {
   const raw = JSON.parse(r.stdout);
   const anyFailed = raw.some((t) => t.status === "failed" || t.status === "error");
   const logs = anyFailed ? await serviceLogs(Object.keys(profile.services ?? {})) : "";
-  const tests = raw.map((t) => cleanTest(t, logs));
+  const tests = raw.map((t) => {
+    const cleaned = cleanTest(t, logs);
+    if (!t.attachments) return cleaned;
+    // Screenshot and trace files, uploaded with the results as <stage>/<file>.
+    const attachments = {};
+    for (const [kind, file] of Object.entries(t.attachments)) {
+      const local = path.join(outDir ?? "", path.basename(file));
+      if (!outDir || !existsSync(local)) continue;
+      attachments[kind] = `${def.key}/${path.basename(file)}`;
+      artifacts.push({ name: attachments[kind], file: local });
+    }
+    return Object.keys(attachments).length ? { ...cleaned, attachments } : cleaned;
+  });
   if (tests.some((t) => t.status === "error")) {
     log(
       `suite errors: ${tests

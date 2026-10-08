@@ -58,6 +58,9 @@ const EVIDENCE_LABEL: Record<string, string> = {
   logs: "Your app's logs",
   output: "Command output",
   failures: "Failing tests",
+  step: "The step that failed",
+  playwright: "Browser details",
+  console: "Browser console",
 };
 const seconds = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 

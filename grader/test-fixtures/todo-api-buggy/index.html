@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Todos</title>
+  </head>
+  <body>
+    <h1>Todos</h1>
+    <form id="add">
+      <label>New todo <input name="title" required /></label>
+      <button type="submit">Add</button>
+    </form>
+    <ul aria-label="Todos" id="list"></ul>
+    <script>
+      const list = document.getElementById("list");
+      const show = (todo) => {
+        const li = document.createElement("li");
+        li.textContent = todo.title;
+        list.append(li);
+      };
+      fetch("/todos")
+        .then((r) => r.json())
+        .then((todos) => todos.forEach(show));
+      document.getElementById("add").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = e.target.elements.title;
+        const res = await fetch("/todos", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: input.value }),
+        });
+        // Bug: the new todo only shows up after a reload.
+        await res.json();
+        input.value = "";
+      });
+    </script>
+  </body>
+</html>

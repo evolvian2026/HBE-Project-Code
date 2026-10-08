@@ -50,7 +50,7 @@ const withStages = (options) =>
     options,
   });
 
-async function harness(submission, extra = [], profileJson = profile) {
+async function harness(submission, extra = [], profileJson = profile, suite = "suites/sample/todo-api") {
   const out = path.join(work, `results-${Math.random().toString(36).slice(2)}.json`);
   const args = [
     path.join(root, "harness/run.mjs"),
@@ -61,7 +61,7 @@ async function harness(submission, extra = [], profileJson = profile) {
     "--submission",
     submission,
     "--suite",
-    path.join(root, "suites/sample/todo-api"),
+    path.join(root, suite),
     "--profile",
     profileJson,
     "--timeout-minutes",
@@ -183,6 +183,21 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
       message: "Turned off for this assignment.",
     });
     assert.equal(stage(results, "student_tests"), undefined);
+  });
+
+  it("runs browser tests, with a screenshot and a trace of each failure", async () => {
+    const good = await harness(path.join(root, "test-fixtures/todo-api-good"), [], profile, "suites/sample/todo-web");
+    assert.equal(good.infra_error, null);
+    assert.deepEqual(failedIds(good), []);
+    assert.equal(stage(good, "ui").tests.length, 2);
+
+    const buggy = await harness(path.join(root, "test-fixtures/todo-api-buggy"), [], profile, "suites/sample/todo-web");
+    assert.deepEqual(failedIds(buggy), ["ui.add"]);
+    const add = stage(buggy, "ui").tests.find((t) => t.id === "ui.add");
+    assert.match(add.message, /^See “.+” in the list: locator.waitFor: Timeout 5000ms exceeded/);
+    assert.match(add.evidence.step, /^See “.+” in the list$/);
+    assert.deepEqual(add.attachments, { screenshot: "ui/ui.add.png", trace: "ui/ui.add.trace.zip" });
+    assert.equal(add.staff_notes.includes("re-render"), true);
   });
 
   it("calls back with the run token: started, then results", async () => {

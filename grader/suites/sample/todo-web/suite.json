@@ -1,0 +1,7 @@
+{
+  "key": "todo-web",
+  "version": 1,
+  "title": "Todo web app (sample browser suite)",
+  "stack_profile": "node22-api",
+  "stages": [{ "key": "ui", "file": "ui.test.mjs", "kind": "browser" }]
+}

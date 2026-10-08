@@ -1,6 +1,9 @@
 // Reference solution for the sample "Todo API" assignment (a grader test fixture).
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const page = readFileSync(new URL("./index.html", import.meta.url));
 
 const todos = new Map();
 
@@ -23,6 +26,10 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const [, collection, id] = url.pathname.split("/");
   if (url.pathname === "/health") return send(res, 200, { status: "ok" });
+  if (url.pathname === "/" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(page);
+  }
   if (collection !== "todos") return send(res, 404, { error: "Not found" });
 
   if (!id && req.method === "GET") return send(res, 200, [...todos.values()]);

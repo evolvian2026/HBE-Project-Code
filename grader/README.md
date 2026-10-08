@@ -38,6 +38,7 @@ test/                            Unit tests and Docker-backed harness tests
 | `build` | `docker compose build` succeeds | Nothing else runs; score 0 |
 | `health` | The app starts and every service answers its health URL within 2 minutes | Tests don't run; score 0 |
 | `api` (suite stages) | The hidden tests | Each failure lists what was expected, what the app did, a hint, the request and response, and the app's logs |
+| `ui` (browser suite stages) | Hidden Playwright tests against the app's pages | Each failure names the step that failed, with a screenshot, a Playwright trace (no test sources), the browser console and the app's logs |
 
 `lint` and `student_tests` run only when the assignment turns them on and the profile defines
 them. Each runs in a fresh container of the stage's `image` on a Docker volume holding a copy of
@@ -111,7 +112,14 @@ export default {
 - `t.expectStatus(res, status)`, `t.expect(condition, { message, expected, actual })` and
   `t.fail(message)` fail the test with details for the student.
 - `t.random` has `int()`, `word()`, `title()` and `email()`.
-- Tests are black-box (HTTP only) and must not depend on each other. Every test needs a title and
+- Browser stages (`"kind": "browser"` in `suite.json`) get `t.page`, a fresh Playwright page whose
+  base URL is the profile's `frontend` service (or its only service), and `t.step(name, fn)`,
+  which names what the test is doing so a failure says which step went wrong. Playwright
+  errors (an element that never appears, a page that doesn't load) fail the test. They run in
+  `hbe-browser-tester:<version>` (`harness/browser/Dockerfile`: Playwright's image plus
+  `playwright-core`), which the harness builds the first time it needs it. See
+  `suites/sample/todo-web`.
+- Tests are black-box (HTTP or the browser only) and must not depend on each other. Every test needs a title and
   a hint. Never put answers in `hint`; put staff-only advice in `staff_notes`.
 
 Register a new suite version in the platform's `grader_suites` table (path and git ref of this
@@ -137,5 +145,4 @@ the fixture apps with Docker; about 30 seconds).
 
 ## Not yet
 
-Browser (Playwright) test stages and uploading logs and traces to Storage are planned
-(docs/ROADMAP.md).
+Uploading logs, screenshots and traces to Storage is planned (docs/ROADMAP.md).

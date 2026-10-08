@@ -3,7 +3,12 @@
  * containers, so they can't read the suite). Prints one JSON document to stdout.
  *
  *   node run-tests.mjs health   HBE_RUNNER_CONFIG={"targets":[{"service","url"}],"timeoutMs"}
- *   node run-tests.mjs tests    HBE_RUNNER_CONFIG={"suiteFile","services":{name:url},"testTimeoutMs"}
+ *   node run-tests.mjs tests    HBE_RUNNER_CONFIG={"suiteFile","services":{name:url},"testTimeoutMs",
+ *                               "browser"?:{"service"}}
+ *
+ * Browser stages run in the Playwright image (HBE_PLAYWRIGHT points at playwright-core): each
+ * test gets a fresh page on the browser service; a failed test leaves a screenshot and a trace
+ * (without test sources) in /out, named in the test's `attachments`.
  */
 import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -36,11 +41,32 @@ async function health() {
   return { ok: results.every((r) => r.ok), results };
 }
 
+/** Errors from Playwright (an element that never appeared, a page that didn't load) are the app's. */
+const isPlaywrightError = (err) =>
+  err?.name === "TimeoutError" || /^(locator|page|frame|elementHandle|browserContext)\.\w+:/.test(err?.message ?? "");
+const firstLine = (s) => String(s).split("\n")[0];
+const safeName = (id) => id.replace(/[^\w.-]/g, "_");
+
 async function tests() {
   const suite = (await import(pathToFileURL(config.suiteFile).href)).default;
+  const browserBase = config.browser ? config.services[config.browser.service] : null;
+  const browser = config.browser
+    ? await (await import(pathToFileURL(process.env.HBE_PLAYWRIGHT).href)).chromium.launch()
+    : null;
   const out = [];
   for (const test of suite.tests) {
-    const { t, exchanges } = createContext({ services: config.services });
+    const { t, exchanges, progress } = createContext({ services: config.services });
+    let context = null;
+    const consoleLines = [];
+    if (browser) {
+      context = await browser.newContext({ baseURL: browserBase, viewport: { width: 1280, height: 800 } });
+      await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      page.on("console", (m) => consoleLines.push(`[${m.type()}] ${m.text()}`));
+      page.on("pageerror", (e) => consoleLines.push(`[page error] ${e.message}`));
+      t.page = page;
+    }
     const base = {
       id: test.id,
       title: test.title,
@@ -50,7 +76,7 @@ async function tests() {
       staff_notes: test.staff_notes,
     };
     const started = Date.now();
-    const timeoutMs = test.timeoutMs ?? config.testTimeoutMs ?? 20_000;
+    const timeoutMs = test.timeoutMs ?? config.testTimeoutMs ?? (browser ? 45_000 : 20_000);
     let timer;
     try {
       await Promise.race([
@@ -63,24 +89,56 @@ async function tests() {
         }),
       ]);
       out.push({ ...base, status: "passed", duration_ms: Date.now() - started });
+      if (context) await context.tracing.stop().catch(() => {});
     } catch (err) {
       const last = exchanges.at(-1);
-      const failure = err instanceof AssertionFailure;
+      const playwright = Boolean(browser) && isPlaywrightError(err);
+      const failure = err instanceof AssertionFailure || playwright;
+      const step = progress.step;
+      const message = playwright ? firstLine(err.message) : (err?.message ?? String(err));
+      const evidence = {
+        ...(last ? { request: last.request, response: last.response } : {}),
+        ...(step ? { step } : {}),
+        ...(playwright ? { playwright: err.message } : {}),
+        ...(consoleLines.length ? { console: consoleLines.slice(-40).join("\n") } : {}),
+      };
+      const attachments = context ? await capture(context, t.page, safeName(test.id)) : {};
       out.push({
         ...base,
         // "error" means the suite itself broke, not the student's app.
         status: failure ? "failed" : "error",
         duration_ms: Date.now() - started,
-        message: failure ? err.message : `The test could not run: ${err?.message ?? err}`,
+        message: failure ? `${step ? `${step}: ` : ""}${message}` : `The test could not run: ${message}`,
         ...(failure && err.expected !== undefined ? { expected: String(err.expected) } : {}),
         ...(failure && err.actual !== undefined ? { actual: String(err.actual) } : {}),
-        ...(last ? { evidence: { request: last.request, response: last.response } } : {}),
+        ...(Object.keys(evidence).length ? { evidence } : {}),
+        ...(Object.keys(attachments).length ? { attachments } : {}),
       });
     } finally {
       clearTimeout(timer);
+      if (context) await context.close().catch(() => {});
     }
   }
+  if (browser) await browser.close();
   return out;
+}
+
+/** A failed browser test's screenshot and trace, written to /out. */
+async function capture(context, page, name) {
+  const attachments = {};
+  try {
+    await page.screenshot({ path: `/out/${name}.png`, timeout: 5000 });
+    attachments.screenshot = `${name}.png`;
+  } catch {
+    // The page may have crashed; the trace still helps.
+  }
+  try {
+    await context.tracing.stop({ path: `/out/${name}.trace.zip` });
+    attachments.trace = `${name}.trace.zip`;
+  } catch {
+    // Nothing recorded.
+  }
+  return attachments;
 }
 
 const result = mode === "health" ? await health() : mode === "tests" ? await tests() : null;

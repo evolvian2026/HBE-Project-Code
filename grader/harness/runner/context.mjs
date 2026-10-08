@@ -57,6 +57,8 @@ function describeFetchError(err, timeoutMs) {
 
 export function createContext({ services, requestTimeoutMs = 10_000 }) {
   const exchanges = [];
+  /** The step a browser test is on (t.step), reported when it fails. */
+  const progress = { step: null };
 
   function client(name) {
     const base = services[name];
@@ -120,6 +122,11 @@ export function createContext({ services, requestTimeoutMs = 10_000 }) {
     /** The app's main service: "backend" when the profile has one, otherwise the first. */
     api: client(services.backend ? "backend" : Object.keys(services)[0]),
     random,
+    /** Names what the test is doing, so a failure says which step went wrong. */
+    async step(name, fn) {
+      progress.step = name;
+      return fn();
+    },
     fail(message, details) {
       throw new AssertionFailure(message, details);
     },
@@ -135,5 +142,5 @@ export function createContext({ services, requestTimeoutMs = 10_000 }) {
       }
     },
   };
-  return { t, exchanges };
+  return { t, exchanges, progress };
 }
