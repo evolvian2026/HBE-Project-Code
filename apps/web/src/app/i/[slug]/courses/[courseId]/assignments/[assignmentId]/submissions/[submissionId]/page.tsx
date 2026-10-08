@@ -16,6 +16,8 @@ import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { loadAssignment } from "../../../data";
 import { RunTestsForm } from "../../forms";
+import { ResolveRegradeForm } from "../../regrade-forms";
+import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "../../regrades";
 import { ExtensionForm } from "./extension-form";
 import { OverrideForm, ReviewForm } from "./grading-forms";
 
@@ -135,7 +137,7 @@ export default async function SubmissionPage({ params }: Props) {
   const runList = (runs.data ?? []) as RunSummary[];
 
   // Grading (staff): rubric, feedback and every grade version.
-  const [criteria, scores, feedback, grades, reasons, reports] = isCourseStaff
+  const [criteria, scores, feedback, grades, reasons, reports, regradeRows] = isCourseStaff
     ? await Promise.all([
         supabase
           .from("assignment_criteria")
@@ -151,8 +153,15 @@ export default async function SubmissionPage({ params }: Props) {
           .select("id, version, grade_version, generated_at, sha256")
           .eq("submission_id", s.id)
           .order("version", { ascending: false }),
+        supabase
+          .from("regrade_requests")
+          .select(REGRADE_COLUMNS)
+          .eq("submission_id", s.id)
+          .order("created_at", { ascending: false }),
       ])
-    : [null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null];
+  const regrades = (regradeRows?.data ?? []) as RegradeRequest[];
+  const openRegrade = regrades.find((r) => r.status === "open");
   const reportList = (reports?.data ?? []) as {
     id: string;
     version: number;
@@ -265,6 +274,20 @@ export default async function SubmissionPage({ params }: Props) {
           </p>
         )}
       </div>
+
+      {regrades.length > 0 && (
+        <Card
+          title="Regrade requests"
+          description={openRegrade ? "The student is waiting for a reply." : `${regrades.length} answered`}
+        >
+          <RegradeHistory requests={regrades} timezone={course.timezone} />
+          {openRegrade && (
+            <div className="mt-4 border-t border-border pt-4">
+              <ResolveRegradeForm ids={gradingIds} requestId={openRegrade.id} />
+            </div>
+          )}
+        </Card>
+      )}
 
       {isCourseStaff && (
         <Card

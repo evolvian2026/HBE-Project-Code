@@ -45,6 +45,7 @@ const assignmentSchema = z
     latePerDay: num(0, 100),
     lateMaxDays: num(0, 60),
     lateGraceMinutes: num(0, 1440),
+    regradeWindowDays: num(0, 60),
     spec: z.string().max(100_000),
   })
   .refine((v) => v.automated + v.rubric + v.process === 100, {
@@ -75,6 +76,7 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
     run_quota_per_day: v.runQuota,
     weights: { automated: v.automated, rubric: v.rubric, process: v.process },
     late_policy: { per_day_percent: v.latePerDay, max_days: v.lateMaxDays, grace_minutes: v.lateGraceMinutes },
+    regrade_window_days: v.regradeWindowDays,
     spec_md: v.spec,
   };
 
@@ -327,4 +329,37 @@ export async function deleteReviewComment(formData: FormData) {
   await supabase.from("review_comments").delete().eq("id", v.id);
   revalidatePath(codePath(v));
   redirect(`${codePath(v)}?sha=${v.sha}&path=${encodeURIComponent(v.path)}`);
+}
+
+/** The student asks for a regrade of their released grade. */
+export async function requestRegrade(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = submissionIdsSchema.extend({ message: z.string() }).parse(Object.fromEntries(formData));
+  const result = await apiFetch(`/v1/submissions/${v.submissionId}/regrade-requests`, {
+    method: "POST",
+    body: { message: v.message },
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`);
+  return { ok: true, message: "Sent. Your instructors will look at it and reply here." };
+}
+
+export async function withdrawRegrade(formData: FormData) {
+  const v = idsSchema.extend({ requestId: z.string().uuid() }).parse(Object.fromEntries(formData));
+  await apiFetch(`/v1/regrade-requests/${v.requestId}/withdraw`, { method: "POST", body: {} });
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`);
+}
+
+/** Course staff accept or decline a regrade request, with a response for the student. */
+export async function resolveRegrade(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = submissionIdsSchema
+    .extend({ requestId: z.string().uuid(), outcome: z.enum(["accepted", "declined"]), response: z.string() })
+    .safeParse(Object.fromEntries(formData));
+  if (!v.success) return { ok: false, message: "Choose whether to accept or decline the request." };
+  const result = await apiFetch(`/v1/regrade-requests/${v.data.requestId}/resolve`, {
+    method: "POST",
+    body: { outcome: v.data.outcome, response: v.data.response },
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(submissionPath(v.data));
+  return { ok: true, message: `Request ${v.data.outcome}; the student has been told.` };
 }

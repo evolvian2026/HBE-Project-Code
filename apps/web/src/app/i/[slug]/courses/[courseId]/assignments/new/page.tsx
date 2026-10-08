@@ -39,6 +39,7 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
           runQuota: 5,
           weights: { automated: 60, rubric: 25, process: 15 },
           late: { per_day_percent: 10, max_days: 5, grace_minutes: 15 },
+          regradeWindowDays: 7,
           spec: "",
           published: false,
         }}

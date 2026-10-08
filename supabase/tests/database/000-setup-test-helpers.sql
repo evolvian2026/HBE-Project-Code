@@ -188,6 +188,9 @@ begin
   insert into public.review_comments (institution_id, submission_id, sha, path, line, body)
     select s.institution_id, s.id, repeat('b', 40), 'src/server.js', 3, 'Validate the title here'
     from public.submissions s where s.repository_id is not null;
+  insert into public.regrade_requests (institution_id, submission_id, requested_by, message)
+    select s.institution_id, s.id, s.user_id, 'Please look at the search tests again'
+    from public.submissions s where s.repository_id is not null;
   insert into public.notifications (institution_id, user_id, type, title, link, dedupe_key) values
     (tests.id('inst_a'), tests.id('student_a'), 'grade_released', 'Your grade for Todo API is out', '/i/alpha', 'seed-a'),
     (tests.id('inst_b'), tests.id('student_b'), 'grade_released', 'Your grade for Shop is out', '/i/beta', 'seed-b');
@@ -238,6 +241,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'submission_snapshots', count(*) from public.submission_snapshots where institution_id = p_institution
   union all select 'notifications', count(*) from public.notifications where institution_id = p_institution
   union all select 'review_comments', count(*) from public.review_comments where institution_id = p_institution
+  union all select 'regrade_requests', count(*) from public.regrade_requests where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

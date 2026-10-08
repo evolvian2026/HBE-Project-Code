@@ -216,6 +216,7 @@ export interface AssignmentsTable {
   status: Generated<AssignmentStatus>;
   published_at: Timestamp | null;
   grades_released_at: Timestamp | null;
+  regrade_window_days: Generated<number>;
   created_by: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
@@ -367,7 +368,8 @@ export interface SubmissionSnapshotsTable {
   created_at: DefaultTimestamp;
 }
 
-export type NotificationType = "run_finished" | "grade_released" | "deadline_soon" | "extension_granted";
+export type NotificationType =
+  "run_finished" | "grade_released" | "deadline_soon" | "extension_granted" | "regrade_requested" | "regrade_answered";
 
 export interface NotificationsTable {
   id: Generated<string>;
@@ -391,6 +393,22 @@ export interface ReviewCommentsTable {
   line: number;
   body: string;
   author_id: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export type RegradeStatus = "open" | "accepted" | "declined" | "withdrawn";
+
+export interface RegradeRequestsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  requested_by: string | null;
+  message: string;
+  status: Generated<RegradeStatus>;
+  response: string | null;
+  resolved_by: string | null;
+  resolved_at: Timestamp | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }
@@ -567,6 +585,7 @@ export interface Database {
   submission_snapshots: SubmissionSnapshotsTable;
   notifications: NotificationsTable;
   review_comments: ReviewCommentsTable;
+  regrade_requests: RegradeRequestsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

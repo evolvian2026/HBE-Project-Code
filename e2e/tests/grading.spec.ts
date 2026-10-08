@@ -190,8 +190,26 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   expect(pdf.headers()["content-type"]).toContain("application/pdf");
   expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
 
+  // The student asks for a regrade; staff see it on the assignment and the submission.
+  const regrade = student
+    .locator("section")
+    .filter({ has: student.getByRole("heading", { name: "Regrade", exact: true }) });
+  await expect(regrade.getByText(/You can ask for a regrade until/)).toBeVisible();
+  await regrade
+    .getByLabel("What should be looked at again, and why?")
+    .fill("My tests cover every endpoint; please look at the testing criterion again.");
+  await regrade.getByRole("button", { name: "Request a regrade" }).click();
+  await expect(regrade.getByText("waiting for a reply")).toBeVisible();
+  await expect(regrade.getByRole("button", { name: "Request a regrade" })).toHaveCount(0);
+  await teacher.goto(assignmentUrl);
+  await expect(teacher.getByText("regrade requested")).toBeVisible();
+
   // An override with a reason: the student sees the new grade, not the reason.
   await teacher.goto(submissionUrl);
+  const requests = teacher
+    .locator("section")
+    .filter({ has: teacher.getByRole("heading", { name: "Regrade requests", exact: true }) });
+  await expect(requests.getByText("please look at the testing criterion again")).toBeVisible();
   await grading.getByLabel("Final grade").fill("55");
   await grading.getByLabel("Reason (staff only)").fill("Bonus for the excellent tests");
   await grading.getByRole("button", { name: "Override grade" }).click();
@@ -201,6 +219,22 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await expect(card.getByTestId("final-grade")).toHaveText("55 / 100");
   await expect(card.getByText(/Adjusted by your instructor/)).toBeVisible();
   await expect(student.getByText("Bonus for the excellent tests")).toHaveCount(0);
+
+  // Staff answer the regrade request; the student is told and sees the answer.
+  await teacher.reload();
+  await requests.getByLabel("Accept").check();
+  await requests.getByLabel("Response to the student").fill("Agreed: the tests are thorough. Grade raised to 55.");
+  await requests.getByRole("button", { name: "Send response" }).click();
+  await expect(requests.getByText("accepted", { exact: true })).toBeVisible();
+  await student.reload();
+  await expect(regrade.getByText("accepted", { exact: true })).toBeVisible();
+  await expect(regrade.getByText("Agreed: the tests are thorough. Grade raised to 55.")).toBeVisible();
+  await expect(student.getByRole("link", { name: /Notifications, \d+ unread/ })).toBeVisible();
+  const [answered] = await sql<{ title: string }>(
+    "select title from public.notifications where type = 'regrade_answered' and user_id = (select id from auth.users where email = $1)",
+    [email("student")],
+  );
+  expect(answered!.title).toBe("Your regrade request for Todo API was accepted");
 
   // The change made a second report version; the reason stays out of it.
   await poll(reports, 30_000).toBe(2);

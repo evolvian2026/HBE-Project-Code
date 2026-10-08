@@ -15,6 +15,7 @@ export interface AssignmentRow {
   run_quota_per_day: number;
   weights: AssignmentFormValues["weights"];
   late_policy: AssignmentFormValues["late"];
+  regrade_window_days: number;
   published_at: string | null;
   triggers: { on_push: boolean; on_pull_request: boolean; manual: boolean };
   profile: { id: string; display_name: string; key: string; version: number } | null;
@@ -30,7 +31,7 @@ export async function loadAssignment(slug: string, courseId: string, assignmentI
   const { data } = await supabase
     .from("assignments")
     .select(
-      "id, slug, title, spec_md, status, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, published_at, triggers, profile:stack_profiles(id, display_name, key, version), suite:grader_suites(id, title, key, version)",
+      "id, slug, title, spec_md, status, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, regrade_window_days, published_at, triggers, profile:stack_profiles(id, display_name, key, version), suite:grader_suites(id, title, key, version)",
     )
     .eq("id", assignmentId)
     .eq("course_id", courseId)

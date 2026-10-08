@@ -73,7 +73,7 @@ erDiagram
 |-------|-------------|-------|
 | `stack_profiles` | institution_id **nullable** (null = global), key, version, display_name, definition jsonb (services, datastores, stages, ignore_paths), template_repo, status | Immutable once used; edits create a new version. unique(institution_id, key, version). |
 | `institution_stack_profiles` | institution_id, stack_profile_id, enabled | Which global profiles an institution has enabled. |
-| `assignments` | institution_id, course_id, slug, title, spec_md, mode (`individual`/`team`), **stack_profile_id**, template_repo, release_at, due_at, late_policy jsonb, triggers jsonb, weights jsonb, **process_policy jsonb**, process_policy_version, run_quota_per_day, grader_suite_id, rubric_id, status (`draft`/`published`/`closed`), grades_released_at | Stack profile can't be changed after publishing (trigger-enforced). |
+| `assignments` | institution_id, course_id, slug, title, spec_md, mode (`individual`/`team`), **stack_profile_id**, template_repo, release_at, due_at, late_policy jsonb, triggers jsonb, weights jsonb, **process_policy jsonb**, process_policy_version, run_quota_per_day, grader_suite_id, rubric_id, status (`draft`/`published`/`closed`), grades_released_at, regrade_window_days | Stack profile can't be changed after publishing (trigger-enforced). |
 | `extensions` | institution_id, assignment_id, user_id or team_id, due_at, reason, granted_by | Effective deadline = max(due_at, extension). |
 | `grader_suites` | institution_id, key, version, git_ref, stack_profile_id (nullable = stack-agnostic), manifest jsonb (tests, titles, hints, weights, categories) | Immutable once published. |
 | `rubrics` / `rubric_criteria` | institution_id, title / rubric_id, name, description, max_points, levels jsonb, position | |
@@ -103,7 +103,7 @@ erDiagram
 | `rubric_scores` | institution_id, submission_id, criterion_id, points, comment, scored_by | unique(submission_id, criterion_id) |
 | `grades` | institution_id, submission_id, user_id, version int, evaluation_run_id, components jsonb (per component score/weight/points, what is still pending, raw), late_days, late_penalty, computed_score, override_score, override_reason, final_score, complete, is_current, released_at, created_by | **Append-only**; a new version only when something changed; one `is_current` per submission. Students see released versions only; `override_reason` is not granted to them (staff read it through `grade_override_reasons()`). |
 | `submission_overview` (view) | one row per submission: latest finished run, last activity, current grade | `security_invoker`: every underlying table's RLS and column privileges apply. Feeds dashboards, history and the CSV export. |
-| `regrade_requests` | institution_id, submission_id, requested_by, message, status, resolved_by, resolution | |
+| `regrade_requests` | institution_id, submission_id, requested_by, message, status (`open`/`accepted`/`declined`/`withdrawn`), response, resolved_by, resolved_at | FR-6.7. Through the API only: the student asks after release, within the assignment's `regrade_window_days` (default 7; 0 = off), one open request at a time; course staff answer with a response (accepting doesn't change the grade by itself: staff adjust the rubric or override, which makes a new released version). Staff and the student are notified. |
 
 ### Records (kept for the contract + 2 years)
 | Table | Key columns | Notes |
@@ -124,7 +124,7 @@ erDiagram
 ### Platform
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `notifications` | institution_id, user_id, type (`run_finished`/`grade_released`/`deadline_soon`/`extension_granted`), title, body, link, dedupe_key, read_at | Written by the platform (an extension trigger writes its own); users read their own and may only set `read_at`. `unique(user_id, dedupe_key)` makes retries harmless. |
+| `notifications` | institution_id, user_id, type (`run_finished`/`grade_released`/`deadline_soon`/`extension_granted`/`regrade_requested`/`regrade_answered`), title, body, link, dedupe_key, read_at | Written by the platform (an extension trigger writes its own); users read their own and may only set `read_at`. `unique(user_id, dedupe_key)` makes retries harmless. |
 | `institution_settings` / `platform_settings` | key, value jsonb, updated_by | Per tenant / global. |
 | `audit_logs` | institution_id (nullable for platform actions), actor_id, action, entity, entity_id, before jsonb, after jsonb, ip, at | Append-only. |
 | `usage_counters` | institution_id, period (month), runs, runner_minutes, storage_bytes | The platform pays for compute; these drive quotas and plan limits. |

@@ -14,6 +14,7 @@ import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
 import { codeRoutes } from "./routes/code.ts";
 import { gradingRoutes } from "./routes/grading.ts";
+import { regradeRoutes } from "./routes/regrades.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
@@ -60,7 +61,8 @@ export async function buildApp(
       return reply.code(403).send({ error: "forbidden", message: error.message });
     }
     if (error instanceof ZodError) {
-      return reply.code(400).send({ error: "invalid_request", issues: error.issues });
+      const message = error.issues[0]?.message ?? "Invalid request";
+      return reply.code(400).send({ error: "invalid_request", message, issues: error.issues });
     }
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {
@@ -87,6 +89,7 @@ export async function buildApp(
       store: deps.store ?? supabaseObjectStore(deps.settings),
     });
     await app.register(gradingRoutes, apiDeps);
+    await app.register(regradeRoutes, apiDeps);
     await app.register(codeRoutes, {
       ...apiDeps,
       github: deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings)),

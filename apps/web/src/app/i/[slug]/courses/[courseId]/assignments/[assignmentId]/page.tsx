@@ -11,6 +11,8 @@ import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
 import { CriterionForm, PublishForm, ReleaseGradesForm, RunTestsForm } from "./forms";
+import { RegradeRequestForm } from "./regrade-forms";
+import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "./regrades";
 
 type Props = {
   params: Promise<{ slug: string; courseId: string; assignmentId: string }>;
@@ -52,7 +54,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const ids = { slug, courseId: course.id, assignmentId: a.id };
   const base = `/i/${slug}/courses/${course.id}`;
 
-  const [criteria, submissions, extension, snapshots, runs, grades] = await Promise.all([
+  const [criteria, submissions, extension, snapshots, runs, grades, openRegrades] = await Promise.all([
     supabase
       .from("assignment_criteria")
       .select("id, title, description, max_points")
@@ -61,7 +63,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     supabase
       .from("submissions")
       .select(
-        "id, user_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
+        "id, user_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
       )
       .eq("assignment_id", a.id),
     supabase
@@ -90,7 +92,15 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       .select(`${GRADE_COLUMNS}, submission_id, submission:submissions!inner(assignment_id)`)
       .eq("is_current", true)
       .eq("submission.assignment_id", a.id),
+    isCourseStaff
+      ? supabase
+          .from("regrade_requests")
+          .select("submission_id, submission:submissions!inner(assignment_id)")
+          .eq("status", "open")
+          .eq("submission.assignment_id", a.id)
+      : Promise.resolve({ data: [] as never[] }),
   ]);
+  const regradeOpen = new Set(((openRegrades.data ?? []) as { submission_id: string }[]).map((r) => r.submission_id));
   const gradeBySubmission = new Map(
     ((grades.data ?? []) as unknown as (GradeRow & { submission_id: string })[]).map((g) => [g.submission_id, g]),
   );
@@ -114,6 +124,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     submitted_at: string | null;
     late_days: number | null;
     finalized_at: string | null;
+    grade_released_at: string | null;
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
     repository: { owner: string; name: string } | null;
   };
@@ -133,7 +144,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const cutoff = submissionCutoff(new Date(effectiveDue), a.late_policy);
   const gradedRun = mine ? myRuns.find((r) => r.trigger === "deadline" || r.trigger === "regrade") : undefined;
   const myGrade = mine ? gradeBySubmission.get(mine.id) : undefined;
-  const [myScores, myFeedback, myReports] = myGrade
+  const [myScores, myFeedback, myReports, myRegrades] = myGrade
     ? await Promise.all([
         supabase.from("rubric_scores").select("criterion_id, points, comment").eq("submission_id", mine!.id),
         supabase.from("feedback").select("body_md").eq("submission_id", mine!.id).maybeSingle(),
@@ -142,8 +153,20 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
           .select("id, version, generated_at")
           .eq("submission_id", mine!.id)
           .order("version", { ascending: false }),
+        supabase
+          .from("regrade_requests")
+          .select(REGRADE_COLUMNS)
+          .eq("submission_id", mine!.id)
+          .order("created_at", { ascending: false }),
       ])
-    : [null, null, null];
+    : [null, null, null, null];
+  const regrades = (myRegrades?.data ?? []) as RegradeRequest[];
+  const regradeCloses =
+    mine?.grade_released_at && a.regrade_window_days > 0
+      ? new Date(new Date(mine.grade_released_at).getTime() + a.regrade_window_days * 86_400_000)
+      : null;
+  const canAskRegrade =
+    regradeCloses !== null && Date.now() < regradeCloses.getTime() && !regrades.some((r) => r.status === "open");
   const latestReport = (myReports?.data ?? [])[0] as { id: string; version: number; generated_at: string } | undefined;
   const myScoreByCriterion = new Map(
     ((myScores?.data ?? []) as { criterion_id: string; points: string; comment: string | null }[]).map((r) => [
@@ -296,6 +319,26 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         </Card>
       )}
 
+      {myGrade && (regrades.length > 0 || regradeCloses) && (
+        <Card
+          title="Regrade"
+          description={
+            regradeCloses
+              ? Date.now() < regradeCloses.getTime()
+                ? `You can ask for a regrade until ${formatInZone(regradeCloses, course.timezone)}.`
+                : `Regrade requests closed ${formatInZone(regradeCloses, course.timezone)}.`
+              : undefined
+          }
+        >
+          {regrades.length > 0 && <RegradeHistory requests={regrades} timezone={course.timezone} withdraw={ids} />}
+          {canAskRegrade && (
+            <div className={regrades.length > 0 ? "mt-4 border-t border-border pt-4" : ""}>
+              <RegradeRequestForm ids={{ ...ids, submissionId: mine!.id }} />
+            </div>
+          )}
+        </Card>
+      )}
+
       {mine?.finalized_at && (
         <Card title="Your submission">
           {mine.final_sha ? (
@@ -419,6 +462,10 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
             <dd className="text-right">{a.suite ? a.suite.title : "none"}</dd>
             <dt className="text-muted">Test runs</dt>
             <dd className="text-right">{a.run_quota_per_day} per day</dd>
+            <dt className="text-muted">Regrade requests</dt>
+            <dd className="text-right">
+              {a.regrade_window_days > 0 ? `${a.regrade_window_days} days after release` : "not offered"}
+            </dd>
           </dl>
         </Card>
 
@@ -487,6 +534,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center justify-end gap-3">
+                      {regradeOpen.has(s.id) && <Badge tone="warning">regrade requested</Badge>}
                       {s.status === "submitted" && s.late_days ? (
                         <span className="text-xs text-warning">{lateLabel(s.late_days)}</span>
                       ) : null}

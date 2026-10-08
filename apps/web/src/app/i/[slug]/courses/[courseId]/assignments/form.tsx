@@ -19,6 +19,7 @@ export interface AssignmentFormValues {
   runQuota: number;
   weights: { automated: number; rubric: number; process: number };
   late: { per_day_percent: number; max_days: number; grace_minutes: number };
+  regradeWindowDays: number;
   spec: string;
   published: boolean;
 }
@@ -234,6 +235,22 @@ export function AssignmentForm({
             max={1440}
             required
             defaultValue={values.late.grace_minutes}
+          />
+        </div>
+      </fieldset>
+
+      <fieldset className="rounded-md border border-border p-4">
+        <legend className="px-1 text-sm font-medium">Regrades</legend>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field
+            label="Requests accepted for (days after release)"
+            name="regradeWindowDays"
+            type="number"
+            min={0}
+            max={60}
+            required
+            hint="0 turns regrade requests off."
+            defaultValue={values.regradeWindowDays}
           />
         </div>
       </fieldset>

@@ -38,6 +38,7 @@ export default async function EditAssignmentPage({
           runQuota: a.run_quota_per_day,
           weights: a.weights,
           late: a.late_policy,
+          regradeWindowDays: a.regrade_window_days,
           spec: a.spec_md,
           published: a.status !== "draft",
         }}
