@@ -1,6 +1,6 @@
 "use client";
 
-import { slugifyAssignment } from "@hbe/core";
+import { slugifyAssignment, type StageSettings } from "@hbe/core";
 import { useActionState, useState, useTransition, type FormEvent } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
@@ -20,6 +20,7 @@ export interface AssignmentFormValues {
   weights: { automated: number; rubric: number; process: number };
   late: { per_day_percent: number; max_days: number; grace_minutes: number };
   regradeWindowDays: number;
+  stages: StageSettings;
   spec: string;
   published: boolean;
 }
@@ -149,6 +150,51 @@ export function AssignmentForm({
                 {label}
               </label>
             ))}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+          <div className="space-y-2 text-sm">
+            <span className="font-medium">Stages</span>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="stageApi" defaultChecked={values.stages.api.enabled} />
+              Hidden API tests
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="stageBrowser" defaultChecked={values.stages.browser.enabled} />
+              Hidden browser tests
+            </label>
+            <span className="block text-xs text-muted">Used when the suite has stages of that kind.</span>
+          </div>
+          <div className="space-y-3 text-sm">
+            {(
+              [
+                ["Lint", "lint", "stageLint", "Lint the code with the stack's linter"],
+                ["StudentTests", "student_tests", "stageStudentTests", "Run the student's own tests"],
+              ] as const
+            ).map(([suffix, key, name, label]) => (
+              <div key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name={name} defaultChecked={values.stages[key].enabled} />
+                  {label}
+                </label>
+                <label className="flex items-center gap-1 text-muted">
+                  worth
+                  <input
+                    type="number"
+                    name={`stage${suffix}Share`}
+                    min={0}
+                    max={50}
+                    defaultValue={values.stages[key].share}
+                    aria-label={`${label}: share of the automated score (%)`}
+                    className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
+                  />
+                  % of the automated score
+                </label>
+              </div>
+            ))}
+            <span className="block text-xs text-muted">
+              These use the commands the stack profile defines (e.g. <code>npm run lint</code>, <code>npm test</code>).
+            </span>
           </div>
         </div>
       </fieldset>

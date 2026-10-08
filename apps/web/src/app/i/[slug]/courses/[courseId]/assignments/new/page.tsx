@@ -1,4 +1,4 @@
-import { utcToZonedLocal } from "@hbe/core";
+import { DEFAULT_STAGE_SETTINGS, utcToZonedLocal } from "@hbe/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
@@ -40,6 +40,7 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
           weights: { automated: 60, rubric: 25, process: 15 },
           late: { per_day_percent: 10, max_days: 5, grace_minutes: 15 },
           regradeWindowDays: 7,
+          stages: DEFAULT_STAGE_SETTINGS,
           spec: "",
           published: false,
         }}

@@ -51,6 +51,44 @@ describe("scoreRun", () => {
   });
 });
 
+describe("scoreRun with stage shares", () => {
+  const lint = (status: TestResult["status"]) => ({
+    key: "lint",
+    status,
+    duration_ms: 1,
+    share: 10,
+    tests: [test("lint", status)],
+  });
+  const ownTests = (status: TestResult["status"]) => ({
+    key: "student_tests",
+    status,
+    duration_ms: 1,
+    share: 20,
+    tests: [test("student_tests", status)],
+  });
+  const api = {
+    key: "api",
+    status: "failed" as const,
+    duration_ms: 1,
+    tests: [test("a", "passed", 3), test("b", "failed", 1)],
+  };
+
+  it("gives shared stages their percent and the hidden tests the rest", () => {
+    // 10% lint (passed) + 20% own tests (failed) + 70% × 3/4 hidden = 10 + 0 + 52.5
+    expect(scoreRun(run([...gates(), lint("passed"), ownTests("failed"), api])).score).toBe(62.5);
+    expect(scoreRun(run([...gates(), lint("passed"), ownTests("passed"), api])).score).toBe(82.5);
+  });
+
+  it("rescales when there are no hidden tests", () => {
+    expect(scoreRun(run([...gates(), lint("passed"), ownTests("failed")])).score).toBe(33.33);
+  });
+
+  it("still scores 0 when a gating stage fails", () => {
+    const blocked = run([...gates("failed"), lint("passed"), ownTests("passed"), api]);
+    expect(scoreRun(blocked)).toMatchObject({ score: 0, blockedBy: "contract" });
+  });
+});
+
 describe("checkRunSummary", () => {
   it("lists failures with expected, actual and hints", () => {
     const results = run([

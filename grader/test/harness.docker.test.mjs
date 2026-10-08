@@ -28,7 +28,29 @@ const profile = JSON.stringify({
 const runId = "00000000-0000-4000-8000-000000000001";
 const sha = "a".repeat(40);
 
-async function harness(submission, extra = []) {
+/** The profile with the node22-api lint and test stages, and the assignment's options. */
+const withStages = (options) =>
+  JSON.stringify({
+    ...JSON.parse(profile),
+    stages: {
+      lint: {
+        image: "node:22-bookworm-slim",
+        setup: "npm ci --no-audit --no-fund",
+        run: "npm run lint",
+        report: "text",
+      },
+      student_tests: {
+        image: "node:22-bookworm-slim",
+        setup: "npm ci --no-audit --no-fund",
+        run: "npm test",
+        report: "junit",
+        junit: "junit.xml",
+      },
+    },
+    options,
+  });
+
+async function harness(submission, extra = [], profileJson = profile) {
   const out = path.join(work, `results-${Math.random().toString(36).slice(2)}.json`);
   const args = [
     path.join(root, "harness/run.mjs"),
@@ -41,7 +63,7 @@ async function harness(submission, extra = []) {
     "--suite",
     path.join(root, "suites/sample/todo-api"),
     "--profile",
-    profile,
+    profileJson,
     "--timeout-minutes",
     "10",
     "--out",
@@ -115,6 +137,52 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
     assert.equal(results.infra_error, null);
     assert.equal(stage(results, "build").status, "failed");
     assert.match(stage(results, "build").message, /The build failed/);
+  });
+
+  it("runs lint and the student's own tests when the assignment turns them on", async () => {
+    const options = { stages: { lint: { share: 10 }, student_tests: { share: 20 } }, skip_kinds: [] };
+    const good = await harness(path.join(root, "test-fixtures/todo-api-good"), [], withStages(options));
+    assert.equal(good.infra_error, null);
+    assert.deepEqual(
+      good.stages.map((s) => [s.key, s.status, s.share]),
+      [
+        ["contract", "passed", undefined],
+        ["lint", "passed", 10],
+        ["student_tests", "passed", 20],
+        ["build", "passed", undefined],
+        ["health", "passed", undefined],
+        ["api", "passed", undefined],
+      ],
+    );
+    assert.equal(stage(good, "student_tests").tests[0].message, "2 of 2 tests passed.");
+
+    const buggy = await harness(path.join(root, "test-fixtures/todo-api-buggy"), [], withStages(options));
+    const own = stage(buggy, "student_tests").tests[0];
+    assert.equal(own.status, "failed");
+    assert.equal(own.message, "1 of 2 tests failed.");
+    assert.match(own.evidence.failures, /✗ test › rejects an empty title/);
+    assert.match(own.evidence.output, /rejects an empty title/);
+    assert.equal(stage(buggy, "lint").status, "passed");
+  });
+
+  it("reports a missing lint script and skips hidden stages the assignment turned off", async () => {
+    const submission = path.join(work, "no-lint");
+    cpSync(path.join(root, "test-fixtures/todo-api-good"), submission, { recursive: true });
+    const pkg = JSON.parse(readFileSync(path.join(submission, "package.json"), "utf8"));
+    delete pkg.scripts.lint;
+    writeFileSync(path.join(submission, "package.json"), JSON.stringify(pkg));
+    const results = await harness(submission, [], withStages({ stages: { lint: { share: 10 } }, skip_kinds: ["api"] }));
+    const lint = stage(results, "lint").tests[0];
+    assert.equal(lint.status, "failed");
+    assert.equal(lint.message, "`npm run lint` exited with code 1.");
+    assert.match(lint.evidence.output, /Missing script: "lint"/);
+    assert.deepEqual(stage(results, "api"), {
+      key: "api",
+      status: "skipped",
+      duration_ms: 0,
+      message: "Turned off for this assignment.",
+    });
+    assert.equal(stage(results, "student_tests"), undefined);
   });
 
   it("calls back with the run token: started, then results", async () => {

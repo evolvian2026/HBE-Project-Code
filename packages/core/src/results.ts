@@ -25,6 +25,11 @@ export interface StageResult {
   status: ResultStatus;
   duration_ms: number;
   message?: string;
+  /**
+   * Percent of the automated score this stage is worth (lint and the student's own tests, as
+   * the assignment sets them). Stages without a share split the rest by test weight.
+   */
+  share?: number;
   tests?: TestResult[];
 }
 
@@ -62,11 +67,34 @@ export function scoreRun(results: RunResults): RunScore {
     return { score: blocked ? 0 : null, passed: 0, failed: 0, total: 0, blockedBy: blocked?.key ?? null };
 
   const weightOf = (t: TestResult) => (Number.isFinite(t.weight) && t.weight >= 0 ? t.weight : 1);
-  const all = tests.reduce((s, t) => s + weightOf(t), 0);
+  const counted = (t: TestResult) => t.status !== "skipped" || blocked;
   const passedTests = blocked ? [] : tests.filter((t) => t.status === "passed");
-  const earned = passedTests.reduce((s, t) => s + weightOf(t), 0);
+  /** Weighted share of passed tests, or null without weight to share. */
+  const ratio = (group: TestResult[]) => {
+    const all = group.reduce((s, t) => s + weightOf(t), 0);
+    if (all === 0) return null;
+    return (blocked ? 0 : group.filter((t) => t.status === "passed").reduce((s, t) => s + weightOf(t), 0)) / all;
+  };
+
+  // Stages with a share are worth that percent; the remaining tests share the rest.
+  const parts: { share: number; ratio: number }[] = [];
+  let shared = 0;
+  for (const stage of results.stages) {
+    const share = Number.isFinite(stage.share) ? Math.min(100, Math.max(0, stage.share!)) : null;
+    if (share === null) continue;
+    const r = ratio((stage.tests ?? []).filter(counted));
+    if (r === null) continue;
+    parts.push({ share, ratio: r });
+    shared += share;
+  }
+  const rest = ratio(
+    results.stages.filter((s) => !Number.isFinite(s.share)).flatMap((s) => (s.tests ?? []).filter(counted)),
+  );
+  if (rest !== null && shared < 100) parts.push({ share: 100 - shared, ratio: rest });
+  const totalShare = parts.reduce((s, p) => s + p.share, 0);
+  const score = totalShare === 0 ? null : parts.reduce((s, p) => s + p.share * p.ratio, 0) / totalShare;
   return {
-    score: all === 0 ? null : Math.round((earned / all) * 10000) / 100,
+    score: score === null ? null : Math.round(score * 10000) / 100,
     passed: passedTests.length,
     failed: total - passedTests.length,
     total,

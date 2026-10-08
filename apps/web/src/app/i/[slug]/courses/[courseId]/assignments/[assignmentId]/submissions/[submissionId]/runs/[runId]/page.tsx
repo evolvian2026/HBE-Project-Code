@@ -21,6 +21,9 @@ const STAGE_LABEL: Record<string, string> = {
   health: "App starts",
   api: "API tests",
   e2e: "Browser tests",
+  ui: "Browser tests",
+  lint: "Lint",
+  student_tests: "Your own tests",
 };
 
 const TEST_TONE = { passed: "success", failed: "danger", error: "warning", skipped: "neutral" } as const;
@@ -31,6 +34,7 @@ interface Stage {
   status: keyof typeof TEST_TONE;
   duration_ms: number;
   message?: string;
+  share?: number;
 }
 
 interface TestRow {
@@ -48,7 +52,13 @@ interface TestRow {
   evidence: Record<string, string> | null;
 }
 
-const EVIDENCE_LABEL: Record<string, string> = { request: "Request", response: "Response", logs: "Your app's logs" };
+const EVIDENCE_LABEL: Record<string, string> = {
+  request: "Request",
+  response: "Response",
+  logs: "Your app's logs",
+  output: "Command output",
+  failures: "Failing tests",
+};
 const seconds = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 export default async function RunPage({ params }: Props) {
@@ -97,6 +107,8 @@ export default async function RunPage({ params }: Props) {
     blockedBy?: string | null;
   };
   const stages = summary.stages ?? [];
+  /** Lint and the student's own tests are worth a share of the score, not points. */
+  const shareOf = new Map(stages.filter((s) => s.share !== undefined).map((s) => [s.key, s.share!]));
   const rows = ((tests.data ?? []) as TestRow[]).sort(
     (x, y) => ORDER[x.status] - ORDER[y.status] || x.title.localeCompare(y.title),
   );
@@ -170,12 +182,18 @@ export default async function RunPage({ params }: Props) {
                 {stages.map((s) => (
                   <li key={s.key} className="text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{STAGE_LABEL[s.key] ?? s.key}</span>
+                      <span className="font-medium">
+                        {STAGE_LABEL[s.key] ?? s.key}
+                        {s.share !== undefined && (
+                          <span className="font-normal text-muted"> · {s.share}% of the score</span>
+                        )}
+                      </span>
                       <span className="flex items-center gap-2 text-muted">
                         {s.duration_ms > 0 && <span className="tabular-nums">{seconds(s.duration_ms)}</span>}
                         <Badge tone={TEST_TONE[s.status] ?? "neutral"}>{s.status}</Badge>
                       </span>
                     </div>
+                    {s.message && s.status === "skipped" && <p className="mt-1 text-muted">{s.message}</p>}
                     {s.message && s.status === "failed" && (
                       <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-xs">
                         {s.message}
@@ -204,7 +222,9 @@ export default async function RunPage({ params }: Props) {
                     </span>
                     <span className="flex items-center gap-2 text-muted">
                       <span className="tabular-nums">
-                        {Number(t.weight)} pt{Number(t.weight) === 1 ? "" : "s"}
+                        {shareOf.has(t.stage)
+                          ? `${shareOf.get(t.stage)}%`
+                          : `${Number(t.weight)} pt${Number(t.weight) === 1 ? "" : "s"}`}
                       </span>
                       <Badge tone={TEST_TONE[t.status]}>{t.status}</Badge>
                     </span>

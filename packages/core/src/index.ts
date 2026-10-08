@@ -8,3 +8,4 @@ export * from "./process.ts";
 export * from "./results.ts";
 export * from "./grading.ts";
 export * from "./dashboard.ts";
+export * from "./stages.ts";

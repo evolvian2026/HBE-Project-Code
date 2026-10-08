@@ -1,6 +1,6 @@
 "use server";
 
-import { ASSIGNMENT_SLUG_PATTERN, zonedLocalToUtc } from "@hbe/core";
+import { ASSIGNMENT_SLUG_PATTERN, stageSettingsProblem, zonedLocalToUtc, type StageSettings } from "@hbe/core";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -46,6 +46,12 @@ const assignmentSchema = z
     lateMaxDays: num(0, 60),
     lateGraceMinutes: num(0, 1440),
     regradeWindowDays: num(0, 60),
+    stageApi: z.literal("on").optional(),
+    stageBrowser: z.literal("on").optional(),
+    stageLint: z.literal("on").optional(),
+    stageLintShare: num(0, 50),
+    stageStudentTests: z.literal("on").optional(),
+    stageStudentTestsShare: num(0, 50),
     spec: z.string().max(100_000),
   })
   .refine((v) => v.automated + v.rubric + v.process === 100, {
@@ -59,6 +65,15 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
   const v = parsed.data;
   const { course, canManage, ctx } = await requireCourse(v.slug, v.courseId);
   if (!canManage) return { ok: false, message: "Only the course's instructors and institution admins can do that." };
+
+  const stages: StageSettings = {
+    lint: { enabled: Boolean(v.stageLint), share: v.stageLintShare },
+    student_tests: { enabled: Boolean(v.stageStudentTests), share: v.stageStudentTestsShare },
+    api: { enabled: Boolean(v.stageApi) },
+    browser: { enabled: Boolean(v.stageBrowser) },
+  };
+  const stageProblem = stageSettingsProblem(stages);
+  if (stageProblem) return { ok: false, message: stageProblem };
 
   const dueAt = zonedLocalToUtc(v.dueAt, course.timezone);
   const releaseAt = v.releaseAt ? zonedLocalToUtc(v.releaseAt, course.timezone) : null;
@@ -77,6 +92,7 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
     weights: { automated: v.automated, rubric: v.rubric, process: v.process },
     late_policy: { per_day_percent: v.latePerDay, max_days: v.lateMaxDays, grace_minutes: v.lateGraceMinutes },
     regrade_window_days: v.regradeWindowDays,
+    stage_settings: stages,
     spec_md: v.spec,
   };
 

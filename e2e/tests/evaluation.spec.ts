@@ -48,10 +48,11 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
   const [student] = await sql<{ id: string }>("select id from auth.users where email = $1", [email("student")]);
   const [assignment] = await sql<{ id: string }>(
     `insert into public.assignments (institution_id, course_id, slug, title, stack_profile_id, grader_suite_id, template_repo,
-                                     due_at, status, published_at, run_quota_per_day)
+                                     due_at, status, published_at, run_quota_per_day, stage_settings)
      values ($1, $2, 'todo-api', 'Todo API', (select id from public.stack_profiles where key = 'node22-api'),
              (select id from public.grader_suites where key = 'todo-api' and institution_id is null), 't/t',
-             now() + interval '3 days', 'published', now(), 3)
+             now() + interval '3 days', 'published', now(), 3,
+             '{"lint": {"enabled": true, "share": 10}, "student_tests": {"enabled": true, "share": 20}}')
      returning id`,
     [inst!.id, course!.id],
   );
@@ -100,16 +101,29 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
       ...["--run-id", runId, "--sha", headSha],
       ...["--submission", path.join(grader, "test-fixtures/todo-api-buggy")],
       ...["--suite", path.join(grader, "suites/sample/todo-api")],
-      ...["--profile", JSON.stringify(profile!.definition)],
+      // What the worker sends for this assignment: the profile, with lint and the student's tests on.
+      ...[
+        "--profile",
+        JSON.stringify({
+          ...profile!.definition,
+          options: { stages: { lint: { share: 10 }, student_tests: { share: 20 } }, skip_kinds: [] },
+        }),
+      ],
       ...["--api-url", baseURL!, "--token", token, "--timeout-minutes", "5"],
       ...["--out", path.join(test.info().outputDir, "results.json")],
     ],
-    { timeout: 180_000 },
+    { timeout: 300_000 },
   );
 
   // The page updates by itself: the score, and each failure with what was expected.
-  await expect(page.getByText("5 of 7 tests passed.")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("70 / 100")).toBeVisible();
+  // 10% lint (passed) + 20% own tests (one failed) + 70% × 70% of the hidden tests' weight = 59.
+  await expect(page.getByText("6 of 9 tests passed.")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("59 / 100")).toBeVisible();
+  await expect(page.getByText("Lint · 10% of the score")).toBeVisible();
+  const own = page.getByTestId("test-student_tests");
+  await expect(own.getByText("1 of 2 tests failed.")).toBeVisible();
+  await own.getByText("Failing tests", { exact: true }).click();
+  await expect(own.getByText(/✗ test › rejects an empty title/)).toBeVisible();
   const validation = page.getByTestId("test-todos.create-requires-title");
   await expect(validation.getByText("POST /todos with a blank title should answer 400 Bad Request")).toBeVisible();
   await expect(validation.getByText("HTTP 400", { exact: true })).toBeVisible();
@@ -124,14 +138,14 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
   // One of today's runs is used.
   await page.goto(assignmentUrl);
   await expect(tests.getByText("2 of 3 test runs left today.")).toBeVisible();
-  await expect(tests.getByText("5/7 passed · 70")).toBeVisible();
+  await expect(tests.getByText("6/9 passed · 59")).toBeVisible();
 
   // The instructor sees the same run, with the staff notes.
   const teacherContext = await browser.newContext();
   const teacher = await teacherContext.newPage();
   await signIn(teacher, email("teacher"));
   await teacher.goto(assignmentUrl);
-  await expect(teacher.getByText("tests 5/7 passed · 70")).toBeVisible();
+  await expect(teacher.getByText("tests 6/9 passed · 59")).toBeVisible();
   await teacher.goto(`${assignmentUrl}/submissions/${submission!.id}/runs/${runId}`);
   await expect(
     teacher.getByTestId("test-todos.delete").getByText(/usually means the delete handler is a stub/),

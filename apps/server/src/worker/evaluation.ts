@@ -1,4 +1,4 @@
-import { checkRunSummary, scoreRun, type RunResults, type StageResult } from "@hbe/core";
+import { checkRunSummary, harnessOptions, scoreRun, stageSettings, type RunResults, type StageResult } from "@hbe/core";
 import { sql, type Db, type Json } from "@hbe/db";
 import { GitHubError, type GitHubClient } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
@@ -30,12 +30,14 @@ export async function dispatchRun(
     .selectFrom("evaluation_runs as e")
     .innerJoin("submissions as s", "s.id", "e.submission_id")
     .innerJoin("repositories as r", "r.id", "s.repository_id")
+    .innerJoin("assignments as a", "a.id", "s.assignment_id")
     .leftJoin("grader_suites as g", "g.id", "e.grader_suite_id")
     .leftJoin("stack_profiles as p", "p.id", "e.stack_profile_id")
     .select([
       "e.id",
       "e.institution_id",
       "e.status",
+      "a.stage_settings",
       "e.trigger",
       "e.sha",
       "r.owner",
@@ -68,6 +70,15 @@ export async function dispatchRun(
       return "cancelled";
     }
   }
+
+  // The profile, plus which of its stages this assignment runs (and what they're worth).
+  const definition = (run.definition ?? {}) as { stages?: Record<string, unknown> };
+  const profileJson = JSON.stringify({
+    key: run.profile_key,
+    version: run.profile_version,
+    ...definition,
+    options: harnessOptions(stageSettings(run.stage_settings), definition.stages),
+  });
 
   const [graderOwner, graderRepo] = (settings.env.GRADER_REPO ?? "").split("/");
   if (!graderOwner || !graderRepo) throw new Error("GRADER_REPO is not configured");
@@ -107,11 +118,7 @@ export async function dispatchRun(
         sha: run.sha,
         suite_path: run.suite_path,
         suite_ref: run.suite_ref ?? settings.env.GRADER_REF,
-        stack_profile: JSON.stringify({
-          key: run.profile_key,
-          version: run.profile_version,
-          ...(run.definition as object),
-        }),
+        stack_profile: profileJson,
         api_url: settings.env.API_URL,
         job_timeout_minutes: String(limits.job_timeout_minutes),
         ...(token ? { callback_token: token } : {}),
@@ -134,15 +141,10 @@ export async function dispatchRun(
   log.info({ runId }, "grader dispatched");
   if (settings.env.GITHUB_FAKE && token) {
     // Local development: nothing runs the in-memory GitHub's workflows, so say how to grade it.
-    const profile = JSON.stringify({
-      key: run.profile_key,
-      version: run.profile_version,
-      ...(run.definition as object),
-    });
     log.info(
       `To grade run ${run.id}, run the harness against a checkout of the student's code:\n` +
         `node grader/harness/run.mjs --run-id ${run.id} --sha ${run.sha} --submission <student-code-dir> ` +
-        `--suite grader/${run.suite_path} --profile '${profile}' --api-url ${settings.env.API_URL} --token ${token}`,
+        `--suite grader/${run.suite_path} --profile '${profileJson}' --api-url ${settings.env.API_URL} --token ${token}`,
     );
   }
   return "dispatched";

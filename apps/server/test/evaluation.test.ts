@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "@hbe/db";
+import { sql, type Json } from "@hbe/db";
 import { FakeGitHub, GitHubError } from "@hbe/github";
 import type { Settings } from "@hbe/settings";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -237,6 +237,31 @@ describe("dispatching", () => {
     expect(github.dispatches).toHaveLength(1);
   });
 
+  it("tells the grader which stages the assignment runs, and what lint and the student's tests are worth", async () => {
+    const s = await scenario();
+    await db
+      .updateTable("assignments")
+      .set({
+        stage_settings: JSON.stringify({ lint: { enabled: true, share: 15 }, browser: { enabled: false } }) as Json,
+      })
+      .where("id", "=", s.assignmentId)
+      .execute();
+    const run = await queuedRun(s);
+    await db
+      .updateTable("evaluation_runs")
+      .set({
+        stack_profile_id: sql<string>`(select stack_profile_id from assignments where id = ${s.assignmentId})`,
+      })
+      .where("id", "=", run.id)
+      .execute();
+    const github = new FakeGitHub();
+    await dispatchRun({ db, queue: new FakeQueue(), github, settings: roomy, log }, run.id);
+    const profile = JSON.parse(github.dispatches[0]!.inputs.stack_profile!);
+    // The scenario's profile (mern-node20) defines lint and student tests; only lint is on.
+    expect(profile.options).toEqual({ stages: { lint: { share: 15 } }, skip_kinds: ["browser"] });
+    expect(profile.stages.lint).toMatchObject({ image: "node:20-bookworm-slim", run: expect.stringContaining("lint") });
+  });
+
   it("defers when the institution is at its concurrency cap", async () => {
     const s = await scenario();
     const busy = await queuedRun(s);
@@ -397,6 +422,40 @@ describe("grader callbacks (per-run token)", () => {
     // Scoring again doesn't post a second check run.
     await scoreAndReport(deps, runId);
     expect(github.checkRuns).toHaveLength(1);
+  });
+
+  it("scores lint by its share of the automated score", async () => {
+    const s = await scenario();
+    const { runId, token } = await dispatched(s);
+    await post(`/v1/runs/${runId}/started`, token);
+    const withLint = {
+      ...results,
+      stages: [
+        ...results.stages.slice(0, 1),
+        {
+          key: "lint",
+          status: "passed",
+          duration_ms: 900,
+          share: 20,
+          tests: [{ id: "lint", title: "Lint passes (npm run lint)", status: "passed", weight: 1 }],
+        },
+        ...results.stages.slice(1),
+      ],
+    };
+    expect((await post(`/v1/runs/${runId}/results`, token, withLint)).statusCode).toBe(200);
+    // 20% lint (passed) + 80% × 1/4 of the hidden tests' weight = 40
+    expect(await scoreAndReport({ db, queue: new FakeQueue(), github: new FakeGitHub(), settings, log }, runId)).toBe(
+      40,
+    );
+    const stored = await db
+      .selectFrom("evaluation_runs")
+      .select("summary")
+      .where("id", "=", runId)
+      .executeTakeFirstOrThrow();
+    expect((stored.summary as { stages: { key: string; share?: number }[] }).stages[1]).toMatchObject({
+      key: "lint",
+      share: 20,
+    });
   });
 
   it("does not grade infrastructure errors", async () => {

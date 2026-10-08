@@ -33,9 +33,24 @@ test/                            Unit tests and Docker-backed harness tests
 | Stage | What it checks | If it fails |
 |-------|----------------|-------------|
 | `contract` | The files the stack profile expects exist; `compose.yaml` is valid and doesn't reach outside its containers | Nothing else runs; score 0 |
+| `lint` (optional) | The profile's lint command passes | Shown with the linter's output; worth the assignment's share of the score |
+| `student_tests` (optional) | The student's own tests pass (the profile's test command) | Shown with the failing tests (from JUnit) and the output; worth its share |
 | `build` | `docker compose build` succeeds | Nothing else runs; score 0 |
 | `health` | The app starts and every service answers its health URL within 2 minutes | Tests don't run; score 0 |
 | `api` (suite stages) | The hidden tests | Each failure lists what was expected, what the app did, a hint, the request and response, and the app's logs |
+
+`lint` and `student_tests` run only when the assignment turns them on and the profile defines
+them. Each runs in a fresh container of the stage's `image` on a Docker volume holding a copy of
+the repository (not the suite, and no host mounts), with memory, CPU and process limits;
+`setup` (installing dependencies, with internet access like the build) runs once per image and
+setup command. Each counts as one test worth a share of the automated score (set per
+assignment, at most 50% together); the hidden tests share the rest by weight. The assignment
+can also turn off hidden-test stages by kind (`"kind": "api"` or `"browser"` in `suite.json`).
+The worker passes these choices as `options` in the profile JSON:
+
+```json
+{ "options": { "stages": { "lint": { "share": 10 }, "student_tests": { "share": 20 } }, "skip_kinds": [] } }
+```
 
 When a stage fails because of the platform (Docker Hub rate limits, a full disk, a broken
 suite), the results carry `infra_error` instead: the run is shown as a platform error and not
@@ -122,5 +137,5 @@ the fixture apps with Docker; about 30 seconds).
 
 ## Not yet
 
-Browser (Playwright) test stages, the profile's lint and student-test stages, uploading logs and
-traces to Storage, and source snapshots of graded commits are planned (docs/ROADMAP.md).
+Browser (Playwright) test stages and uploading logs and traces to Storage are planned
+(docs/ROADMAP.md).

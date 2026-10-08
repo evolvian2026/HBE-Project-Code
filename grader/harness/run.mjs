@@ -6,7 +6,10 @@
  *     --profile '<stack profile JSON>' --api-url <url> [--token <token>] [--out results.json]
  *     [--timeout-minutes 20] [--no-callback] [--keep]
  *
- * Stages: contract → build → health → the suite's test stages (docs/ARCHITECTURE.md §6).
+ * Stages: contract → lint → student tests → build → health → the suite's test stages
+ * (docs/ARCHITECTURE.md §6). Lint and student tests run when the assignment turns them on
+ * (`options` in the profile JSON) and the profile defines them; the assignment can also turn
+ * off hidden-test stages by kind (`api`, `browser`).
  * The student's app runs with Docker Compose on an internal network with no internet access;
  * the hidden tests run in a separate container on that network, so the app never sees them.
  * Failures caused by the platform (Docker Hub limits, a full disk, a broken suite) are
@@ -21,6 +24,7 @@ import { parseArgs } from "node:util";
 import { createCallbacks } from "./lib/callback.mjs";
 import { prepareCompose, redact } from "./lib/compose.mjs";
 import { looksLikeInfraFailure, run } from "./lib/exec.mjs";
+import { createToolchains } from "./lib/toolchain.mjs";
 
 const RUNNER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "runner");
 const TESTER_IMAGE = process.env.HBE_TESTER_IMAGE ?? "node:22-bookworm-slim";
@@ -64,6 +68,7 @@ const runId = args["run-id"];
 const submissionDir = path.resolve(args.submission);
 const suiteDir = path.resolve(args.suite);
 const profile = JSON.parse(args.profile);
+const options = { stages: {}, skip_kinds: [], ...(profile.options ?? {}) };
 const manifest = JSON.parse(readFileSync(path.join(suiteDir, "suite.json"), "utf8"));
 const project = `hbe-${runId
   .replace(/[^a-z0-9]/gi, "")
@@ -98,6 +103,15 @@ const results = {
 let composePath = null;
 const workdir = mkdtempSync(path.join(tmpdir(), "hbe-run-"));
 const compose = (...rest) => ["compose", "-p", project, "-f", composePath, ...rest];
+const toolchains = createToolchains({
+  project,
+  submissionDir,
+  workdir,
+  remaining,
+  infra: (message) => {
+    throw new InfraError(message);
+  },
+});
 
 async function stage(key, fn) {
   const started = Date.now();
@@ -350,9 +364,19 @@ async function snapshot() {
 async function main() {
   await snapshot();
   try {
-    let ok = true;
+    let ok = await stage("contract", contract);
+    for (const key of ["lint", "student_tests"]) {
+      const def = profile.stages?.[key];
+      const share = options.stages?.[key]?.share;
+      if (!def?.image || !def?.run || typeof share !== "number") continue;
+      if (ok) {
+        await stage(key, async () => {
+          const outcome = await toolchains.runStage(key, def, share);
+          return { ...outcome, tests: outcome.tests.map((t) => cleanTest(t, "")) };
+        });
+      } else results.stages.push({ key, status: "skipped", duration_ms: 0, share });
+    }
     for (const [key, fn] of [
-      ["contract", contract],
       ["build", build],
       ["health", health],
     ]) {
@@ -361,7 +385,14 @@ async function main() {
     }
     const blockedBy = results.stages.find((s) => GATING.includes(s.key) && s.status !== "passed")?.key;
     for (const def of manifest.stages) {
-      if (blockedBy) {
+      if (options.skip_kinds?.includes(def.kind ?? "api")) {
+        results.stages.push({
+          key: def.key,
+          status: "skipped",
+          duration_ms: 0,
+          message: "Turned off for this assignment.",
+        });
+      } else if (blockedBy) {
         const tests = (await listTests(def.file)).map((t) => ({
           ...t,
           status: "skipped",
@@ -379,6 +410,7 @@ async function main() {
     if (composePath && !args.keep) {
       await run("docker", compose("down", "-v", "--remove-orphans", "-t", "5"), { timeoutMs: 120_000 });
     }
+    if (!args.keep) await toolchains.cleanup();
     if (!args.keep) rmSync(workdir, { recursive: true, force: true });
   }
   results.finished_at = new Date().toISOString();

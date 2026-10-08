@@ -218,6 +218,7 @@ export interface AssignmentsTable {
   published_at: Timestamp | null;
   grades_released_at: Timestamp | null;
   regrade_window_days: Generated<number>;
+  stage_settings: Generated<Json>;
   created_by: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;

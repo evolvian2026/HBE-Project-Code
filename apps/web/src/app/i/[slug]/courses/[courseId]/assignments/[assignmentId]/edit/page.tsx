@@ -1,4 +1,4 @@
-import { utcToZonedLocal } from "@hbe/core";
+import { stageSettings, utcToZonedLocal } from "@hbe/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
@@ -39,6 +39,7 @@ export default async function EditAssignmentPage({
           weights: a.weights,
           late: a.late_policy,
           regradeWindowDays: a.regrade_window_days,
+          stages: stageSettings(a.stage_settings),
           spec: a.spec_md,
           published: a.status !== "draft",
         }}

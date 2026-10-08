@@ -37,6 +37,7 @@ const resultsSchema = z.object({
         status,
         duration_ms: z.number().int().nonnegative().default(0),
         message: text(4000).optional(),
+        share: z.number().min(0).max(100).optional(),
         tests: z
           .array(
             z.object({

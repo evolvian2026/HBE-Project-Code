@@ -170,6 +170,7 @@ const declared: Record<string, string[]> = {
     "published_at",
     "grades_released_at",
     "regrade_window_days",
+    "stage_settings",
     "created_by",
     "created_at",
     "updated_at",

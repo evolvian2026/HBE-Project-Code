@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/compose.test.mjs",
+    "test": "node --test test/compose.test.mjs test/junit.test.mjs",
     "test:docker": "node --test --test-concurrency=1 test/harness.docker.test.mjs"
   }
 }
