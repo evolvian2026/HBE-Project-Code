@@ -37,6 +37,13 @@ export const envSchema = z.object({
   GITHUB_WEBHOOK_SECRET: optional,
   /** The App's URL slug (github.com/apps/<slug>), used for install links. */
   GITHUB_APP_SLUG: optional,
+  /** GitHub REST base URL (GitHub Enterprise Server or tests). */
+  GITHUB_API_URL: z.string().url().default("https://api.github.com"),
+  /** Local development only: an in-memory GitHub instead of the real App. */
+  GITHUB_FAKE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   GRADER_REPO: z
     .string()
     .regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo")
@@ -101,6 +108,10 @@ const rules: Rule[] = [
     when: deployed,
     check: (e) =>
       [e.APP_URL, e.API_URL].some((u) => !u.startsWith("https://")) ? "APP_URL and API_URL must use https" : undefined,
+  },
+  {
+    when: (e) => e.GITHUB_FAKE,
+    check: (e) => (e.HBE_ENV === "local" ? undefined : "GITHUB_FAKE is only allowed when HBE_ENV=local"),
   },
   {
     // Provider hostnames baked into GitHub/LTI/OAuth config would break the AWS migration.

@@ -86,6 +86,11 @@ describe("loadSettings", () => {
     expect(() => loadSettings({ ...webOnly, ROLES: "worker" })).toThrow(/GITHUB_APP_ID/);
   });
 
+  it("only allows the fake GitHub locally", () => {
+    expect(() => loadSettings({ ...demo, GITHUB_FAKE: "true" })).toThrow(/GITHUB_FAKE is only allowed/);
+    expect(loadSettings({ ...demo, HBE_ENV: "local", GITHUB_FAKE: "true" }).env.GITHUB_FAKE).toBe(true);
+  });
+
   it("keeps both plan profiles in sync (same keys)", () => {
     const keys = (name: string) =>
       readFileSync(resolve(defaultConfigDir(), "profiles", `${name}.yaml`), "utf8")

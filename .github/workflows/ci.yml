@@ -82,6 +82,7 @@ jobs:
           GITHUB_APP_ID=1
           GITHUB_APP_PRIVATE_KEY_BASE64=eA==
           GITHUB_APP_SLUG=hbe-ci
+          GITHUB_FAKE=true
           GITHUB_WEBHOOK_SECRET=ci-secret
           GRADER_REPO=hbe-ci/hbe-grader
           EMAIL_FROM=HBE CI <ci@localhost>

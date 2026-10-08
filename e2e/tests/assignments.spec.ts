@@ -76,8 +76,12 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
   await teacher.getByRole("button", { name: "Publish to students" }).click();
   await expect(teacher.getByText("Published. 2 students will get a repository.")).toBeVisible();
 
-  await teacher.reload();
-  await expect(teacher.getByText("creating repository")).toBeVisible();
+  // The worker creates the linked student's repository (in-memory GitHub when GITHUB_FAKE=true).
+  await expect(async () => {
+    await teacher.reload();
+    await expect(teacher.getByText("repository ready")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(teacher.getByRole("link", { name: "todo-api-gh-student" })).toBeVisible();
   await expect(teacher.getByText("waiting for GitHub link")).toBeVisible();
 
   // Once published, the short name is locked.
@@ -93,7 +97,7 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
 
   await ghStudent.goto(`/i/${slug}/courses/${course!.id}`);
   await ghStudent.getByRole("link", { name: "Todo API" }).click();
-  await expect(ghStudent.getByText("creating repository…")).toBeVisible();
+  await expect(ghStudent.getByRole("link", { name: /todo-api-gh-student/ })).toBeVisible();
 
   for (const ctx of [studentCtx, ghCtx, teacherCtx]) await ctx.close();
 });

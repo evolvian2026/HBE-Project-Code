@@ -4,7 +4,7 @@ import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
 import { MarkdownView } from "@/components/markdown";
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
-import { deleteAssignment, removeCriterion } from "../actions";
+import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
 import { CriterionForm, PublishForm } from "./forms";
 
@@ -241,7 +241,21 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                         {s.profile?.github_login ? ` · @${s.profile.github_login}` : ""}
                       </span>
                     </span>
-                    <span className="flex items-center gap-3">
+                    <span className="flex flex-wrap items-center justify-end gap-3">
+                      {s.status === "provisioning_failed" && s.status_detail && (
+                        <span className="max-w-md text-xs text-danger">{s.status_detail}</span>
+                      )}
+                      {s.status === "provisioning_failed" && canManage && (
+                        <form action={retryProvisioning}>
+                          <input type="hidden" name="slug" value={slug} />
+                          <input type="hidden" name="courseId" value={course.id} />
+                          <input type="hidden" name="assignmentId" value={a.id} />
+                          <input type="hidden" name="submissionId" value={s.id} />
+                          <Button type="submit" variant="secondary" className="px-2 py-0.5 text-xs">
+                            Retry
+                          </Button>
+                        </form>
+                      )}
                       {s.repository && (
                         <a
                           href={`https://github.com/${s.repository.owner}/${s.repository.name}`}

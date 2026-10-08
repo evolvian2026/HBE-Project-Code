@@ -8,6 +8,10 @@ export interface QueuePayloads {
   "github-events-sweep": Record<string, never>;
   /** Send pending rows of email_outbox. */
   "email-outbox": Record<string, never>;
+  /** Create a student's repository from the assignment template and give them access. */
+  "provision-submission": { submissionId: string };
+  /** Re-enqueue submissions stuck in provisioning. */
+  "provisioning-sweep": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -23,6 +27,8 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "github-event": { retryLimit: 5, retryDelay: 10, retryBackoff: true, expireInSeconds: 300 },
   "github-events-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
   "email-outbox": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
+  "provision-submission": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300 },
+  "provisioning-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

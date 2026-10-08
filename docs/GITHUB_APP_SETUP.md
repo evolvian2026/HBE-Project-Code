@@ -6,6 +6,10 @@ an App between environments: each has its own webhook URL, keys and installation
 This page gives the exact settings for the **development App**. The demo and production Apps use
 the same settings with the URLs in [§6](#6-demo-and-production-apps).
 
+> Until the App exists, local development can run with `GITHUB_FAKE=true` (the default in
+> `config/env/local.env.example`): repositories are "created" in an in-memory GitHub, so the
+> rest of the platform can be tried. Set it to `false` once the App's credentials are in place.
+
 > Set every permission and event now, even though Phase 0 only uses some of them. Each later
 > permission change makes every organisation that installed the App approve it again.
 

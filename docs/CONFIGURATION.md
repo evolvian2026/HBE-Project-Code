@@ -105,7 +105,15 @@ HBE__RUNTIME__QUEUE_CONCURRENCY=3
 Overrides are type-checked. An unknown key (a typo) or a wrong type stops startup with a clear
 message.
 
-## 5. Platform settings in the database
+## 5. GitHub settings
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_BASE64`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | — | From the GitHub App (docs/GITHUB_APP_SETUP.md) |
+| `GITHUB_API_URL` | `https://api.github.com` | Change only for GitHub Enterprise Server |
+| `GITHUB_FAKE` | `false` | `true` uses an in-memory GitHub so repository creation can be tried without an App. **Refused unless `HBE_ENV=local`.** |
+
+## 6. Platform settings in the database
 
 A few switches must be enforced by the database itself, so they live in the
 `platform_settings` table rather than in env vars. Super admins can change them; every change
@@ -115,7 +123,7 @@ is audited.
 |-----|---------|--------|
 | `require_admin_mfa` | `true` | Admin powers (RLS and API) need a session that passed two-factor authentication. Only set to `false` for local experiments. |
 
-## 6. Adding a new setting
+## 7. Adding a new setting
 
 1. Add the key to **both** `free.yaml` and `paid.yaml` (a test fails if they diverge).
 2. Add it to `profileSchema` in `packages/settings/src/profile.ts`.

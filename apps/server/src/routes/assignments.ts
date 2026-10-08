@@ -17,7 +17,20 @@ async function courseRoleOf(db: Db, courseId: string, userId: string): Promise<s
   return row?.role ?? null;
 }
 
-export async function assignmentRoutes(app: FastifyInstance, { db, verifier }: ApiDeps): Promise<void> {
+/** Queues repository creation; the provisioning sweep catches anything this misses. */
+async function enqueueProvisioning(
+  deps: Pick<ApiDeps, "db" | "queue">,
+  where: { assignmentId?: string; submissionId?: string },
+) {
+  let query = deps.db.selectFrom("submissions").select("id").where("status", "=", "provisioning");
+  if (where.assignmentId) query = query.where("assignment_id", "=", where.assignmentId);
+  if (where.submissionId) query = query.where("id", "=", where.submissionId);
+  for (const { id } of await query.execute()) {
+    await deps.queue.send("provision-submission", { submissionId: id }, { singletonKey: `provision-${id}` });
+  }
+}
+
+export async function assignmentRoutes(app: FastifyInstance, { db, verifier, queue }: ApiDeps): Promise<void> {
   /**
    * Publishes a draft: checks it is complete, marks it published and creates one submission
    * per enrolled student (repositories are provisioned by the worker).
@@ -86,7 +99,36 @@ export async function assignmentRoutes(app: FastifyInstance, { db, verifier }: A
       return rows[0]?.n ?? 0;
     });
 
+    await enqueueProvisioning({ db, queue }, { assignmentId }).catch((err: unknown) =>
+      req.log.error({ err, assignmentId }, "failed to enqueue provisioning; the sweep will retry"),
+    );
     req.log.info({ assignmentId, submissionsCreated }, "assignment published");
     return { published: true, submissionsCreated };
+  });
+
+  /** Staff retry for a submission whose repository could not be created. */
+  app.post<{ Params: { submissionId: string } }>("/v1/submissions/:submissionId/retry-provisioning", async (req) => {
+    const actor = await authenticate(req, db, verifier);
+    const submissionId = z.string().uuid().parse(req.params.submissionId);
+    const s = await db
+      .selectFrom("submissions as s")
+      .innerJoin("assignments as a", "a.id", "s.assignment_id")
+      .select(["s.id", "s.status", "s.institution_id", "a.course_id"])
+      .where("s.id", "=", submissionId)
+      .executeTakeFirst();
+    if (!s) throw notFound("Submission not found");
+    authorize(actor, "manageCourse", s.institution_id, await courseRoleOf(db, s.course_id, actor.userId));
+    if (s.status !== "provisioning_failed" && s.status !== "provisioning") {
+      throw new HttpError(409, "not_failed", "This submission's repository does not need provisioning.");
+    }
+    await withActor(db, actor.userId, (tx) =>
+      tx
+        .updateTable("submissions")
+        .set({ status: "provisioning", status_detail: null, provisioning_attempts: 0 })
+        .where("id", "=", submissionId)
+        .execute(),
+    );
+    await enqueueProvisioning({ db, queue }, { submissionId });
+    return { retrying: true };
   });
 }

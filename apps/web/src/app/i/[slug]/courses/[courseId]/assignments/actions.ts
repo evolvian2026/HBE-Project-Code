@@ -157,3 +157,11 @@ export async function removeCriterion(formData: FormData) {
   await supabase.from("assignment_criteria").delete().eq("id", id);
   revalidatePath(`/i/${slug}/courses/${courseId}/assignments/${assignmentId}`);
 }
+
+export async function retryProvisioning(formData: FormData) {
+  const { slug, courseId, assignmentId, submissionId } = idsSchema
+    .extend({ submissionId: z.string().uuid() })
+    .parse(Object.fromEntries(formData));
+  await apiFetch(`/v1/submissions/${submissionId}/retry-provisioning`, { method: "POST" });
+  revalidatePath(`/i/${slug}/courses/${courseId}/assignments/${assignmentId}`);
+}

@@ -3,6 +3,7 @@ import { PgBossQueue } from "@hbe/queue";
 import { describeSettings, loadSettings } from "@hbe/settings";
 import { buildApp, loggerOptions } from "./app.ts";
 import { supabaseTokenVerifier } from "./auth.ts";
+import { createGitHubClient } from "./github.ts";
 import { startWorker } from "./worker/index.ts";
 
 /**
@@ -41,7 +42,10 @@ async function start(): Promise<void> {
 
   await queue?.start();
   if (roles.has("worker") && db && queue) {
-    await startWorker({ db, queue, log: app.log.child({ role: "worker" }) }, settings);
+    await startWorker(
+      { db, queue, github: createGitHubClient(settings), log: app.log.child({ role: "worker" }) },
+      settings,
+    );
   }
   if (roles.has("web")) {
     const { mountWeb } = await import("./web.ts");
