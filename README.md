@@ -1,16 +1,21 @@
 # HBE Project Platform
 
-An automated full-stack project evaluation and management platform for students and educators.
+An automated full-stack project evaluation and management platform for students and educators,
+serving **multiple institutions** from one deployment.
 
-- **Students** work in GitHub repositories provisioned per assignment. Every push or pull request
-  can trigger an automated build and test pipeline against their full-stack app.
-- **Educators** track commit, PR and issue activity, review code, score rubrics, and release
-  targeted feedback and grades.
-- **Admins** manage users (students, teachers, admins), courses, project assignments, GitHub
-  integration and platform settings.
+- **Students** work in GitHub repositories provisioned per assignment, in the tech stack the
+  teacher chose for that project. Every push or pull request can trigger an automated build and
+  test pipeline, with detailed, actionable failure feedback.
+- **Educators** track commit, PR and issue activity (which counts toward the grade as a
+  process score), review code, score rubrics, and release targeted feedback and grades.
+  Grades are pushed to **Canvas, Moodle or Google Classroom**.
+- **Every submission and grade report is archived permanently**, so a student's performance
+  history can be reviewed at any time.
+- **Institution admins** manage users (students, teachers, admins), courses, stack profiles,
+  GitHub and LMS connections, and settings. A **super admin** manages institutions.
 
 **Stack:** Next.js · Fastify · BullMQ · Supabase (Postgres, Auth, Storage, Realtime) · GitHub App +
-GitHub Actions (isolated grading) · Render (hosting, custom domain).
+GitHub Actions (isolated grading) · LTI 1.3 / Google Classroom API · Render (hosting, custom domain).
 
 ## Design documents
 

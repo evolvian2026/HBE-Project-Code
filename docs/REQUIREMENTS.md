@@ -12,28 +12,40 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | Student | Works on assigned projects in GitHub; sees their own results and feedback. |
 | Teacher (Instructor) | Owns courses and assignments; reviews, grades and gives feedback. |
 | TA | Course-scoped helper with review/grading rights but no course configuration rights. |
-| Admin | Manages users, roles, courses, integrations and platform settings. |
+| Institution admin | Manages users, roles, courses, stack profiles, GitHub orgs, LMS connections and settings for one institution. |
+| Super admin | Platform operator: creates and manages institutions, global stack profiles, platform health. |
 | System | GitHub App, worker, cron jobs, grader runners. |
 
 ---
 
 ## 2. Functional requirements
 
+### FR-0 Institutions (multi-tenancy)
+| ID | Requirement | P |
+|----|-------------|---|
+| FR-0.1 | Super admins create, suspend and configure institutions (name, slug, limits, data region label). | M |
+| FR-0.2 | All data is isolated per institution; no user can read another institution's data unless they are a member of it. | M |
+| FR-0.3 | A user may belong to several institutions with different roles, and can switch between them. | M |
+| FR-0.4 | Each institution connects its own GitHub org(s), LMS connections, SSO, branding, quotas and retention policy. | M |
+| FR-0.5 | Per-institution usage reporting: active users, evaluation runs, Actions minutes, storage. | S |
+| FR-0.6 | Per-institution subdomain or vanity domain. | C |
+
 ### FR-1 Authentication & accounts
 | ID | Requirement | P |
 |----|-------------|---|
 | FR-1.1 | Students sign in with GitHub; the platform stores their immutable GitHub user id. | M |
-| FR-1.2 | Staff sign in with email/password or Google/Microsoft SSO. | M |
-| FR-1.3 | Admin accounts must use MFA (TOTP). | M |
-| FR-1.4 | Admins invite users individually or by CSV (name, email, role, course, GitHub login). | M |
+| FR-1.2 | Staff sign in with email/password, Google/Microsoft OAuth, or the institution's SAML SSO. | M (email/OAuth) / S (SAML) |
+| FR-1.3 | Institution admin and super admin accounts must use MFA (TOTP). | M |
+| FR-1.4 | Institution admins invite users individually or by CSV (name, email, role, course, GitHub login). | M |
 | FR-1.5 | A user who arrives by invite is matched to their invite on first login (email or GitHub login). | M |
 | FR-1.6 | Users can be deactivated (they can't sign in, and their history is kept). | M |
 | FR-1.7 | Profile page: name, avatar, linked GitHub account, notification preferences. | S |
+| FR-1.8 | Users launched from an LMS (LTI 1.3) are signed in and linked to their platform profile; they're asked to link GitHub on first launch. | S |
 
 ### FR-2 Courses & membership
 | ID | Requirement | P |
 |----|-------------|---|
-| FR-2.1 | Admins and teachers create courses (name, code, term, GitHub org, timezone). | M |
+| FR-2.1 | Institution admins and teachers create courses (name, code, term, GitHub org, timezone). | M |
 | FR-2.2 | Course roles: instructor, TA, student; one user can hold different roles in different courses. | M |
 | FR-2.3 | Students can be grouped into teams/sections within a course. | S |
 | FR-2.4 | Courses can be archived (read-only, excluded from active dashboards). | S |
@@ -41,7 +53,9 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 ### FR-3 Assignments
 | ID | Requirement | P |
 |----|-------------|---|
-| FR-3.1 | Teachers create assignments with spec (Markdown), template repo, runtime contract, release date, due date, late policy. | M |
+| FR-3.1 | Teachers create assignments with spec (Markdown), **stack profile**, template repo, release date, due date, late policy. | M |
+| FR-3.1a | Any tech stack can be used. The teacher or admin picks one stack profile per project, and it is locked once published (ARCHITECTURE §6.1). | M |
+| FR-3.1b | Super admins maintain global stack profiles; institution admins enable them and can add their own. | M |
 | FR-3.2 | Assignments are individual or team-based. | S |
 | FR-3.3 | Publishing provisions a private repo per student/team from the template and grants access. | M |
 | FR-3.4 | Bring-your-own-repo mode: a student links a repo where the App is installed. | S |
@@ -58,6 +72,9 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-4.2 | Store commits, PRs, reviews, issues and comments linked to submission and student. | M |
 | FR-4.3 | Attribute commits by GitHub user id; flag unmatched authors (e.g. wrong git email). | M |
 | FR-4.4 | Per-student activity timeline and metrics (see ARCHITECTURE §5.4). | M |
+| FR-4.4a | **Process score** computed from activity using a configurable, capped policy, and included as a grade component. | M |
+| FR-4.4b | Students see their live process score with per-criterion reasons and can claim unattributed commits (staff confirm). | M |
+| FR-4.4c | Team contribution share is computed and flagged for staff review (never automatically penalised). | S |
 | FR-4.5 | Reconcile missed events (redeliver failed deliveries, periodic sync). | M |
 | FR-4.6 | Detect suspicious patterns: force-push to main, commits after the deadline, large single "dump" commits. These are flags only, not penalties. | S |
 | FR-4.7 | Similarity/plagiarism check across submissions (e.g. MOSS/JPlag integration). | C |
@@ -71,7 +88,8 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-5.4 | Each run records the SHA, suite version, per-test results, logs, screenshots and traces. | M |
 | FR-5.5 | Results appear in the platform and as a GitHub Check Run on the commit/PR. | M |
 | FR-5.6 | Infra failures are distinguished from student failures, auto-retried, and never graded. | M |
-| FR-5.7 | Students see which visible tests failed and why; hidden tests show only a name/category, at a level of detail the teacher configures. | M |
+| FR-5.7 | Students see enough detail to fix every failure: test title, what was checked, expected vs actual, request/response or E2E step evidence, screenshot or trace, their app's logs, and a hint. Test source code stays hidden. | M |
+| FR-5.7a | Grader suites must include titles, hints and descriptive assertion messages for every test (enforced by suite linting), and use randomised data per run. | M |
 | FR-5.8 | Teachers can re-run any submission at any SHA, individually or in bulk. | M |
 | FR-5.9 | Per-student daily run quota and global concurrency limits. | M |
 | FR-5.10 | Final graded run on the last commit before the effective deadline (deadline plus any extension). | M |
@@ -86,7 +104,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-6.5 | Final grade computed from components, with manual override (reason required, audited). | M |
 | FR-6.6 | Grades and feedback stay hidden until staff release them (per assignment or per student). | M |
 | FR-6.7 | Students can request a regrade with a message; staff resolve it. | S |
-| FR-6.8 | Grade export (CSV); LMS integration (LTI 1.3 / Canvas / Moodle). | M (CSV) / C (LTI) |
+| FR-6.8 | Grade export (CSV). | M |
 
 ### FR-7 Dashboards & notifications
 | ID | Requirement | P |
@@ -100,7 +118,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 ### FR-8 Administration
 | ID | Requirement | P |
 |----|-------------|---|
-| FR-8.1 | User management: search, filter, invite, change platform role, deactivate, reset MFA. | M |
+| FR-8.1 | User management (within the admin's institution): search, filter, invite, change role, deactivate, reset MFA. | M |
 | FR-8.2 | Course management and staff assignment. | M |
 | FR-8.3 | GitHub installations: list orgs, permissions health, reinstall prompts. | M |
 | FR-8.4 | Grader suite registry: versions, linked assignments. | S |
@@ -108,6 +126,28 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | FR-8.6 | Audit log viewer with filters and export. | M |
 | FR-8.7 | System health: queue depths, failed jobs (retry/discard), webhook lag, Actions minutes used. | S |
 | FR-8.8 | Read-only impersonation ("view as") for support, always audited. | C |
+| FR-8.9 | Super admin console: institutions, global stack profiles, cross-tenant health; tenant data only through an audited support-access grant. | M |
+
+### FR-9 Records & performance history
+| ID | Requirement | P |
+|----|-------------|---|
+| FR-9.1 | Every graded submission's source is archived (git bundle and tarball, with hash) independently of GitHub. | M |
+| FR-9.2 | Every grade release generates an immutable, versioned grade report (JSON + PDF); changes create new versions and old versions are kept. | M |
+| FR-9.3 | Teachers and admins can view any student's full performance history (all courses, terms, submissions, reports), including archived courses. | M |
+| FR-9.4 | Students can view and download their own released grade reports at any time. | M |
+| FR-9.5 | Archived records are replicated to an external write-once bucket. | S |
+| FR-9.6 | Institution admins handle erasure requests by anonymising or deleting, according to policy, with an audit record. | S |
+
+### FR-10 LMS integration
+| ID | Requirement | P |
+|----|-------------|---|
+| FR-10.1 | Institution admins configure LMS connections: Canvas (LTI 1.3), Moodle (LTI 1.3), Google Classroom (API). | M |
+| FR-10.2 | Teachers link a platform course and its assignments to an LMS course (Deep Linking / courseWork creation). | M |
+| FR-10.3 | Released grades are pushed to the LMS automatically, with a link to the grade report; overrides and regrades re-sync. | M |
+| FR-10.4 | Sync status per student is visible to teachers, with retry; failures are alerted. | M |
+| FR-10.5 | Roster sync from the LMS (NRPS / Classroom API) to course memberships. | S |
+| FR-10.6 | Launch from the LMS into the platform (LTI resource link) with single sign-on. | S |
+| FR-10.7 | Nightly reconciliation report of platform vs LMS grades. | S |
 
 ---
 
@@ -115,12 +155,12 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 
 | ID | Category | Requirement |
 |----|----------|-------------|
-| NFR-1 | Scale (v1 target) | 2,000 active students, 100 staff, 50 concurrent courses; 20k webhook events/day; 200 concurrent evaluation runs at deadline peaks (queue, don't drop). |
+| NFR-1 | Scale (v1 target) | About 100 concurrently active students across all institutions (design headroom to 1,000 without re-architecture); 5k webhook events/day; 50 queued evaluation runs at deadline peaks (queue, don't drop). Records grow without limit, so queries must stay fast with years of history. |
 | NFR-2 | Latency | p95 page load under 2 s; p95 API under 300 ms (excluding GitHub calls); webhook ack under 500 ms; webhook to visible in UI under 30 s. |
 | NFR-3 | Evaluation time | Typical run under 10 minutes end to end; hard job timeout 20 minutes. |
 | NFR-4 | Availability | 99.5% monthly for web/api; no lost webhooks (persist first, reconcile later). |
-| NFR-5 | Durability | Supabase daily backups plus PITR in production; RPO ≤ 1 h, RTO ≤ 4 h; quarterly restore drill. |
-| NFR-6 | Security | OWASP ASVS L2 as the baseline; RLS on all user-data tables; secrets only in Render env groups / GitHub secrets; webhook HMAC; OIDC for grader callbacks; CSP, HSTS, secure cookies; dependency scanning (Dependabot/Renovate); least-privilege GitHub App. |
+| NFR-5 | Durability | Supabase daily backups plus PITR in production; Storage records replicated to an external write-once bucket; RPO ≤ 1 h (DB) / 24 h (objects), RTO ≤ 4 h; quarterly restore drill. Submission snapshots and grade reports are never deleted except under an institution's retention or erasure policy. |
+| NFR-6 | Security | OWASP ASVS L2 as the baseline; RLS on all user-data tables with tenant isolation tests for every table; LTI launches validated (nonce, state, issuer, deployment); LMS OAuth tokens encrypted at rest; secrets only in Render env groups / GitHub secrets; webhook HMAC; OIDC for grader callbacks; CSP, HSTS, secure cookies; dependency scanning (Dependabot/Renovate); least-privilege GitHub App. |
 | NFR-7 | Isolation | Untrusted student code never runs on platform infrastructure (ARCHITECTURE §6.4). |
 | NFR-8 | Privacy | FERPA/GDPR-aligned: data minimisation, retention policy, export and delete on request, DPAs with vendors, no PII in logs. |
 | NFR-9 | Auditability | All grade-affecting and permission-affecting actions recorded with actor, time, before/after. |
@@ -146,6 +186,9 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | GitHub | GitHub App, Octokit (`@octokit/app`, `@octokit/webhooks`), GraphQL for bulk reads | — |
 | Test execution | GitHub Actions (hosted → self-hosted ephemeral runners), Docker Compose, Playwright, Supertest/Hurl for API tests | Self-managed Firecracker/gVisor sandbox (later, if needed) |
 | Email | Resend or Postmark (also used as Supabase SMTP) | SES |
+| LMS | LTI 1.3 Advantage via `jose` (Canvas, Moodle); `googleapis` Classroom client | ltijs |
+| Reports | `@react-pdf/renderer` (PDF), canonical JSON + SHA-256 | Headless Chromium |
+| Archive backup | Cloudflare R2 or Backblaze B2 with object lock | AWS S3 |
 | Observability | pino, Sentry, OpenTelemetry → Grafana Cloud/Honeycomb | Datadog |
 | Hosting | Render (web, api, worker, cron, Key Value) | — |
 | DNS / domain | Any registrar; Cloudflare DNS recommended (proxy **off** for Render records) | — |
@@ -161,21 +204,31 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 - [ ] Supabase projects: staging, prod (Pro plan for prod); auth providers; custom SMTP; Custom Access Token Hook; storage buckets
 - [ ] Render workspace; Blueprint connected to this repo; env groups per environment; custom domains verified
 - [ ] Email provider with SPF/DKIM/DMARC configured for the domain
+- [ ] LTI 1.3 tool registration for each pilot institution's Canvas / Moodle; Google Cloud project with the Classroom API enabled and OAuth consent screen verified
+- [ ] External archive bucket (R2/B2) with object lock
+- [ ] Template agreement for institutions (DPA, retention defaults)
 - [ ] Sentry project(s); uptime monitor on `/healthz`
 - [ ] Data protection: privacy policy, terms, DPAs, retention schedule
 
 ---
 
-## 6. Open questions to settle before building
+## 6. Decisions log
 
-1. **Tenancy**: one institution, or multiple institutions (each with its own admins and GitHub
-   orgs)? The data model includes `institutions` so both work, but multi-tenant changes the
-   admin UX and RLS.
-2. **Stacks**: will every assignment use one stack (e.g. React + Node + Postgres), or should
-   any Docker-runnable stack be supported? This decides how generic the harness must be.
-3. **Volume and budget for evaluation minutes**: numbers of students and runs per week, so we
-   can choose hosted or self-hosted runners.
-4. **LMS**: is there an LMS (Canvas, Moodle, Google Classroom) that grades must flow into?
-5. **Hidden-test policy**: how much failure detail students see for hidden tests.
-6. **Activity in grades**: whether process metrics may count towards a grade, and how.
-7. **Data residency** requirements, which determine the Supabase and Render regions.
+| # | Question | Decision | Where it is reflected |
+|---|----------|----------|-----------------------|
+| Q1 | Tenancy | **Multiple institutions** on one deployment, isolated by `institution_id` + RLS | ARCHITECTURE §4.1, FR-0, DATA_MODEL |
+| Q2 | Tech stacks | **Any stack**; the teacher/admin fixes one **stack profile** per project | ARCHITECTURE §6.1, FR-3.1a/b |
+| Q3 | Volume and persistence | About **100 concurrent students**; **all submissions and grade reports stored permanently** and viewable at any time | NFR-1, NFR-5, ARCHITECTURE §12, FR-9 |
+| Q4 | LMS | Grades **flow to Canvas, Moodle and Google Classroom**; the platform stays the system of record | ARCHITECTURE §13, FR-10 |
+| Q5 | Failure detail | Students see **enough detail to fix the problem**; test source stays hidden | ARCHITECTURE §6.5, FR-5.7 |
+| Q6 | Activity in grades | **Yes**: a process score is a standard grade component | ARCHITECTURE §5.4, FR-4.4a–c |
+
+### Still open
+
+1. **Data residency**: which regions must data stay in (e.g. India, EU, US)? This sets the
+   Supabase and Render regions. If institutions need different regions, we would need one
+   deployment per region.
+2. **Default retention period**: "permanent" in practice means until the institution's
+   contract ends plus N years. What is N?
+3. **Who pays for evaluation compute**: is it the platform (included in the plan) or each
+   institution (bring your own runners or GitHub org)?
