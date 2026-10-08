@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell, PageTitle } from "@/components/app-shell";
 import { Alert, Badge, Button, Card, EmptyState, Field } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
+import { enforceAdminMfa } from "@/lib/mfa";
 import { requireSession } from "@/lib/session";
 import { createInstitution, mapInstallation } from "./actions";
 
@@ -32,6 +33,7 @@ export default async function PlatformPage({
 }) {
   const [session, query] = await Promise.all([requireSession(), searchParams]);
   if (!session.isSuperAdmin) notFound();
+  await enforceAdminMfa("/platform");
 
   const [institutions, installations] = await Promise.all([
     apiFetch<{ institutions: InstitutionRow[] }>("/v1/platform/institutions"),

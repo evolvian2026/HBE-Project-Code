@@ -1,6 +1,7 @@
 import type { InstitutionRole } from "@hbe/core";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { enforceAdminMfa } from "./mfa";
 import { requireSession, type SessionContext } from "./session";
 
 export interface InstitutionContext {
@@ -17,6 +18,7 @@ export const requireMembership = cache(async (slug: string): Promise<Institution
   const session = await requireSession();
   const membership = session.memberships.find((m) => m.institution.slug === slug);
   if (!membership) notFound();
+  if (membership.role === "admin") await enforceAdminMfa(`/i/${slug}`);
   return {
     session,
     institution: membership.institution,

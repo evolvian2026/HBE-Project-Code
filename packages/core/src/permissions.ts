@@ -4,7 +4,10 @@ export type InstitutionRole = "admin" | "teacher" | "student";
 
 export interface Actor {
   userId: string;
+  /** Super admin AND (MFA passed or not required): see mfaSatisfied. */
   isSuperAdmin: boolean;
+  /** Session passed MFA (aal2), or the platform does not require it for admins. */
+  mfaSatisfied: boolean;
   githubUserId: number | null;
   /** Active memberships in usable (active or read-only) institutions. */
   memberships: ReadonlyMap<string, { role: InstitutionRole; institutionStatus: InstitutionStatus }>;
@@ -20,8 +23,10 @@ export class ForbiddenError extends Error {
   }
 }
 
+/** Effective role: an admin without MFA has no admin powers (mirrors the database rule). */
 export function roleIn(actor: Actor, institutionId: string): InstitutionRole | null {
-  return actor.memberships.get(institutionId)?.role ?? null;
+  const role = actor.memberships.get(institutionId)?.role ?? null;
+  return role === "admin" && !actor.mfaSatisfied ? null : role;
 }
 
 const can = {

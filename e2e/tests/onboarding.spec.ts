@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn, sql } from "./support.ts";
+import { passMfa, setUpMfa, signIn, sql } from "./support.ts";
 
 const suffix = Date.now().toString(36);
 const superEmail = `super-${suffix}@e2e.test`;
@@ -22,7 +22,9 @@ test("a super admin creates an institution and its invited admin lands in it", a
   await sql("insert into public.user_roles (user_id, role) select id, 'super_admin' from auth.users where email = $1", [
     superEmail,
   ]);
+  // Super admins must set up two-factor authentication before the console opens.
   await page.goto("/platform");
+  const superSecret = await setUpMfa(page);
   await expect(page.getByRole("heading", { name: "Platform console" })).toBeVisible();
 
   await page.getByLabel("Name", { exact: true }).fill(name);
@@ -37,6 +39,7 @@ test("a super admin creates an institution and its invited admin lands in it", a
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();
   await signIn(admin, adminEmail);
+  await setUpMfa(admin); // institution admins too
   await expect(admin).toHaveURL(new RegExp(`/i/${slug}$`));
   await expect(admin.getByRole("heading", { name })).toBeVisible();
   await expect(admin.getByText("You are")).toContainText("admin");
@@ -52,6 +55,15 @@ test("a super admin creates an institution and its invited admin lands in it", a
   await admin.goto("/i/not-their-institution");
   await expect(admin.getByText("Page not found")).toBeVisible();
   await adminContext.close();
+
+  // Signing in again asks for a code instead of setting MFA up again.
+  const again = await browser.newContext();
+  const superAgain = await again.newPage();
+  await signIn(superAgain, superEmail);
+  await superAgain.goto("/platform");
+  await passMfa(superAgain, superSecret);
+  await expect(superAgain.getByRole("heading", { name: "Platform console" })).toBeVisible();
+  await again.close();
 });
 
 test("someone without an invitation gets no access", async ({ page }) => {

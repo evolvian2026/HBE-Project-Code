@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createInstitutionWithAdmin, signIn, sql } from "./support.ts";
+import { createInstitutionWithAdmin, setUpMfa, signIn, sql } from "./support.ts";
 
 const suffix = Date.now().toString(36);
 const email = (who: string) => `${who}-${suffix}@e2e.test`;
@@ -19,6 +19,7 @@ test("an admin sets up a course, invites people, and each role sees the right th
   const adminCtx = await browser.newContext();
   const admin = await adminCtx.newPage();
   await signIn(admin, email("admin"));
+  await setUpMfa(admin);
   await expect(admin).toHaveURL(new RegExp(`/i/${slug}$`));
 
   // Create a course.
@@ -54,11 +55,11 @@ test("an admin sets up a course, invites people, and each role sees the right th
   await expect(admin.getByText("3 waiting")).toBeVisible();
 
   // Invitation emails were queued.
-  const [{ count }] = await sql<{ count: string }>(
+  const [queued] = await sql<{ count: string }>(
     "select count(*) from public.email_outbox where template = 'invitation' and to_email like $1",
     [`%-${suffix}@e2e.test`],
   );
-  expect(Number(count)).toBe(4); // admin + teacher + 2 students
+  expect(Number(queued!.count)).toBe(4); // admin + teacher + 2 students
 
   // The last admin cannot demote themselves.
   const me = admin.getByRole("listitem").filter({ hasText: "(you)" });

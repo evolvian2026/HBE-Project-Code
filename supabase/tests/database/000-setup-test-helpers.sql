@@ -47,13 +47,14 @@ begin
 end;
 $$;
 
--- Switch to the `authenticated` role with the given user as JWT subject.
--- Undo with `reset role;` in the test file.
-create or replace function tests.authenticate_as(p_user uuid) returns void
+-- Switch to the `authenticated` role with the given user as JWT subject. Sessions are
+-- MFA-verified (aal2) unless p_aal says otherwise. Undo with `reset role;`.
+drop function if exists tests.authenticate_as(uuid);
+create or replace function tests.authenticate_as(p_user uuid, p_aal text default 'aal2') returns void
 language plpgsql as $$
 begin
   perform set_config('request.jwt.claims',
-                     jsonb_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+                     jsonb_build_object('sub', p_user, 'role', 'authenticated', 'aal', p_aal)::text, true);
   perform set_config('role', 'authenticated', true);
 end;
 $$;

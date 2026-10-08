@@ -12,6 +12,7 @@ afterAll(() => db.destroy());
 
 // Column names per table as declared in types.ts.
 const declared: Record<string, string[]> = {
+  platform_settings: ["key", "value", "description", "updated_by", "updated_at"],
   email_outbox: [
     "id",
     "institution_id",

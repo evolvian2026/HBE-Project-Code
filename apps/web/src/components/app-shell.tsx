@@ -29,7 +29,9 @@ export function AppShell({
             </Link>
           )}
           <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden text-muted sm:inline">{session.email ?? session.githubLogin}</span>
+            <Link href="/account/security" className="hidden text-muted hover:text-text sm:inline">
+              {session.email ?? session.githubLogin}
+            </Link>
             <form action="/auth/signout" method="post">
               <button className="text-muted hover:text-text">Sign out</button>
             </form>

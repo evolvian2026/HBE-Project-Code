@@ -51,14 +51,17 @@ export class FakeQueue implements JobQueue {
 /** Maps opaque test tokens to user ids. */
 export class FakeVerifier implements TokenVerifier {
   private tokens = new Map<string, string>();
-  tokenFor(userId: string): string {
+  private aals = new Map<string, string>();
+  /** Sessions are MFA-verified (aal2) unless stated otherwise. */
+  tokenFor(userId: string, aal: "aal1" | "aal2" = "aal2"): string {
     const token = `token-${randomUUID()}`;
     this.tokens.set(token, userId);
+    this.aals.set(token, aal);
     return token;
   }
   async verify(token: string) {
     const userId = this.tokens.get(token);
-    return userId ? { userId, aal: "aal1" } : null;
+    return userId ? { userId, aal: this.aals.get(token) ?? "aal1" } : null;
   }
 }
 

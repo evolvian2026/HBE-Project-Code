@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import pg from "pg";
 
@@ -52,4 +53,38 @@ export async function createInstitutionWithAdmin(slug: string, name: string, adm
     adminEmail,
   ]);
   return inst!.id;
+}
+
+/** RFC 6238 TOTP (SHA-1, 6 digits, 30 s), as authenticator apps compute it. */
+export function totp(base32Secret: string, now = Date.now()): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const ch of base32Secret.replace(/=+$/, "").toUpperCase())
+    bits += alphabet.indexOf(ch).toString(2).padStart(5, "0");
+  const key = Buffer.from(bits.match(/.{8}/g)!.map((b) => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 1000 / 30)));
+  const hmac = createHmac("sha1", key).update(counter).digest();
+  const offset = hmac[hmac.length - 1]! & 0xf;
+  return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, "0");
+}
+
+/** Completes the "admins must set up two-factor" page; returns the TOTP secret. */
+export async function setUpMfa(page: Page): Promise<string> {
+  await expect(page).toHaveURL(/\/account\/security\?/);
+  await expect(page.getByText("Admins must use two-factor authentication.")).toBeVisible();
+  await page.getByRole("button", { name: "Set up authenticator app" }).click();
+  const secret = (await page.getByTestId("totp-secret").textContent())!.trim();
+  await page.getByLabel("Code").fill(totp(secret));
+  await page.getByRole("button", { name: "Verify and turn on" }).click();
+  await expect(page).not.toHaveURL(/\/account\/security/);
+  return secret;
+}
+
+/** Answers the two-factor challenge shown at sign-in. */
+export async function passMfa(page: Page, secret: string): Promise<void> {
+  await expect(page).toHaveURL(/\/auth\/mfa/);
+  await page.getByLabel("Code").fill(totp(secret));
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).not.toHaveURL(/\/auth\/mfa/);
 }

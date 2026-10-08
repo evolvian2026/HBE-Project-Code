@@ -72,6 +72,15 @@ psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \
 
 Then open **Platform** to create an institution and invite its admin.
 
+Admins (super admins and institution admins) must set up two-factor authentication with an
+authenticator app; the database withholds admin powers until they do. For local experiments
+only, you can relax this:
+
+```bash
+psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \
+  "update public.platform_settings set value = 'false' where key = 'require_admin_mfa'"
+```
+
 GitHub sign-in and webhooks need a development GitHub App. The exact settings, where each
 credential goes, and how to forward webhooks are in [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md).
 

@@ -105,7 +105,17 @@ HBE__RUNTIME__QUEUE_CONCURRENCY=3
 Overrides are type-checked. An unknown key (a typo) or a wrong type stops startup with a clear
 message.
 
-## 5. Adding a new setting
+## 5. Platform settings in the database
+
+A few switches must be enforced by the database itself, so they live in the
+`platform_settings` table rather than in env vars. Super admins can change them; every change
+is audited.
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `require_admin_mfa` | `true` | Admin powers (RLS and API) need a session that passed two-factor authentication. Only set to `false` for local experiments. |
+
+## 6. Adding a new setting
 
 1. Add the key to **both** `free.yaml` and `paid.yaml` (a test fails if they diverge).
 2. Add it to `profileSchema` in `packages/settings/src/profile.ts`.

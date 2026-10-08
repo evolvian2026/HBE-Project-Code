@@ -5,6 +5,7 @@ import { SLUG_PATTERN, slugify } from "./slug.ts";
 const actor = (over: Partial<Actor> = {}): Actor => ({
   userId: "u1",
   isSuperAdmin: false,
+  mfaSatisfied: true,
   githubUserId: null,
   memberships: new Map(),
   ...over,
@@ -31,6 +32,12 @@ describe("permissions", () => {
 
   it("super admins can invite an institution's admins without being a member", () => {
     expect(allowed(actor({ isSuperAdmin: true }), "inviteInstitutionAdmin", "inst-b")).toBe(true);
+  });
+
+  it("admins without MFA have no admin powers", () => {
+    const noMfa = { ...admin, mfaSatisfied: false };
+    expect(allowed(noMfa, "manageInstitution", "inst-a")).toBe(false);
+    expect(allowed(noMfa, "inviteInstitutionAdmin", "inst-a")).toBe(false);
   });
 
   it("authorize throws a 403 error", () => {

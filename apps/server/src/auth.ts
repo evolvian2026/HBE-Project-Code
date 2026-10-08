@@ -36,8 +36,8 @@ export function supabaseTokenVerifier(supabaseUrl: string, publishableKey: strin
  * Builds the actor from the database, never from token claims, so role changes
  * and deactivations take effect immediately.
  */
-export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
-  const [profile, superAdmin, memberships] = await Promise.all([
+export async function loadActor(db: Db, userId: string, aal: string | null): Promise<Actor | null> {
+  const [profile, superAdmin, memberships, mfaSetting] = await Promise.all([
     db.selectFrom("profiles").select(["id", "status", "github_user_id"]).where("id", "=", userId).executeTakeFirst(),
     db
       .selectFrom("user_roles")
@@ -53,12 +53,16 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
       .where("m.status", "=", "active")
       .where("i.status", "in", ["active", "read_only"])
       .execute(),
+    db.selectFrom("platform_settings").select("value").where("key", "=", "require_admin_mfa").executeTakeFirst(),
   ]);
   if (!profile || profile.status !== "active") return null;
 
+  // Same rule as private.admin_mfa_ok() in the database.
+  const mfaSatisfied = aal === "aal2" || mfaSetting?.value === false;
   return {
     userId,
-    isSuperAdmin: Boolean(superAdmin),
+    isSuperAdmin: Boolean(superAdmin) && mfaSatisfied,
+    mfaSatisfied,
     githubUserId: profile.github_user_id,
     memberships: new Map(
       memberships.map((m) => [
@@ -75,7 +79,7 @@ export async function authenticate(req: FastifyRequest, db: Db, verifier: TokenV
   if (!token) throw unauthorized();
   const verified = await verifier.verify(token);
   if (!verified) throw unauthorized("Session expired or invalid");
-  const actor = await loadActor(db, verified.userId);
+  const actor = await loadActor(db, verified.userId, verified.aal);
   if (!actor) throw unauthorized("Account is not active");
   return actor;
 }

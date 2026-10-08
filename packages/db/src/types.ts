@@ -172,6 +172,14 @@ export interface EmailOutboxTable {
   sent_at: Timestamp | null;
 }
 
+export interface PlatformSettingsTable {
+  key: string;
+  value: Json;
+  description: string | null;
+  updated_by: string | null;
+  updated_at: DefaultTimestamp;
+}
+
 export interface Database {
   institutions: InstitutionsTable;
   profiles: ProfilesTable;
@@ -185,6 +193,7 @@ export interface Database {
   github_link_requests: GithubLinkRequestsTable;
   github_events: GithubEventsTable;
   email_outbox: EmailOutboxTable;
+  platform_settings: PlatformSettingsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

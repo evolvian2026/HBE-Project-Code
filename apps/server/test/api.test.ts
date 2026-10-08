@@ -33,7 +33,9 @@ afterAll(async () => {
   await db.destroy();
 });
 
-const as = (userId: string) => ({ authorization: `Bearer ${verifier.tokenFor(userId)}` });
+const as = (userId: string, aal: "aal1" | "aal2" = "aal2") => ({
+  authorization: `Bearer ${verifier.tokenFor(userId, aal)}`,
+});
 
 describe("health", () => {
   it("reports liveness and readiness", async () => {
@@ -75,6 +77,18 @@ describe("super admin: institutions", () => {
     });
     expect(res.statusCode).toBe(403);
     expect((await app.inject({ url: "/v1/platform/institutions", headers: as(admin) })).statusCode).toBe(403);
+  });
+
+  it("requires MFA for super admin actions", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/platform/institutions",
+      headers: as(superAdmin, "aal1"),
+      payload: { name: "No MFA" },
+    });
+    expect(res.statusCode).toBe(403);
+    const me = await app.inject({ url: "/v1/me", headers: as(superAdmin, "aal1") });
+    expect(me.json()).toMatchObject({ isSuperAdmin: false, mfaSatisfied: false });
   });
 
   it("creates an institution with an admin invitation, audited with the actor", async () => {
@@ -143,6 +157,11 @@ describe("GitHub organisation linking", () => {
   it("only lets institution admins start a link", async () => {
     expect((await app.inject({ method: "POST", url: url(), headers: as(teacher) })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: url(), headers: as(superAdmin) })).statusCode).toBe(403);
+  });
+
+  it("requires MFA for institution admins", async () => {
+    const res = await app.inject({ method: "POST", url: url(), headers: as(adminWithGithub, "aal1") });
+    expect(res.statusCode).toBe(403);
   });
 
   it("requires the admin to have linked their GitHub account", async () => {

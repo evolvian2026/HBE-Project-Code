@@ -24,6 +24,7 @@ export async function meRoutes(app: FastifyInstance, { db, verifier }: ApiDeps):
     return {
       profile,
       isSuperAdmin: actor.isSuperAdmin,
+      mfaSatisfied: actor.mfaSatisfied,
       institutions: memberships.map(({ role, ...institution }) => ({ ...institution, role })),
     };
   });
