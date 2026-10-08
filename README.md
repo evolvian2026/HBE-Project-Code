@@ -72,9 +72,8 @@ psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \
 
 Then open **Platform** to create an institution and invite its admin.
 
-GitHub sign-in and webhooks need a development GitHub App: put its credentials in `.env.local`,
-enable `[auth.external.github]` in `supabase/config.toml`, and forward webhooks to
-`http://localhost:4000/webhooks/github` (for example with smee.io).
+GitHub sign-in and webhooks need a development GitHub App. The exact settings, where each
+credential goes, and how to forward webhooks are in [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md).
 
 > If Docker Hub is reachable but AWS ECR is not, start Supabase with
 > `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io pnpm db:start`.
@@ -107,6 +106,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above plus a Docker image build 
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements, tech stack, setup checklist, decisions log |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Database schema, RLS patterns, indexes |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Config layering, files, and exact changes for each migration (Supabase Pro, AWS EC2, runners) |
+| [docs/GITHUB_APP_SETUP.md](docs/GITHUB_APP_SETUP.md) | Exact GitHub App settings (dev, demo, production) and how to test them |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Free-tier demo setup, AWS EC2 production design, runners, migration runbook |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased delivery plan and key risks |
 | [docs/adr/](docs/adr/README.md) | Architecture decision records |
