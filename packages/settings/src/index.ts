@@ -18,7 +18,10 @@ const ROLE_NAMES = new Set<Role>(["web", "api", "worker"]);
 
 function parseRoles(raw: string | undefined, fallback: Role[]): Set<Role> {
   if (!raw) return new Set(fallback);
-  const roles = raw.split(",").map((r) => r.trim()).filter(Boolean);
+  const roles = raw
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean);
   const unknown = roles.filter((r) => !ROLE_NAMES.has(r as Role));
   if (unknown.length) throw new Error(`Unknown ROLES: ${unknown.join(", ")} (expected web, api, worker)`);
   return new Set(roles as Role[]);
@@ -39,7 +42,9 @@ export function loadSettings(source: Record<string, string | undefined> = proces
 
   const problems = validateEnv(env, roles);
   if (problems.length) {
-    throw new Error(`Invalid configuration (HBE_ENV=${env.HBE_ENV}, profile=${profile.profile}):\n  - ${problems.join("\n  - ")}`);
+    throw new Error(
+      `Invalid configuration (HBE_ENV=${env.HBE_ENV}, profile=${profile.profile}):\n  - ${problems.join("\n  - ")}`,
+    );
   }
 
   return {

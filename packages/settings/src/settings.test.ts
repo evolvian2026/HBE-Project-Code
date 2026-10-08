@@ -18,6 +18,7 @@ const demo = {
   GITHUB_APP_ID: "1",
   GITHUB_APP_PRIVATE_KEY_BASE64: "a2V5",
   GITHUB_WEBHOOK_SECRET: "s",
+  GITHUB_APP_SLUG: "hbe-demo",
   GRADER_REPO: "hbe-demo-org/hbe-grader",
   ARCHIVE_S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
   ARCHIVE_S3_BUCKET: "hbe-archive",

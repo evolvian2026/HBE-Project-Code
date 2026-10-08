@@ -10,15 +10,15 @@ name: evaluate
 on:
   workflow_dispatch:
     inputs:
-      run_id:       { required: true,  type: string }
-      repo_owner:   { required: true,  type: string }   # student repo owner (institution org)
-      repo_name:    { required: true,  type: string }   # student repo name
-      sha:          { required: true,  type: string }
-      suite:        { required: true,  type: string }   # e.g. acme-uni/a3@v4
-      stack:        { required: true,  type: string }   # e.g. mern-node20@3
+      run_id: { required: true, type: string }
+      repo_owner: { required: true, type: string } # student repo owner (institution org)
+      repo_name: { required: true, type: string } # student repo name
+      sha: { required: true, type: string }
+      suite: { required: true, type: string } # e.g. acme-uni/a3@v4
+      stack: { required: true, type: string } # e.g. mern-node20@3
 
 permissions:
-  id-token: write   # GitHub OIDC token for the results callback
+  id-token: write # GitHub OIDC token for the results callback
   contents: read
 
 concurrency:
@@ -53,7 +53,7 @@ jobs:
           ref: ${{ inputs.sha }}
           token: ${{ steps.student-token.outputs.token }}
           path: submission
-          fetch-depth: 0   # full history is needed for the git bundle snapshot
+          fetch-depth: 0 # full history is needed for the git bundle snapshot
 
       - name: Evaluate
         run: echo "TODO(phase-1) contract validation, build, stages, snapshot, upload, results callback"

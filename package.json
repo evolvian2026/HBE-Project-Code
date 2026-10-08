@@ -34,6 +34,11 @@
     "vitest": "3.2.7"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "supabase", "sharp", "@tailwindcss/oxide"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "supabase",
+      "sharp",
+      "@tailwindcss/oxide"
+    ]
   }
 }

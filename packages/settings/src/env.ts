@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { Role } from "./profile.ts";
 
-const optional = z.string().trim().optional().transform((v) => (v ? v : undefined));
+const optional = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v ? v : undefined));
 const url = z.string().url();
 const pgUrl = z.string().regex(/^postgres(ql)?:\/\//, "must be a postgres:// connection string");
 
@@ -9,6 +13,9 @@ export const envSchema = z.object({
   HBE_ENV: z.enum(["local", "demo", "staging", "production"]),
   HBE_PLAN_PROFILE: z.enum(["free", "paid"]),
   ROLES: optional,
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /** Built Next.js app served by the web role (defaults to apps/web relative to the server). */
+  WEB_DIR: optional,
   TZ: z.string().default("Asia/Singapore"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error"]).default("info"),
 
@@ -26,7 +33,12 @@ export const envSchema = z.object({
   GITHUB_APP_CLIENT_SECRET: optional,
   GITHUB_APP_PRIVATE_KEY_BASE64: optional,
   GITHUB_WEBHOOK_SECRET: optional,
-  GRADER_REPO: z.string().regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo").optional(),
+  /** The App's URL slug (github.com/apps/<slug>), used for install links. */
+  GITHUB_APP_SLUG: optional,
+  GRADER_REPO: z
+    .string()
+    .regex(/^[\w.-]+\/[\w.-]+$/, "must be owner/repo")
+    .optional(),
   GRADER_WORKFLOW: z.string().default("evaluate.yml"),
   GRADER_REF: z.string().default("main"),
 
@@ -68,10 +80,13 @@ const deployed = (env: Env) => env.HBE_ENV !== "local";
 
 /** Cross-field rules: which variables a given role/environment needs. */
 const rules: Rule[] = [
-  { when: serverSide, check: required("SUPABASE_SECRET_KEY", "DATABASE_URL", "TOKEN_ENCRYPTION_KEY") },
+  {
+    when: serverSide,
+    check: required("SUPABASE_SECRET_KEY", "DATABASE_URL", "QUEUE_DATABASE_URL", "TOKEN_ENCRYPTION_KEY"),
+  },
   { when: serverSide, check: required("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_BASE64") },
-  { when: (_, r) => r.has("api"), check: required("GITHUB_WEBHOOK_SECRET") },
-  { when: (_, r) => r.has("worker"), check: required("QUEUE_DATABASE_URL", "GRADER_REPO", "EMAIL_FROM") },
+  { when: (_, r) => r.has("api"), check: required("GITHUB_WEBHOOK_SECRET", "GITHUB_APP_SLUG") },
+  { when: (_, r) => r.has("worker"), check: required("GRADER_REPO", "EMAIL_FROM") },
   { when: (e, r) => r.has("worker") && e.EMAIL_PROVIDER === "resend", check: required("RESEND_API_KEY") },
   { when: (e, r) => r.has("worker") && e.EMAIL_PROVIDER === "ses", check: required("AWS_SES_REGION") },
   { when: (e, r) => r.has("worker") && deployed(e), check: required("ARCHIVE_S3_BUCKET") },

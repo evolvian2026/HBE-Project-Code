@@ -14,7 +14,9 @@ function readEnvFile(path: string): Record<string, string> {
 
 const file = process.argv[2];
 try {
-  const settings = loadSettings(file ? { ...readEnvFile(file), HBE_CONFIG_DIR: process.env.HBE_CONFIG_DIR } : process.env);
+  const settings = loadSettings(
+    file ? { ...readEnvFile(file), HBE_CONFIG_DIR: process.env.HBE_CONFIG_DIR } : process.env,
+  );
   console.log("Configuration OK");
   console.table(describeSettings(settings));
 } catch (err) {

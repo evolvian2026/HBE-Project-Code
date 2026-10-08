@@ -24,17 +24,17 @@ retention:
   export_notice_days: [90, 30]
 
 evaluation:
-  runner: self_hosted             # ephemeral EC2 spot runners (DEPLOYMENT.md §2.4)
+  runner: self_hosted # ephemeral EC2 spot runners (DEPLOYMENT.md §2.4)
   runs_per_student_per_day: 10
-  global_concurrency: 10          # keep ≤ the runner module's max-instances cap
+  global_concurrency: 10 # keep ≤ the runner module's max-instances cap
   institution_concurrency: 4
   monthly_runner_minutes_budget: 30000
   push_debounce_seconds: 300
   job_timeout_minutes: 20
 
 backups:
-  strategy: supabase_pitr         # Supabase Pro daily backups + PITR add-on
-  pg_dump_keep_days: 30           # extra logical dumps to S3 are still taken weekly
+  strategy: supabase_pitr # Supabase Pro daily backups + PITR add-on
+  pg_dump_keep_days: 30 # extra logical dumps to S3 are still taken weekly
   archive_replication: true
 
 email:
@@ -49,6 +49,6 @@ features:
 limits:
   max_institutions: 50
   max_active_students: 1000
-  database_soft_limit_mb: 7000    # Pro includes 8 GB; alert before the overage
-  storage_soft_limit_mb: 90000    # Pro includes 100 GB
+  database_soft_limit_mb: 7000 # Pro includes 8 GB; alert before the overage
+  storage_soft_limit_mb: 90000 # Pro includes 100 GB
   max_upload_mb: 500
