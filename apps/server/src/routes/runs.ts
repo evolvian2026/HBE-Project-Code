@@ -7,6 +7,7 @@ import { authenticate } from "../auth.ts";
 import { HttpError, notFound } from "../errors.ts";
 import { manualRunsToday, queueRun } from "../evaluation.ts";
 import type { GraderAuth } from "../grader-auth.ts";
+import type { ObjectStore } from "../storage.ts";
 
 const text = (max: number) =>
   z
@@ -16,8 +17,19 @@ const text = (max: number) =>
 const status = z.enum(["passed", "failed", "skipped", "error"]);
 
 /** What the grader harness reports (docs/ARCHITECTURE.md §6.5), with size limits. */
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
+
 const resultsSchema = z.object({
   infra_error: text(2000).nullable().default(null),
+  /** Source snapshot the harness uploaded (graded runs only). */
+  snapshot: z
+    .object({
+      bundle_sha256: sha256Hex,
+      bundle_size: z.number().int().nonnegative(),
+      tarball_sha256: sha256Hex,
+      tarball_size: z.number().int().nonnegative(),
+    })
+    .optional(),
   stages: z
     .array(
       z.object({
@@ -49,8 +61,19 @@ const resultsSchema = z.object({
     .max(20),
 });
 
-export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAuth: GraderAuth }): Promise<void> {
-  const { db, verifier, graderAuth } = deps;
+export const ARCHIVE_BUCKET = "submission-archive";
+
+/** Where a graded commit's source snapshot lives in the archive bucket. */
+const snapshotPaths = (run: { institution_id: string; submission_id: string; sha: string }) => {
+  const base = `${run.institution_id}/${run.submission_id}/${run.sha}`;
+  return { bundle: `${base}.bundle`, tarball: `${base}.tar.gz` };
+};
+
+export async function runRoutes(
+  app: FastifyInstance,
+  deps: ApiDeps & { graderAuth: GraderAuth; store: ObjectStore },
+): Promise<void> {
+  const { db, verifier, graderAuth, store } = deps;
 
   /**
    * Students start a run on the head of their default branch (within the daily quota, if the
@@ -165,7 +188,16 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
   const loadRun = async (runId: string) => {
     const run = await db
       .selectFrom("evaluation_runs")
-      .select(["id", "status", "callback_token_hash", "gh_workflow_run_id"])
+      .select([
+        "id",
+        "status",
+        "trigger",
+        "sha",
+        "institution_id",
+        "submission_id",
+        "callback_token_hash",
+        "gh_workflow_run_id",
+      ])
       .where("id", "=", z.string().uuid().parse(runId))
       .executeTakeFirst();
     if (!run) throw notFound("Run not found");
@@ -184,6 +216,23 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
       .where("id", "=", run.id)
       .execute();
     return { ok: true };
+  });
+
+  /**
+   * Grader callback: where to upload the source snapshot. Graded runs (deadline, re-grade)
+   * archive the commit; other runs get `{}` and skip it.
+   */
+  app.post<{ Params: { runId: string } }>("/v1/runs/:runId/snapshot-uploads", async (req) => {
+    const run = await loadRun(req.params.runId);
+    await graderAuth.verify(req, run);
+    if (!["dispatched", "running"].includes(run.status))
+      throw new HttpError(409, "run_not_active", `Run is ${run.status}`);
+    if (run.trigger !== "deadline" && run.trigger !== "regrade") return {};
+    const paths = snapshotPaths(run);
+    return {
+      bundle: { path: paths.bundle, url: await store.signedUploadUrl(ARCHIVE_BUCKET, paths.bundle) },
+      tarball: { path: paths.tarball, url: await store.signedUploadUrl(ARCHIVE_BUCKET, paths.tarball) },
+    };
   });
 
   /** Grader callback: results. Stored, then scored and reported by the worker. */
@@ -220,6 +269,23 @@ export async function runRoutes(app: FastifyInstance, deps: ApiDeps & { graderAu
         .where("id", "=", run.id)
         .executeTakeFirstOrThrow();
       await tx.deleteFrom("test_results").where("run_id", "=", run.id).execute();
+      if (results.snapshot && (run.trigger === "deadline" || run.trigger === "regrade")) {
+        const paths = snapshotPaths(run);
+        const values = {
+          run_id: run.id,
+          bundle_path: paths.bundle,
+          bundle_sha256: results.snapshot.bundle_sha256,
+          bundle_size: results.snapshot.bundle_size,
+          tarball_path: paths.tarball,
+          tarball_sha256: results.snapshot.tarball_sha256,
+          tarball_size: results.snapshot.tarball_size,
+        };
+        await tx
+          .insertInto("submission_snapshots")
+          .values({ institution_id, submission_id: run.submission_id, sha: run.sha, ...values })
+          .onConflict((oc) => oc.columns(["submission_id", "sha"]).doUpdateSet(values))
+          .execute();
+      }
       if (tests.length)
         await tx
           .insertInto("test_results")

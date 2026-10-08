@@ -8,6 +8,7 @@ import { ZodError } from "zod";
 import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
 import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
+import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
 import { gradingRoutes } from "./routes/grading.ts";
 import { runRoutes } from "./routes/runs.ts";
@@ -26,6 +27,8 @@ export interface AppDeps {
   verifier: TokenVerifier;
   /** Defaults to the configured grader callback authentication. */
   graderAuth?: GraderAuth;
+  /** Defaults to Supabase Storage. */
+  store?: ObjectStore;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -73,7 +76,11 @@ export async function buildApp(
     await app.register(platformRoutes, apiDeps);
     await app.register(institutionRoutes, apiDeps);
     await app.register(assignmentRoutes, apiDeps);
-    await app.register(runRoutes, { ...apiDeps, graderAuth: deps.graderAuth ?? createGraderAuth(deps.settings) });
+    await app.register(runRoutes, {
+      ...apiDeps,
+      graderAuth: deps.graderAuth ?? createGraderAuth(deps.settings),
+      store: deps.store ?? supabaseObjectStore(deps.settings),
+    });
     await app.register(gradingRoutes, apiDeps);
   }
 

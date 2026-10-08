@@ -4,6 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -117,35 +118,86 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
   });
 
   it("calls back with the run token: started, then results", async () => {
-    const calls = [];
-    const server = createServer((req, res) => {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        calls.push({ url: req.url, auth: req.headers.authorization, body: body ? JSON.parse(body) : null });
-        res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
-      });
-    });
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    try {
-      const { port } = server.address();
-      await harness(path.join(root, "test-fixtures/todo-api-good"), [
-        "--api-url",
-        `http://127.0.0.1:${port}`,
-        "--token",
-        "local-run-token",
-      ]);
-    } finally {
-      server.close();
-    }
+    const { calls } = await withPlatform(path.join(root, "test-fixtures/todo-api-good"), () => ({}));
     assert.deepEqual(
       calls.map((c) => [c.url, c.auth]),
       [
         [`/v1/runs/${runId}/started`, "Bearer local-run-token"],
+        [`/v1/runs/${runId}/snapshot-uploads`, "Bearer local-run-token"],
         [`/v1/runs/${runId}/results`, "Bearer local-run-token"],
       ],
     );
-    assert.equal(calls[1].body.run_id, runId);
-    assert.equal(calls[1].body.stages.length, 4);
+    assert.equal(calls[2].body.run_id, runId);
+    assert.equal(calls[2].body.stages.length, 4);
+    assert.equal(calls[2].body.snapshot, undefined); // not a graded run
+  });
+
+  it("archives a graded commit: a git bundle and a tarball, with their hashes", async () => {
+    const submission = path.join(work, "git-submission");
+    cpSync(path.join(root, "test-fixtures/todo-api-good"), submission, { recursive: true });
+    const git = (...args) =>
+      promisify(execFile)("git", [
+        "-C",
+        submission,
+        "-c",
+        "user.name=Ada",
+        "-c",
+        "user.email=ada@example.test",
+        ...args,
+      ]);
+    await git("init", "-q", "-b", "main");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "Finish the API");
+
+    const { calls, uploads } = await withPlatform(submission, (port) => ({
+      bundle: { path: "x.bundle", url: `http://127.0.0.1:${port}/upload/bundle?token=t` },
+      tarball: { path: "x.tar.gz", url: `http://127.0.0.1:${port}/upload/tarball?token=t` },
+    }));
+    const results = calls.find((c) => c.url.endsWith("/results")).body;
+    const bundle = uploads.get("/upload/bundle?token=t");
+    const tarball = uploads.get("/upload/tarball?token=t");
+    assert.equal(bundle.type, "application/x-git-bundle");
+    assert.equal(tarball.type, "application/gzip");
+    assert.deepEqual(results.snapshot, {
+      bundle_sha256: createHash("sha256").update(bundle.body).digest("hex"),
+      bundle_size: bundle.body.length,
+      tarball_sha256: createHash("sha256").update(tarball.body).digest("hex"),
+      tarball_size: tarball.body.length,
+    });
+    // The bundle is a complete, verifiable copy of the history.
+    const file = path.join(work, "check.bundle");
+    writeFileSync(file, bundle.body);
+    await promisify(execFile)("git", ["-C", submission, "bundle", "verify", file]);
   });
 });
+
+/**
+ * Runs the harness against a stand-in platform API that records callbacks and uploads.
+ * `uploadTargets(port)` answers the snapshot-uploads callback.
+ */
+async function withPlatform(submission, uploadTargets) {
+  const calls = [];
+  const uploads = new Map();
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks);
+      if (req.method === "PUT") {
+        uploads.set(req.url, { type: req.headers["content-type"], body });
+        res.writeHead(200).end("{}");
+        return;
+      }
+      calls.push({ url: req.url, auth: req.headers.authorization, body: body.length ? JSON.parse(body) : null });
+      const reply = req.url.endsWith("/snapshot-uploads") ? uploadTargets(server.address().port) : { ok: true };
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(reply));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    await harness(submission, ["--api-url", `http://127.0.0.1:${server.address().port}`, "--token", "local-run-token"]);
+  } finally {
+    server.close();
+  }
+  return { calls, uploads };
+}

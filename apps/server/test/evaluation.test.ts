@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { hashToken } from "../src/evaluation.ts";
 import { oidcGraderAuth, tokenGraderAuth } from "../src/grader-auth.ts";
+import { MemoryObjectStore } from "../src/storage.ts";
 import { handlePullRequest, handlePush } from "../src/worker/activity.ts";
 import { dispatchRun, reapRuns, runnerMinutesThisMonth, scoreAndReport } from "../src/worker/evaluation.ts";
 import { FakeQueue, FakeVerifier, Fixtures, randomGithubId, testDb, testSettings } from "./helpers.ts";
@@ -44,11 +45,12 @@ const runsOf = (submissionId: string) =>
   db.selectFrom("evaluation_runs").selectAll().where("submission_id", "=", submissionId).orderBy("queued_at").execute();
 
 let app: FastifyInstance;
+const store = new MemoryObjectStore();
 let queue: FakeQueue;
 
 beforeAll(async () => {
   queue = new FakeQueue();
-  app = await buildApp({ settings, db, queue, verifier, graderAuth: tokenGraderAuth() });
+  app = await buildApp({ settings, db, queue, verifier, graderAuth: tokenGraderAuth(), store });
 });
 
 afterAll(async () => {
@@ -410,6 +412,53 @@ describe("grader callbacks (per-run token)", () => {
       .executeTakeFirstOrThrow();
     expect(stored).toEqual({ status: "infra_error", score: null });
     expect(github.checkRuns[0]).toMatchObject({ conclusion: "neutral", title: "The grader could not run" });
+  });
+
+  it("archives the source of graded runs only", async () => {
+    const s = await scenario();
+    const token = "graded-run-token";
+    const commit = sha();
+    const insertRun = (trigger: "deadline" | "manual") =>
+      db
+        .insertInto("evaluation_runs")
+        .values({
+          institution_id: s.institutionId,
+          submission_id: s.submissionId,
+          sha: commit,
+          trigger,
+          status: "running",
+          grader_suite_id: null,
+          stack_profile_id: null,
+          requested_by: null,
+          callback_token_hash: hashToken(token),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+    const manual = await insertRun("manual");
+    expect((await post(`/v1/runs/${manual.id}/snapshot-uploads`, token)).json()).toEqual({});
+
+    const graded = await insertRun("deadline");
+    const targets = (await post(`/v1/runs/${graded.id}/snapshot-uploads`, token)).json();
+    const base = `${s.institutionId}/${s.submissionId}/${commit}`;
+    expect(targets).toEqual({
+      bundle: { path: `${base}.bundle`, url: `memory://submission-archive/${base}.bundle?token=test` },
+      tarball: { path: `${base}.tar.gz`, url: `memory://submission-archive/${base}.tar.gz?token=test` },
+    });
+
+    const snapshot = {
+      bundle_sha256: "a".repeat(64),
+      bundle_size: 1234,
+      tarball_sha256: "b".repeat(64),
+      tarball_size: 567,
+    };
+    expect((await post(`/v1/runs/${graded.id}/results`, token, { stages: [], snapshot })).statusCode).toBe(200);
+    const stored = await db
+      .selectFrom("submission_snapshots")
+      .selectAll()
+      .where("submission_id", "=", s.submissionId)
+      .executeTakeFirstOrThrow();
+    expect(stored).toMatchObject({ sha: commit, run_id: graded.id, bundle_path: `${base}.bundle`, ...snapshot });
   });
 
   it("rejects callbacks for runs that are not active", async () => {

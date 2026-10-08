@@ -72,6 +72,7 @@ jobs:
           token: ${{ steps.student-token.outputs.token }}
           path: submission
           persist-credentials: false # the build must not see a token in .git/config
+          fetch-depth: 0 # full history for the source snapshot (git bundle) of graded runs
 
       - uses: actions/setup-node@v4
         with:

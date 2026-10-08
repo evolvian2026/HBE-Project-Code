@@ -66,7 +66,7 @@ export default async function SubmissionPage({ params }: Props) {
     repository: { owner: string; name: string } | null;
   };
 
-  const [snapshot, commits, prs, issues, extension, policyRow, runs] = await Promise.all([
+  const [snapshot, commits, prs, issues, extension, policyRow, runs, archive] = await Promise.all([
     supabase
       .from("process_snapshots")
       .select("breakdown, computed_at, is_final")
@@ -109,6 +109,14 @@ export default async function SubmissionPage({ params }: Props) {
       .eq("submission_id", s.id)
       .order("queued_at", { ascending: false })
       .limit(20),
+    s.final_sha
+      ? supabase
+          .from("submission_snapshots")
+          .select("id, tarball_sha256")
+          .eq("submission_id", s.id)
+          .eq("sha", s.final_sha)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
   const runList = (runs.data ?? []) as RunSummary[];
 
@@ -193,6 +201,22 @@ export default async function SubmissionPage({ params }: Props) {
                   <span className="font-mono">{s.final_sha.slice(0, 7)}</span>
                 )}
                 , pushed {s.submitted_at && formatInZone(s.submitted_at, course.timezone)}
+                {archive.data && (
+                  <span className="text-muted">
+                    · archived source:{" "}
+                    <a
+                      href={`/i/${slug}/snapshots/${archive.data.id}/tarball`}
+                      className="text-accent hover:underline"
+                      title={`SHA-256 ${archive.data.tarball_sha256}`}
+                    >
+                      tar.gz
+                    </a>{" "}
+                    ·{" "}
+                    <a href={`/i/${slug}/snapshots/${archive.data.id}/bundle`} className="text-accent hover:underline">
+                      git bundle
+                    </a>
+                  </span>
+                )}
                 {s.late_days ? (
                   <Badge tone="warning">
                     {s.late_days} day{s.late_days === 1 ? "" : "s"} late

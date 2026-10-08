@@ -112,14 +112,20 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
     return r?.status;
   }).toBe("dispatched");
   const test_ = (id: string, status: string) => ({ id, title: id, status, weight: 1 });
-  await reportRun(baseURL!, runId, {
-    stages: [
-      { key: "contract", status: "passed", duration_ms: 5 },
-      { key: "build", status: "passed", duration_ms: 5 },
-      { key: "health", status: "passed", duration_ms: 5 },
-      { key: "api", status: "failed", duration_ms: 5, tests: [test_("a", "passed"), test_("b", "failed")] },
-    ],
-  });
+  const tarball = Buffer.from("pretend this is the student's code, gzipped");
+  await reportRun(
+    baseURL!,
+    runId,
+    {
+      stages: [
+        { key: "contract", status: "passed", duration_ms: 5 },
+        { key: "build", status: "passed", duration_ms: 5 },
+        { key: "health", status: "passed", duration_ms: 5 },
+        { key: "api", status: "failed", duration_ms: 5, tests: [test_("a", "passed"), test_("b", "failed")] },
+      ],
+    },
+    { snapshot: { bundle: Buffer.from("bundle"), tarball } },
+  );
 
   // The instructor sees the calculated grade waiting for the rubric, scores it and writes feedback.
   const submissionUrl = `/i/${slug}/courses/${course!.id}/assignments/${assignment!.id}/submissions/${submission!.id}`;
@@ -132,6 +138,11 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   }, 30_000).toBeGreaterThan(0);
   await teacher.goto(submissionUrl);
   const grading = teacher.locator("section").filter({ hasText: "Grading" });
+  // The graded commit's source was archived; staff can download it.
+  const archived = await teacher.request.get(
+    (await teacher.getByRole("link", { name: "tar.gz" }).getAttribute("href"))!,
+  );
+  expect(Buffer.from(await archived.body()).toString()).toBe(tarball.toString());
   await expect(grading.getByText("Still needed: rubric scores for 1 criterion.")).toBeVisible();
   await grading.getByLabel("Points for Code quality").fill("8");
   await grading.getByLabel("Comment").fill("Clear structure; name things consistently.");

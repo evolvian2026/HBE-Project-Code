@@ -12,7 +12,7 @@
  * Failures caused by the platform (Docker Hub limits, a full disk, a broken suite) are
  * reported as `infra_error`: the run is not graded.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -296,7 +296,59 @@ async function testStage(def) {
   return { status: anyFailed ? "failed" : "passed", tests };
 }
 
+/**
+ * Graded runs archive the commit (FR-9.1): a git bundle (history up to the commit) and a
+ * tarball of the tree, uploaded to signed URLs from the platform. Failures are logged and
+ * don't stop grading.
+ */
+async function snapshot() {
+  if (!callbacks) return;
+  let targets;
+  try {
+    targets = await callbacks.snapshotUploads();
+  } catch (err) {
+    log(`snapshot: no upload URLs (${err.message})`);
+    return;
+  }
+  if (!targets?.bundle || !targets?.tarball) return; // not a graded run
+  if (!existsSync(path.join(submissionDir, ".git"))) {
+    log("snapshot: the submission is not a git checkout; skipped");
+    return;
+  }
+  const files = {
+    bundle: { file: path.join(workdir, "snapshot.bundle"), type: "application/x-git-bundle" },
+    tarball: { file: path.join(workdir, "snapshot.tar.gz"), type: "application/gzip" },
+  };
+  const made = [
+    await run("git", ["-C", submissionDir, "bundle", "create", files.bundle.file, "HEAD"], { timeoutMs: 300_000 }),
+    await run("git", ["-C", submissionDir, "archive", "--format=tar.gz", "-o", files.tarball.file, "HEAD"], {
+      timeoutMs: 300_000,
+    }),
+  ];
+  const failed = made.find((r) => r.code !== 0);
+  if (failed) {
+    log(`snapshot: git failed: ${tailLines(failed.stderr, 3)}`);
+    return;
+  }
+  const out = {};
+  for (const [kind, { file, type }] of Object.entries(files)) {
+    const body = readFileSync(file);
+    const res = await fetch(targets[kind].url, { method: "PUT", headers: { "content-type": type }, body }).catch(
+      (err) => ({ ok: false, status: err.message }),
+    );
+    if (!res.ok) {
+      log(`snapshot: upload of the ${kind} failed (${res.status})`);
+      return;
+    }
+    out[`${kind}_sha256`] = createHash("sha256").update(body).digest("hex");
+    out[`${kind}_size`] = body.length;
+  }
+  results.snapshot = out;
+  log(`snapshot: archived (${out.bundle_size + out.tarball_size} bytes)`);
+}
+
 async function main() {
+  await snapshot();
   try {
     let ok = true;
     for (const [key, fn] of [

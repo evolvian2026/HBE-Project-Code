@@ -111,21 +111,46 @@ export async function sendWebhook(baseURL: string, event: string, payload: unkno
  * Plays the grader for a run the worker dispatched to the in-memory GitHub: gives the run a
  * known callback token, then reports `started` and the given results like the harness does.
  */
-export async function reportRun(baseURL: string, runId: string, results: unknown): Promise<void> {
+export async function reportRun(
+  baseURL: string,
+  runId: string,
+  results: Record<string, unknown>,
+  opts: { snapshot?: { bundle: Buffer; tarball: Buffer } } = {},
+): Promise<void> {
   const token = randomBytes(24).toString("base64url");
   await sql("update public.evaluation_runs set callback_token_hash = $2 where id = $1", [
     runId,
     createHash("sha256").update(token).digest("hex"),
   ]);
-  for (const [path, body] of [
-    ["started", {}],
-    ["results", results],
-  ] as const) {
+  const call = async (path: string, body: unknown) => {
     const res = await fetch(`${baseURL}/v1/runs/${runId}/${path}`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
     expect(res.status).toBe(200);
+    return res.json();
+  };
+  await call("started", {});
+  let snapshot: Record<string, unknown> | undefined;
+  if (opts.snapshot) {
+    // Upload like the harness: to the signed URLs the platform hands out, then report the hashes.
+    const targets = (await call("snapshot-uploads", {})) as Record<"bundle" | "tarball", { url: string }>;
+    snapshot = {};
+    for (const [kind, type] of [
+      ["bundle", "application/x-git-bundle"],
+      ["tarball", "application/gzip"],
+    ] as const) {
+      const body = opts.snapshot[kind];
+      const res = await fetch(targets[kind].url, {
+        method: "PUT",
+        headers: { "content-type": type },
+        body: new Uint8Array(body),
+      });
+      expect(res.status).toBe(200);
+      snapshot[`${kind}_sha256`] = createHash("sha256").update(body).digest("hex");
+      snapshot[`${kind}_size`] = body.length;
+    }
   }
+  await call("results", { ...results, ...(snapshot ? { snapshot } : {}) });
 }

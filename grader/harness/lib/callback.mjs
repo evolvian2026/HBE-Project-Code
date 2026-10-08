@@ -52,6 +52,8 @@ export function createCallbacks({ apiUrl, runId, token }) {
 
   return {
     started: () => post("started", {}),
+    /** Signed upload URLs for the source snapshot (graded runs), or `{}`. */
+    snapshotUploads: () => post("snapshot-uploads", {}),
     results: (results) => post("results", results, 6),
   };
 }
