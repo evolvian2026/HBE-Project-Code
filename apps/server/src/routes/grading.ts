@@ -101,7 +101,7 @@ export async function gradingRoutes(app: FastifyInstance, deps: ApiDeps): Promis
       throw err;
     });
 
-    return { grade: gradeView(await recomputeGrade(db, s.id, { actorId: actor.userId })) };
+    return { grade: gradeView(await recomputeGrade(db, s.id, { actorId: actor.userId, queue: deps.queue })) };
   });
 
   /** Instructors (not TAs) override a final grade, with a reason; `score: null` removes the override. */
@@ -121,6 +121,7 @@ export async function gradingRoutes(app: FastifyInstance, deps: ApiDeps): Promis
     if (!s.finalized_at) throw new HttpError(409, "not_final", "The graded commit isn't fixed yet.");
     const grade = await recomputeGrade(db, s.id, {
       actorId: actor.userId,
+      queue: deps.queue,
       override: body.score === null ? null : { score: body.score, reason: body.reason! },
     });
     return { grade: gradeView(grade) };
@@ -138,6 +139,6 @@ export async function gradingRoutes(app: FastifyInstance, deps: ApiDeps): Promis
     if (!a) throw notFound("Assignment not found");
     authorize(actor, "manageCourse", a.institution_id, await courseRoleOf(db, a.course_id, actor.userId));
     const body = z.object({ submissionIds: z.array(z.string().uuid()).max(1000).optional() }).parse(req.body ?? {});
-    return releaseGrades(db, a.id, { actorId: actor.userId, submissionIds: body.submissionIds });
+    return releaseGrades(db, a.id, { actorId: actor.userId, submissionIds: body.submissionIds, queue: deps.queue });
   });
 }

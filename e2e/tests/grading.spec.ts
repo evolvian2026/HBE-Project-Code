@@ -156,6 +156,21 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await expect(card.getByText("Clear structure; name things consistently.")).toBeVisible();
   await expect(card.getByRole("strong")).toHaveText("README");
 
+  // Release wrote a grade report the student can download (from private Storage).
+  const reports = async () =>
+    (
+      await sql<{ n: number }>("select count(*)::int as n from public.grade_reports where submission_id = $1", [
+        submission!.id,
+      ])
+    )[0]?.n;
+  await poll(reports, 30_000).toBe(1);
+  await student.reload();
+  const pdf = await student.request.get(
+    (await card.getByRole("link", { name: "Grade report (PDF)" }).getAttribute("href"))!,
+  );
+  expect(pdf.headers()["content-type"]).toContain("application/pdf");
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+
   // An override with a reason: the student sees the new grade, not the reason.
   await teacher.goto(submissionUrl);
   await grading.getByLabel("Final grade").fill("55");
@@ -167,6 +182,14 @@ test("work pushed before the deadline is graded, reviewed, released and adjusted
   await expect(card.getByTestId("final-grade")).toHaveText("55 / 100");
   await expect(card.getByText(/Adjusted by your instructor/)).toBeVisible();
   await expect(student.getByText("Bonus for the excellent tests")).toHaveCount(0);
+
+  // The change made a second report version; the reason stays out of it.
+  await poll(reports, 30_000).toBe(2);
+  await student.reload();
+  const json = await student.request.get((await card.getByRole("link", { name: "JSON" }).getAttribute("href"))!);
+  const report = await json.json();
+  expect(report).toMatchObject({ report: { version: 2 }, grade: { final: 55, computed: 50, adjusted_by_staff: true } });
+  expect(JSON.stringify(report)).not.toContain("Bonus for the excellent tests");
 
   // The course dashboard shows the released grade, and the export has it.
   await teacher.goto(`/i/${slug}/courses/${course!.id}`);

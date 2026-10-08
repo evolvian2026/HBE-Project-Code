@@ -4,6 +4,7 @@ import { describeSettings, loadSettings } from "@hbe/settings";
 import { buildApp, loggerOptions } from "./app.ts";
 import { supabaseTokenVerifier } from "./auth.ts";
 import { createGitHubClient } from "./github.ts";
+import { supabaseObjectStore } from "./storage.ts";
 import { startWorker } from "./worker/index.ts";
 
 /**
@@ -43,7 +44,14 @@ async function start(): Promise<void> {
   await queue?.start();
   if (roles.has("worker") && db && queue) {
     await startWorker(
-      { db, queue, settings, github: createGitHubClient(settings), log: app.log.child({ role: "worker" }) },
+      {
+        db,
+        queue,
+        settings,
+        github: createGitHubClient(settings),
+        store: supabaseObjectStore(settings),
+        log: app.log.child({ role: "worker" }),
+      },
       settings,
     );
   }

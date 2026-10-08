@@ -113,7 +113,7 @@ export default async function SubmissionPage({ params }: Props) {
   const runList = (runs.data ?? []) as RunSummary[];
 
   // Grading (staff): rubric, feedback and every grade version.
-  const [criteria, scores, feedback, grades, reasons] = isCourseStaff
+  const [criteria, scores, feedback, grades, reasons, reports] = isCourseStaff
     ? await Promise.all([
         supabase
           .from("assignment_criteria")
@@ -124,8 +124,20 @@ export default async function SubmissionPage({ params }: Props) {
         supabase.from("feedback").select("body_md").eq("submission_id", s.id).maybeSingle(),
         supabase.from("grades").select(GRADE_COLUMNS).eq("submission_id", s.id).order("version", { ascending: false }),
         supabase.rpc("grade_override_reasons", { p_submission: s.id }),
+        supabase
+          .from("grade_reports")
+          .select("id, version, grade_version, generated_at, sha256")
+          .eq("submission_id", s.id)
+          .order("version", { ascending: false }),
       ])
-    : [null, null, null, null, null];
+    : [null, null, null, null, null, null];
+  const reportList = (reports?.data ?? []) as {
+    id: string;
+    version: number;
+    grade_version: number;
+    generated_at: string;
+    sha256: string;
+  }[];
   const gradeVersions = (grades?.data ?? []) as unknown as GradeRow[];
   const currentGrade = gradeVersions[0];
   const overrideReasons = new Map(
@@ -222,6 +234,29 @@ export default async function SubmissionPage({ params }: Props) {
                         : null
                     }
                   />
+                </div>
+              )}
+              {reportList.length > 0 && (
+                <div className="border-t border-border pt-4 text-sm">
+                  <h3 className="mb-2 font-medium">Grade reports</h3>
+                  <ul className="space-y-1">
+                    {reportList.map((r) => (
+                      <li key={r.id} className="flex flex-wrap items-center gap-x-3">
+                        <span>
+                          v{r.version} · grade v{r.grade_version} · {formatInZone(r.generated_at, course.timezone)}
+                        </span>
+                        <a href={`/i/${slug}/reports/${r.id}/pdf`} className="text-accent hover:underline">
+                          PDF
+                        </a>
+                        <a href={`/i/${slug}/reports/${r.id}/json`} className="text-accent hover:underline">
+                          JSON
+                        </a>
+                        <span className="font-mono text-xs text-muted" title="SHA-256 of the JSON record">
+                          {r.sha256.slice(0, 12)}…
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {gradeVersions.length > 1 && (

@@ -4,19 +4,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { recomputeGrade } from "../src/grading.ts";
 import { tokenGraderAuth } from "../src/grader-auth.ts";
-import { handlePush } from "../src/worker/activity.ts";
-import { finalizeDueSubmissions } from "../src/worker/deadlines.ts";
 import { scoreAndReport } from "../src/worker/evaluation.ts";
 import { FakeQueue, FakeVerifier, Fixtures, testDb, testSettings } from "./helpers.ts";
-import { createScenario, pushEvent, sha, type Scenario } from "./scenario.ts";
+import { createGradedScenario, type GradedScenario as Graded, type Scenario } from "./scenario.ts";
 
 const db = testDb();
 const fixtures = new Fixtures(db);
 const settings = testSettings({ GRADER_CALLBACK_AUTH: "token" });
 const log = Fastify({ logger: false }).log;
 const verifier = new FakeVerifier();
-const HOUR = 3_600_000;
-const deps = () => ({ db, queue: new FakeQueue(), settings, log });
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -28,63 +24,8 @@ afterAll(async () => {
   await db.destroy();
 });
 
-interface Graded extends Scenario {
-  ta: string;
-  criteria: [string, string];
-  runId: string | null;
-}
-
-/**
- * A finalized submission: two rubric criteria of 10 points, weights 60/25/15, a frozen process
- * score of 80, and (unless `pushed` is false) a completed deadline run scoring 70.
- */
-async function graded({ pushed = true, lateDays = 0 } = {}): Promise<Graded> {
-  const deadline = new Date(Date.now() - 2 * HOUR);
-  const s = await createScenario(db, fixtures, {
-    dueAt: deadline,
-    latePolicy: { per_day_percent: 10, max_days: 0, grace_minutes: 15 },
-    weights: { automated: 60, rubric: 25, process: 15 },
-  });
-  const criteria = await db
-    .insertInto("assignment_criteria")
-    .values([
-      {
-        institution_id: s.institutionId,
-        assignment_id: s.assignmentId,
-        title: "Code quality",
-        max_points: "10",
-        position: 0,
-      },
-      { institution_id: s.institutionId, assignment_id: s.assignmentId, title: "Docs", max_points: "10", position: 1 },
-    ])
-    .returning("id")
-    .execute();
-  const ta = await fixtures.user();
-  await db
-    .insertInto("institution_memberships")
-    .values({ institution_id: s.institutionId, user_id: ta, role: "teacher", external_id: null })
-    .execute();
-  await db
-    .insertInto("course_memberships")
-    .values({ institution_id: s.institutionId, course_id: s.courseId, user_id: ta, role: "ta" })
-    .execute();
-  if (pushed) {
-    await handlePush(deps(), pushEvent(s, sha(), { pushedAt: Math.floor((deadline.getTime() - HOUR) / 1000) }));
-  }
-  await finalizeDueSubmissions(deps());
-  await db.updateTable("process_snapshots").set({ score: "80" }).where("submission_id", "=", s.submissionId).execute();
-  if (lateDays) {
-    await db.updateTable("submissions").set({ late_days: lateDays }).where("id", "=", s.submissionId).execute();
-  }
-  const run = await db
-    .updateTable("evaluation_runs")
-    .set({ status: "completed", score: "70", finished_at: new Date() })
-    .where("submission_id", "=", s.submissionId)
-    .where("trigger", "=", "deadline")
-    .returning("id")
-    .executeTakeFirst();
-  return { ...s, ta, criteria: [criteria[0]!.id, criteria[1]!.id], runId: run?.id ?? null };
-}
+const graded = (opts: { pushed?: boolean; lateDays?: number } = {}) =>
+  createGradedScenario(db, fixtures, settings, opts);
 
 const as = (userId: string) => ({ authorization: `Bearer ${verifier.tokenFor(userId)}` });
 const review = (s: Graded, userId: string, payload: object) =>

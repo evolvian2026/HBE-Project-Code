@@ -333,6 +333,38 @@ export interface BranchPushesTable {
   received_at: DefaultTimestamp;
 }
 
+/** One immutable report (JSON + PDF in Storage) per released grade version. */
+export interface GradeReportsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  grade_id: string;
+  user_id: string;
+  version: number;
+  grade_version: number;
+  json_path: string;
+  pdf_path: string;
+  sha256: string;
+  pdf_sha256: string;
+  generated_at: DefaultTimestamp;
+}
+
+/** Source of a graded commit, archived by the grader job. */
+export interface SubmissionSnapshotsTable {
+  id: Generated<string>;
+  institution_id: string;
+  submission_id: string;
+  run_id: string | null;
+  sha: string;
+  bundle_path: string;
+  bundle_sha256: string;
+  bundle_size: number;
+  tarball_path: string;
+  tarball_sha256: string;
+  tarball_size: number;
+  created_at: DefaultTimestamp;
+}
+
 export interface CommitsTable {
   id: Generated<string>;
   institution_id: string;
@@ -501,6 +533,8 @@ export interface Database {
   rubric_scores: RubricScoresTable;
   feedback: FeedbackTable;
   grades: GradesTable;
+  grade_reports: GradeReportsTable;
+  submission_snapshots: SubmissionSnapshotsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

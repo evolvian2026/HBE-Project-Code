@@ -133,12 +133,18 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const cutoff = submissionCutoff(new Date(effectiveDue), a.late_policy);
   const gradedRun = mine ? myRuns.find((r) => r.trigger === "deadline" || r.trigger === "regrade") : undefined;
   const myGrade = mine ? gradeBySubmission.get(mine.id) : undefined;
-  const [myScores, myFeedback] = myGrade
+  const [myScores, myFeedback, myReports] = myGrade
     ? await Promise.all([
         supabase.from("rubric_scores").select("criterion_id, points, comment").eq("submission_id", mine!.id),
         supabase.from("feedback").select("body_md").eq("submission_id", mine!.id).maybeSingle(),
+        supabase
+          .from("grade_reports")
+          .select("id, version, generated_at")
+          .eq("submission_id", mine!.id)
+          .order("version", { ascending: false }),
       ])
-    : [null, null];
+    : [null, null, null];
+  const latestReport = (myReports?.data ?? [])[0] as { id: string; version: number; generated_at: string } | undefined;
   const myScoreByCriterion = new Map(
     ((myScores?.data ?? []) as { criterion_id: string; points: string; comment: string | null }[]).map((r) => [
       r.criterion_id,
@@ -240,7 +246,24 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       )}
 
       {myGrade && (
-        <Card title="Your grade" description={`Released ${formatInZone(myGrade.released_at!, course.timezone)}`}>
+        <Card
+          title="Your grade"
+          description={`Released ${formatInZone(myGrade.released_at!, course.timezone)}`}
+          actions={
+            latestReport ? (
+              <span className="flex gap-3 text-sm">
+                <a href={`/i/${slug}/reports/${latestReport.id}/pdf`} className="text-accent hover:underline">
+                  Grade report (PDF)
+                </a>
+                <a href={`/i/${slug}/reports/${latestReport.id}/json`} className="text-accent hover:underline">
+                  JSON
+                </a>
+              </span>
+            ) : (
+              <span className="text-sm text-muted">Report being prepared…</span>
+            )
+          }
+        >
           <div className="grid gap-8 lg:grid-cols-2">
             <GradeBreakdown grade={myGrade} />
             <div className="space-y-4">

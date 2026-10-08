@@ -174,6 +174,21 @@ begin
     select s.institution_id, s.id, s.user_id, 1, '{}', 70, 75, 'Bonus for documentation', 75, true
     from public.submissions s where s.repository_id is not null;
 
+  -- Records: a report of each (unreleased) grade, and a snapshot of each graded commit.
+  insert into public.grade_reports (institution_id, submission_id, grade_id, user_id, version, grade_version,
+                                    json_path, pdf_path, sha256, pdf_sha256)
+    select g.institution_id, g.submission_id, g.id, g.user_id, 1, 1,
+           g.institution_id || '/' || g.submission_id || '/v1.json', g.institution_id || '/' || g.submission_id || '/v1.pdf',
+           repeat('a', 64), repeat('b', 64)
+    from public.grades g;
+  insert into public.submission_snapshots (institution_id, submission_id, sha, bundle_path, bundle_sha256, bundle_size,
+                                           tarball_path, tarball_sha256, tarball_size)
+    select s.institution_id, s.id, repeat('b', 40), s.id || '.bundle', repeat('c', 64), 10, s.id || '.tar.gz', repeat('d', 64), 10
+    from public.submissions s where s.repository_id is not null;
+  insert into storage.objects (bucket_id, name)
+    select 'grade-reports', json_path from public.grade_reports
+    union all select 'submission-archive', bundle_path from public.submission_snapshots;
+
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
     (tests.id('inst_b'), tests.id('admin_b'), 7002);
@@ -213,6 +228,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'feedback', count(*) from public.feedback where institution_id = p_institution
   union all select 'grades', count(*) from public.grades where institution_id = p_institution
   union all select 'submission_overview', count(*) from public.submission_overview where institution_id = p_institution
+  union all select 'grade_reports', count(*) from public.grade_reports where institution_id = p_institution
+  union all select 'submission_snapshots', count(*) from public.submission_snapshots where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

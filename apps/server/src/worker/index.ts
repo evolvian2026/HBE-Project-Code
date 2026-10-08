@@ -6,11 +6,16 @@ import { processGithubEvent, sweepUnprocessedEvents, type WorkerDeps } from "./g
 import { provisionSubmission, sweepProvisioning } from "./provisioning.ts";
 import { computeSubmissionProcess, fetchCommitDetails } from "./activity.ts";
 import { recomputeGrade } from "../grading.ts";
+import { generateGradeReport } from "../reports/index.ts";
+import type { ObjectStore } from "../storage.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
-export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, settings: Settings): Promise<void> {
+export async function startWorker(
+  deps: WorkerDeps & { github: GitHubClient; store: ObjectStore },
+  settings: Settings,
+): Promise<void> {
   const { queue, log } = deps;
   await queue.work("github-event", (job) => processGithubEvent(deps, job.data.eventId), {
     concurrency: settings.profile.runtime.queue_concurrency,
@@ -64,7 +69,10 @@ export async function startWorker(deps: WorkerDeps & { github: GitHubClient }, s
   });
   await queue.schedule("deadline-sweep", "* * * * *", {});
   await queue.work("compute-grade", async (job) => {
-    await recomputeGrade(deps.db, job.data.submissionId, { actorId: null });
+    await recomputeGrade(deps.db, job.data.submissionId, { actorId: null, queue });
+  });
+  await queue.work("grade-report", async (job) => {
+    await generateGradeReport(deps, job.data.gradeId);
   });
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

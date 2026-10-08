@@ -1,5 +1,11 @@
 import { computeGrade, type LatePolicy, type Weights } from "@hbe/core";
 import { sql, withActor, type Db, type Json } from "@hbe/db";
+import type { JobQueue } from "@hbe/queue";
+
+/** Queues the grade report of a released grade version (after the version is committed). */
+export async function queueReport(queue: JobQueue | undefined, gradeId: string): Promise<void> {
+  await queue?.send("grade-report", { gradeId }, { singletonKey: `report-${gradeId}` });
+}
 
 /** JSON with keys sorted, so stored and freshly computed values compare equal. */
 function canonical(value: unknown): string {
@@ -27,9 +33,10 @@ export interface Override {
 export async function recomputeGrade(
   db: Db,
   submissionId: string,
-  opts: { actorId: string | null; override?: Override | null },
+  opts: { actorId: string | null; override?: Override | null; queue?: JobQueue },
 ) {
-  return withActor(db, opts.actorId, async (tx) => {
+  let releasedVersion: string | null = null;
+  const grade = await withActor(db, opts.actorId, async (tx) => {
     const s = await tx
       .selectFrom("submissions as s")
       .innerJoin("assignments as a", "a.id", "s.assignment_id")
@@ -133,7 +140,7 @@ export async function recomputeGrade(
     if (current) {
       await tx.updateTable("grades").set({ is_current: false }).where("id", "=", current.id).execute();
     }
-    return tx
+    const inserted = await tx
       .insertInto("grades")
       .values({
         institution_id: s.institution_id,
@@ -147,7 +154,11 @@ export async function recomputeGrade(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+    if (inserted.released_at) releasedVersion = inserted.id;
+    return inserted;
   });
+  if (releasedVersion) await queueReport(opts.queue, releasedVersion);
+  return grade;
 }
 
 export interface ReleaseResult {
@@ -162,9 +173,10 @@ export interface ReleaseResult {
 export async function releaseGrades(
   db: Db,
   assignmentId: string,
-  opts: { actorId: string; submissionIds?: string[] },
+  opts: { actorId: string; submissionIds?: string[]; queue?: JobQueue },
 ): Promise<ReleaseResult> {
-  return withActor(db, opts.actorId, async (tx) => {
+  const releasedGrades: string[] = [];
+  const result = await withActor(db, opts.actorId, async (tx) => {
     let query = tx
       .selectFrom("submissions as s")
       .leftJoin("grades as g", (j) => j.onRef("g.submission_id", "=", "s.id").on("g.is_current", "=", true))
@@ -190,6 +202,7 @@ export async function releaseGrades(
         .where("id", "=", c.id)
         .execute();
       await tx.updateTable("grades").set({ released_at: now }).where("id", "=", c.grade_id).execute();
+      releasedGrades.push(c.grade_id);
       result.released++;
     }
 
@@ -207,4 +220,6 @@ export async function releaseGrades(
     }
     return result;
   });
+  for (const id of releasedGrades) await queueReport(opts.queue, id);
+  return result;
 }

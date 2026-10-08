@@ -26,6 +26,8 @@ export interface QueuePayloads {
   "deadline-sweep": Record<string, never>;
   /** Recompute a finalized submission's grade (a new version if anything changed). */
   "compute-grade": { submissionId: string };
+  /** Write the grade report (JSON + PDF) of a released grade version. */
+  "grade-report": { gradeId: string };
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -51,6 +53,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "run-reaper": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 120, policy: "stately" },
   "deadline-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
   "compute-grade": { retryLimit: 3, retryDelay: 10, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
+  "grade-report": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

@@ -16,7 +16,7 @@
     "test": "turbo run test",
     "test:integration": "turbo run test:integration --concurrency=1",
     "config:check": "pnpm --filter @hbe/settings check",
-    "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta",
+    "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,postgres-meta",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
