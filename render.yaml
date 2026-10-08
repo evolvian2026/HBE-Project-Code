@@ -1,0 +1,79 @@
+# Render Blueprint: FREE-TIER DEMO (see docs/DEPLOYMENT.md §1)
+# Leaving Render later doesn't need changes here: the same image and env vars move to
+# deploy/aws/. Values marked sync:false are entered in the Render dashboard
+# (template: config/env/demo-render.env.example).
+services:
+  - type: web
+    name: hbe-app
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    domains:
+      - app.example.com
+      - api.example.com
+    envVars:
+      - key: HBE_ENV
+        value: demo
+      - key: HBE_PLAN_PROFILE
+        value: free
+      - key: ROLES
+        value: web,api,worker
+      - key: TZ
+        value: Asia/Singapore
+      - key: APP_URL
+        value: https://app.example.com
+      - key: API_URL
+        value: https://api.example.com
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: QUEUE_DATABASE_URL
+        sync: false
+      - key: GITHUB_APP_ID
+        sync: false
+      - key: GITHUB_APP_CLIENT_ID
+        sync: false
+      - key: GITHUB_APP_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_APP_PRIVATE_KEY_BASE64
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: GRADER_REPO
+        sync: false
+      - key: ARCHIVE_S3_ENDPOINT
+        sync: false
+      - key: ARCHIVE_S3_REGION
+        value: auto
+      - key: ARCHIVE_S3_BUCKET
+        value: hbe-archive
+      - key: ARCHIVE_S3_ACCESS_KEY_ID
+        sync: false
+      - key: ARCHIVE_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: LTI_PRIVATE_KEY_BASE64
+        sync: false
+      - key: LTI_KEY_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false

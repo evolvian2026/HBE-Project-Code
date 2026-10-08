@@ -27,5 +27,6 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, components, GitHub integration, evaluation pipeline, security, deployment, custom domain |
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements, tech stack, setup checklist, decisions log |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Database schema, RLS patterns, indexes |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Config layering, files, and exact changes for each migration (Supabase Pro, AWS EC2, runners) |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Free-tier demo setup, AWS EC2 production design, runners, migration runbook |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased delivery plan and key risks |

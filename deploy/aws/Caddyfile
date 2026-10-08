@@ -1,0 +1,20 @@
+# TLS via Let's Encrypt for the same hostnames used on Render.
+# Stage B replaces Caddy with an ALB + ACM (DEPLOYMENT.md §2.3).
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_HOST} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy web:3000
+}
+
+{$API_HOST} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	request_body {
+		max_size 50MB
+	}
+	reverse_proxy api:4000
+}

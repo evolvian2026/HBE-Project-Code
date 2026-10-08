@@ -114,11 +114,15 @@ hbe-project-code/
 │   ├── db/                  # Generated Supabase types, query helpers (Kysely), repositories
 │   ├── github/              # GitHub App client, webhook schemas, token cache, rate-limit handling
 │   ├── queue/               # Queue + schedule interface (pg-boss implementation)
+│   ├── settings/            # Typed config loader: plan profile + env, validated at startup
 │   ├── contracts/           # Zod schemas shared by api/web/worker/grader (API DTOs, result payloads)
 │   ├── lms/                 # LMS adapters: LTI 1.3 (Canvas, Moodle), Google Classroom API
 │   ├── reports/             # Grade report rendering (HTML → PDF)
 │   ├── ui/                  # Shared React components
 │   └── config/              # eslint, tsconfig, tailwind presets
+├── config/
+│   ├── profiles/            # free.yaml / paid.yaml plan profiles (limits, behaviour)
+│   └── env/                 # *.env.example per environment (local, demo, production)
 ├── supabase/
 │   ├── migrations/          # SQL migrations (source of truth)
 │   ├── seed.sql             # Local/dev seed data

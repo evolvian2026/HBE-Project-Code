@@ -1,0 +1,49 @@
+# Production on AWS EC2 (ap-southeast-1), stage A single host. See docs/DEPLOYMENT.md §2.2.
+# /opt/hbe/.env is rendered from SSM Parameter Store at boot
+# (template: config/env/production-aws.env.example).
+# Same image as the Render demo; only ROLES and the env differ.
+name: hbe
+
+x-app: &app
+  image: ${HBE_IMAGE:?set HBE_IMAGE in .env}
+  env_file: .env
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: awslogs
+    options:
+      awslogs-region: ap-southeast-1
+      awslogs-group: /hbe/prod/app
+      awslogs-create-group: "true"
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://localhost:'+(process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    interval: 15s
+    timeout: 5s
+    retries: 4
+
+services:
+  web:
+    <<: *app
+    environment: { ROLES: web, PORT: "3000" }
+
+  api:
+    <<: *app
+    environment: { ROLES: api, PORT: "4000" }
+
+  worker:
+    <<: *app
+    # The worker serves /healthz only on the internal network.
+    environment: { ROLES: worker, PORT: "4100" }
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web, api]
+
+volumes:
+  caddy_data:

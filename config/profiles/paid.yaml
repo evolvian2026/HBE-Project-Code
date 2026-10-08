@@ -1,0 +1,54 @@
+# Plan profile: PAID (AWS EC2 ap-southeast-1 + Supabase Pro + self-hosted runners)
+#
+# Selected with HBE_PLAN_PROFILE=paid. Override any value per environment with
+# HBE__<SECTION>__<KEY>. Institution-level limits can only tighten these values.
+
+profile: paid
+
+runtime:
+  # On EC2 each container sets ROLES explicitly (web | api | worker); this is only the fallback.
+  default_roles: [web, api, worker]
+  queue_concurrency: 5
+  pdf_concurrency: 2
+
+database:
+  app_pool_max: 10
+  queue_pool_max: 5
+
+retention:
+  contract_grace_years: 2
+  raw_webhook_days: 90
+  nonfinal_artifact_days: 180
+  queue_archive_days: 7
+  playwright_traces: always
+  export_notice_days: [90, 30]
+
+evaluation:
+  runner: self_hosted             # ephemeral EC2 spot runners (DEPLOYMENT.md §2.4)
+  runs_per_student_per_day: 10
+  global_concurrency: 10          # keep ≤ the runner module's max-instances cap
+  institution_concurrency: 4
+  monthly_runner_minutes_budget: 30000
+  push_debounce_seconds: 300
+  job_timeout_minutes: 20
+
+backups:
+  strategy: supabase_pitr         # Supabase Pro daily backups + PITR add-on
+  pg_dump_keep_days: 30           # extra logical dumps to S3 are still taken weekly
+  archive_replication: true
+
+email:
+  daily_cap: 5000
+
+features:
+  saml_sso: true
+  supabase_custom_auth_domain: true
+  realtime: true
+  lms_sync: true
+
+limits:
+  max_institutions: 50
+  max_active_students: 1000
+  database_soft_limit_mb: 7000    # Pro includes 8 GB; alert before the overage
+  storage_soft_limit_mb: 90000    # Pro includes 100 GB
+  max_upload_mb: 500

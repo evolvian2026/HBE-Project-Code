@@ -1,0 +1,59 @@
+# Skeleton: shows how the grader is configured. The evaluation steps are filled in during Phase 1.
+#
+# Moving from GitHub-hosted to self-hosted EC2 runners is a config change: set the repository
+# variable HBE_RUNNER_LABELS (Settings → Secrets and variables → Actions → Variables):
+#   demo:        (unset)                       → ["ubuntu-latest"]
+#   production:  ["self-hosted","hbe-grader"]
+# HBE_API_URL stays https://api.example.com in both.
+name: evaluate
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:       { required: true,  type: string }
+      repo_owner:   { required: true,  type: string }   # student repo owner (institution org)
+      repo_name:    { required: true,  type: string }   # student repo name
+      sha:          { required: true,  type: string }
+      suite:        { required: true,  type: string }   # e.g. acme-uni/a3@v4
+      stack:        { required: true,  type: string }   # e.g. mern-node20@3
+
+permissions:
+  id-token: write   # GitHub OIDC token for the results callback
+  contents: read
+
+concurrency:
+  group: run-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ${{ fromJSON(vars.HBE_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: ${{ fromJSON(vars.HBE_JOB_TIMEOUT_MINUTES || '20') }}
+    env:
+      HBE_API_URL: ${{ vars.HBE_API_URL }}
+      RUN_ID: ${{ inputs.run_id }}
+    steps:
+      - name: Token scoped to the student repo (read-only)
+        id: student-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.GRADER_APP_ID }}
+          private-key: ${{ secrets.GRADER_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.repo_owner }}
+          repositories: ${{ inputs.repo_name }}
+
+      - name: Checkout harness and suite
+        uses: actions/checkout@v4
+        with: { path: grader }
+
+      - name: Checkout student code at the graded SHA
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo_owner }}/${{ inputs.repo_name }}
+          ref: ${{ inputs.sha }}
+          token: ${{ steps.student-token.outputs.token }}
+          path: submission
+          fetch-depth: 0   # full history is needed for the git bundle snapshot
+
+      - name: Evaluate
+        run: echo "TODO(phase-1) contract validation, build, stages, snapshot, upload, results callback"

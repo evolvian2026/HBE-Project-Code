@@ -1,0 +1,56 @@
+# Plan profile: FREE (demo on Render free + Supabase Free + GitHub free org)
+#
+# Selected with HBE_PLAN_PROFILE=free. Any value can be overridden per environment with an
+# env var named HBE__<SECTION>__<KEY>, e.g. HBE__EVALUATION__RUNS_PER_STUDENT_PER_DAY=10.
+# Institution-level limits (stored in the database) can only tighten these values, never exceed them.
+
+profile: free
+
+runtime:
+  # Roles that run when ROLES isn't set. On Render free, everything runs in one process.
+  default_roles: [web, api, worker]
+  queue_concurrency: 2            # pg-boss jobs processed in parallel (512 MB instance)
+  pdf_concurrency: 1
+
+database:
+  app_pool_max: 3                 # transaction pooler connections per process
+  queue_pool_max: 2               # session pooler connections for pg-boss
+
+retention:
+  contract_grace_years: 2         # keep records for the contract + this many years
+  raw_webhook_days: 7
+  nonfinal_artifact_days: 14
+  queue_archive_days: 1           # completed pg-boss jobs
+  playwright_traces: on_failure   # on_failure | always | never
+  export_notice_days: [90, 30]
+
+evaluation:
+  runner: github_hosted           # github_hosted | self_hosted (label set in the grader repo variable)
+  runs_per_student_per_day: 5
+  global_concurrency: 2
+  institution_concurrency: 1
+  monthly_runner_minutes_budget: 1800   # stays under GitHub free org's 2,000 private-repo minutes
+  push_debounce_seconds: 300
+  job_timeout_minutes: 20
+
+backups:
+  # Supabase Free has no backups: a nightly GitHub Action dumps the DB to the archive bucket.
+  strategy: pg_dump_to_archive    # pg_dump_to_archive | supabase_pitr
+  pg_dump_keep_days: 14
+  archive_replication: true
+
+email:
+  daily_cap: 90                   # Resend free allows 100/day
+
+features:
+  saml_sso: false                 # Supabase Pro feature
+  supabase_custom_auth_domain: false
+  realtime: true
+  lms_sync: true
+
+limits:
+  max_institutions: 2
+  max_active_students: 50
+  database_soft_limit_mb: 450     # Supabase Free: 500 MB
+  storage_soft_limit_mb: 900      # Supabase Free: 1 GB
+  max_upload_mb: 45               # Supabase Free: 50 MB per file

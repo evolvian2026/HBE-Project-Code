@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.turbo/
+.next/
+coverage/
+
+# Real environment files are never committed; only *.example templates are.
+.env
+.env.*
+!*.env.example
+*.pem
+deploy/aws/terraform/*.tfvars
+!deploy/aws/terraform/*.tfvars.example

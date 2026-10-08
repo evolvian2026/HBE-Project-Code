@@ -89,45 +89,9 @@ assignments. That's enough to show the full flow, including LMS grade passback.
 7. **Monitoring**: Sentry free plan, plus an external uptime check (e.g. UptimeRobot free) on
    `/healthz`.
 
-```yaml
-# render.yaml (demo)
-services:
-  - type: web
-    name: hbe-app
-    runtime: docker
-    plan: free
-    region: singapore
-    dockerfilePath: ./Dockerfile
-    healthCheckPath: /healthz
-    domains: [app.example.com, api.example.com]
-    envVars:
-      - key: ROLES
-        value: web,api,worker
-      - key: DEMO_MODE
-        value: "true"
-      - key: TZ
-        value: Asia/Singapore
-      - key: DATABASE_URL
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: GITHUB_APP_ID
-        sync: false
-      - key: GITHUB_APP_PRIVATE_KEY
-        sync: false
-      - key: GITHUB_WEBHOOK_SECRET
-        sync: false
-      - key: RESEND_API_KEY
-        sync: false
-```
-
-```sql
--- Keep the free Render service awake (runs inside Supabase)
-select cron.schedule('keep-awake', '*/10 * * * *',
-  $$ select net.http_get('https://api.example.com/healthz') $$);
-```
+The ready-to-use files are `render.yaml`, `config/env/demo-render.env.example` and
+`supabase/snippets/demo-keep-awake.sql`. **[CONFIGURATION.md](./CONFIGURATION.md)** lists
+exactly which values change for each migration step.
 
 ---
 
@@ -222,7 +186,9 @@ GitHub (grader repo) ── workflow_job webhook ──▶ API Gateway + Lambda 
 ## 3. Migration runbook: Render free → AWS EC2
 
 Because hostnames, the image and the database stay the same, this is a **DNS cutover**, not a
-data migration.
+data migration. Every config value that changes is listed in
+[CONFIGURATION.md §3](./CONFIGURATION.md#3-migration-recipes); run `pnpm config:check` on the
+production env file before cutting over.
 
 1. **Prepare (about a week before)**
    - Set up an AWS Organization with accounts `hbe-prod` and `hbe-grader`; Terraform state
