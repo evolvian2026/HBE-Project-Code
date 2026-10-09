@@ -9,3 +9,5 @@ supabase/.temp
 supabase/.branches
 .env*
 !**/*.env.example
+templates
+grader/test-fixtures

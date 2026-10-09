@@ -81,6 +81,13 @@ async function start(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
+if (process.argv.includes("--check-config")) {
+  const { preflight } = await import("./preflight.ts");
+  const result = await preflight({ connect: process.argv.includes("--connect") });
+  for (const c of result.checks) console.log(`${c.ok ? "ok  " : "FAIL"} ${c.name}: ${c.detail}`);
+  process.exit(result.ok ? 0 : 1);
+}
+
 start().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);

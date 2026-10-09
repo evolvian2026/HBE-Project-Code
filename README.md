@@ -22,10 +22,12 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
 
 ## Status
 
-**Phase 0 (foundations) is built; Phase 1 (the MVP vertical slice) is in progress.** Working today:
+**Phases 0 and 1 (foundations and the MVP vertical slice) are built**; next is deploying the
+demo environment and a pilot course ([docs/DEPLOYMENT.md §1.3](docs/DEPLOYMENT.md#13-demo-runbook)).
+Working today:
 
 - Multi-institution database with row-level security on every table, composite foreign keys that
-  block cross-institution links, an audit log, and 161 database tests proving the isolation.
+  block cross-institution links, an audit log, and about 200 database tests proving the isolation.
 - Sign-in with GitHub or an emailed magic link; invitations accepted automatically on first sign-in.
 - Super admin console; institution admins manage members (single or CSV invitations), courses,
   staff and their GitHub organisation. Admin powers require two-factor authentication.
@@ -35,21 +37,30 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
   that explains every point lost.
 - **Automated grading**: tests run on push, on pull requests or on request (with a daily quota) in
   a private grader repository on GitHub Actions. The student's app runs with Docker Compose on an
-  offline network and is tested by black-box hidden tests with random data. Students see each
-  failure with what was expected, a hint, the request and response and their app's logs, also as
-  a check on their commit.
+  offline network and is tested by black-box hidden API and Playwright browser tests with random
+  data; assignments can add the stack's linter and the student's own tests, each worth a share of
+  the score. Students see each failure with what was expected, a hint, the request and response
+  (or the failing step, a screenshot and a trace) and their app's logs, also as a check on their
+  commit. Logs, reports, screenshots and traces are kept with the run.
+- **Starter templates** for the three stack profiles (`templates/`), graded in CI by the real
+  harness, so a student's first push builds, starts and passes.
 - **Deadlines and grades**: the graded commit is fixed at the cutoff by GitHub's push time (late
   windows and extensions included) and graded by a deadline run. Staff score the rubric, write
-  feedback, override with a reason and release; every change is a new grade version.
+  feedback, override with a reason and release; every change is a new grade version. Staff review
+  the code in the platform (file tree, file view, changes since the template) and comment on
+  lines; students can ask for a regrade within a set window.
 - **Records**: every released grade version gets a report (JSON with its SHA-256, and a PDF), and
   the graded commit's source is archived (git bundle and tarball), all in private Storage.
   Students have "My grades"; staff have student profiles, a course progress matrix with at-risk
-  signals, and a CSV grade export. In-app notifications cover test results, grades, extensions
-  and deadlines.
+  signals, and a CSV grade export. Notifications (in the app, and by email as each person chooses)
+  cover test results, grades, extensions, deadlines and regrades.
+- **Records lifecycle**: record files are copied nightly to an external archive bucket; admins can
+  export everything as one ZIP; ending a contract makes the institution read-only, warns admins 90
+  and 30 days before the purge two years later, and the purge leaves only a certificate.
 - One Docker image running the web, api and worker roles, validated by end-to-end browser tests.
 
-Next: the submission review screen, regrade requests and the remaining grader stages, then the
-demo deployment and LMS integration (Phase 2). See [docs/ROADMAP.md](docs/ROADMAP.md).
+Next: the demo deployment and pilot, then LMS integration (Phase 2). See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 
@@ -62,6 +73,8 @@ packages/queue    Typed job queue and schedules on pg-boss
 packages/github   GitHub App client, webhook verification and payload parsing, in-memory fake
 packages/core     Permission rules and shared domain helpers
 grader/           Grader harness, hidden test suites and the evaluate workflow (its own repo when deployed)
+templates/        Starter repositories for the stack profiles (published as GitHub template repositories)
+scripts/          Local env setup; publishing the grader and the templates to GitHub
 supabase/         Config, SQL migrations and pgTAP database tests
 e2e/              Playwright end-to-end tests
 config/           Plan profiles (free/paid) and env templates per environment

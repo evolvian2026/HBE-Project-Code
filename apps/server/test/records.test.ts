@@ -152,6 +152,7 @@ describe("replication", () => {
         ARCHIVE_S3_SECRET_ACCESS_KEY: process.env.SUPABASE_S3_SECRET_ACCESS_KEY ?? "",
       }),
     )!;
+    await s3.probe(); // the preflight's check
     const objectKey = `s3-test/${Date.now()}.zip`;
     await s3.put(objectKey, Buffer.from("PK test"), { contentType: "application/zip" });
     expect((await s3.get(objectKey))?.toString()).toBe("PK test");

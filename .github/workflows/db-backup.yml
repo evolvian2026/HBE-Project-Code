@@ -1,0 +1,86 @@
+# Nightly database backup for the demo (Supabase Free has no backups): roles, schema and data
+# are dumped with the Supabase CLI, encrypted to a GPG public key (the private key stays offline
+# with the platform team), and uploaded to the archive bucket (Cloudflare R2 or S3) under
+# db-backups/. Backups older than DB_BACKUP_KEEP_DAYS are deleted. Production uses Supabase Pro
+# backups and PITR instead (docs/DEPLOYMENT.md).
+#
+# Off until the repository variable DB_BACKUP_ENABLED is "true". Settings (Settings → Secrets
+# and variables → Actions):
+#   secrets:   DB_BACKUP_DATABASE_URL (session pooler, port 5432), ARCHIVE_S3_ACCESS_KEY_ID,
+#              ARCHIVE_S3_SECRET_ACCESS_KEY
+#   variables: DB_BACKUP_ENABLED, DB_BACKUP_GPG_PUBLIC_KEY (ASCII-armoured), ARCHIVE_S3_ENDPOINT
+#              (empty for AWS S3), ARCHIVE_S3_REGION, ARCHIVE_S3_BUCKET, DB_BACKUP_KEEP_DAYS (14)
+#
+# Restore: decrypt with the private key (gpg --decrypt), untar, then into a new Supabase project:
+#   psql "$NEW_DB_URL" --single-transaction -v ON_ERROR_STOP=1 -f roles.sql -f schema.sql \
+#     -c 'SET session_replication_role = replica' -f data.sql
+# (the Supabase "Backup and restore using the CLI" guide), and run a restore drill each quarter.
+name: database backup
+
+on:
+  schedule:
+    - cron: "37 18 * * *" # 02:37 in Singapore
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: vars.DB_BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Dump, encrypt and upload
+        env:
+          DATABASE_URL: ${{ secrets.DB_BACKUP_DATABASE_URL }}
+          GPG_PUBLIC_KEY: ${{ vars.DB_BACKUP_GPG_PUBLIC_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARCHIVE_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARCHIVE_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.ARCHIVE_S3_REGION || 'auto' }}
+          ENDPOINT: ${{ vars.ARCHIVE_S3_ENDPOINT }}
+          BUCKET: ${{ vars.ARCHIVE_S3_BUCKET }}
+          KEEP_DAYS: ${{ vars.DB_BACKUP_KEEP_DAYS || '14' }}
+        run: |
+          set -euo pipefail
+          for v in DATABASE_URL GPG_PUBLIC_KEY BUCKET AWS_ACCESS_KEY_ID; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
+          done
+          cli="npx --yes supabase@$(node -p "require('./package.json').devDependencies.supabase")"
+          mkdir dump
+          $cli db dump --db-url "$DATABASE_URL" --role-only -f dump/roles.sql
+          $cli db dump --db-url "$DATABASE_URL" -f dump/schema.sql
+          $cli db dump --db-url "$DATABASE_URL" --data-only --use-copy -f dump/data.sql
+          stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"
+          tar -czf backup.tar.gz -C dump .
+
+          printf '%s\n' "$GPG_PUBLIC_KEY" > key.asc
+          export GNUPGHOME="$(mktemp -d)"
+          gpg --batch --quiet --import key.asc
+          recipient="$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')"
+          gpg --batch --yes --trust-model always --encrypt --recipient "$recipient" \
+            --output "db-$stamp.tar.gz.gpg" backup.tar.gz
+
+          s3() { aws s3 ${ENDPOINT:+--endpoint-url "$ENDPOINT"} "$@"; }
+          s3 cp "db-$stamp.tar.gz.gpg" "s3://$BUCKET/db-backups/db-$stamp.tar.gz.gpg" --only-show-errors
+          echo "Uploaded db-backups/db-$stamp.tar.gz.gpg ($(stat -c %s "db-$stamp.tar.gz.gpg") bytes)"
+
+          # Keep the last KEEP_DAYS days (names sort by date).
+          cutoff="$(date -u -d "-$KEEP_DAYS days" +%Y-%m-%dT%H%M%SZ)"
+          s3 ls "s3://$BUCKET/db-backups/" | awk '{ print $4 }' | while read -r name; do
+            when="${name#db-}"; when="${when%.tar.gz.gpg}"
+            if [ -n "$name" ] && [[ "$when" < "$cutoff" ]]; then
+              s3 rm "s3://$BUCKET/db-backups/$name" --only-show-errors && echo "Deleted $name"
+            fi
+          done

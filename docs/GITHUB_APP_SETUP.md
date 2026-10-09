@@ -215,8 +215,9 @@ Test runs execute in a private repository that holds the harness and the hidden 
 ([grader/README.md](../grader/README.md)). Set it up once per environment:
 
 1. Create a **private** repository, for example `hbe-platform/hbe-grader`, in an organisation the
-   platform controls (not an institution's). Copy the contents of this repository's `grader/`
-   folder to its root and push to `main`.
+   platform controls (not an institution's), holding this repository's `grader/` folder as its
+   root: `scripts/publish-grader.sh hbe-platform/hbe-grader` does both (it needs the GitHub CLI).
+   Run it again after `grader/` changes: it opens a pull request with the new version.
 2. Install the platform's GitHub App on that organisation, with access to the grader repository.
    The worker uses this installation to dispatch `evaluate.yml` (the App's **Actions: Read and
    write** permission).

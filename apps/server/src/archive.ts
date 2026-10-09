@@ -1,4 +1,4 @@
-import { DeleteObjectsCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand, HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Settings } from "@hbe/settings";
@@ -21,6 +21,8 @@ export interface ArchiveStore {
   downloadUrl(key: string, seconds: number, filename: string): Promise<string>;
   /** The object's content, or null (restore drills and tests). */
   get(key: string): Promise<Buffer | null>;
+  /** Throws unless the bucket exists and the credentials can reach it (preflight). */
+  probe(): Promise<void>;
 }
 
 /** The configured archive bucket, or null when ARCHIVE_S3_BUCKET isn't set (local development). */
@@ -87,6 +89,9 @@ export function s3ArchiveStore(settings: Settings): ArchiveStore | null {
         { expiresIn: seconds },
       );
     },
+    async probe() {
+      await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    },
     async get(key) {
       try {
         const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
@@ -123,6 +128,7 @@ export class MemoryArchiveStore implements ArchiveStore {
   async get(key: string) {
     return this.objects.get(key)?.body ?? null;
   }
+  async probe() {}
 }
 
 export const bufferStream = (body: Buffer) => Readable.from([body]);

@@ -31,27 +31,30 @@ management UI for institution admins, and deploying the free-tier demo environme
 **Exit:** two test institutions on the demo environment, with users in each who can't see
 each other's data (proven by tests); webhooks land in the DB.
 
-## Phase 1: MVP vertical slice (6–8 weeks) — in progress
+## Phase 1: MVP vertical slice (6–8 weeks) — built; demo deployment and pilot next
 
-Built (slices 1A–1G): institution administration (members, single and CSV invitations,
+Built (slices 1A–1H): institution administration (members, single and CSV invitations,
 courses, staff, GitHub organisation); two-factor authentication for admins, enforced in the
-database; stack profiles (MERN, Django + React, and an API-only Node profile for the sample
-suite); assignments with weights, late policy, rubric and hidden test suite; repository
-provisioning from templates; activity tracking and the process score with explanations;
-automated test runs (push, pull request and on-request triggers, debounce, quotas, concurrency
-caps, a monthly minutes budget, a sandboxed offline Compose harness, black-box API tests with
-random data, OIDC-authenticated results, check runs, run pages with full failure detail);
-deadlines (graded commit by push time, late window, extensions, deadline runs with retries);
-rubric scoring, feedback, versioned grades with overrides and release; grade reports (JSON +
-PDF) for every released version and source snapshots of graded commits in Storage; student
-"My grades" and staff student profiles; the course matrix with at-risk signals; CSV export; and
-in-app notifications.
+database; stack profiles (MERN, Django + React, and an API-only Node profile) with starter
+template repositories for each; assignments with weights, late policy, rubric, hidden test
+suite and per-assignment automated stages; repository provisioning from templates; activity
+tracking and the process score with explanations; automated test runs (push, pull request and
+on-request triggers, debounce, quotas, concurrency caps, a monthly minutes budget, a sandboxed
+offline Compose harness, black-box API tests with random data, Playwright browser tests with
+screenshots and traces, the profile's lint and the student's own tests worth a set share of the
+score, OIDC-authenticated results, check runs, run pages with full failure detail and the run's
+files kept in Storage); deadlines (graded commit by push time, late window, extensions, deadline
+runs with retries); the code review screen (file tree, file view, changes since the template)
+with inline comments; rubric scoring, feedback, versioned grades with overrides and release;
+regrade requests; grade reports (JSON + PDF) for every released version and source snapshots of
+graded commits; student "My grades" and staff student profiles; the course matrix with at-risk
+signals; CSV export; in-app and email notifications with per-user email choices; and the records
+lifecycle (nightly replication to the archive bucket, contract end, full exports, purge notices
+and the purge with its certificate).
 
-Still to do in Phase 1: the submission review screen with file tree and diffs (FR-6.1) and
-inline comments (FR-6.2); regrade requests (FR-6.7); email notifications; the profiles' lint
-and student-test stages and Playwright browser-test stages in the grader; uploading run logs
-and traces to Storage; template repositories for the global stack profiles; deploying the
-demo environment and running a pilot course.
+Still to do in Phase 1, all needing the project's own accounts: deploying the demo environment
+(the runbook is [DEPLOYMENT.md §1.3](./DEPLOYMENT.md#13-demo-runbook); the image, preflight
+checks, backups workflow and publishing scripts are ready) and running a pilot course.
 
 - Institution admin: invite users (single + CSV), create courses, assign staff, connect a GitHub org
 - **Stack profiles v1**: two global profiles (e.g. MERN and Django + React), with adapters and

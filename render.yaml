@@ -23,6 +23,11 @@ services:
         value: web,api,worker
       - key: TZ
         value: Asia/Singapore
+      - key: LOG_LEVEL
+        value: info
+      # 512 MB instance: keep the heap well below it (idle use is about 120 MB).
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=320
       - key: APP_URL
         value: https://app.example.com
       - key: API_URL
@@ -61,6 +66,8 @@ services:
         sync: false
       - key: ARCHIVE_S3_SECRET_ACCESS_KEY
         sync: false
+      - key: ARCHIVE_OBJECT_LOCK
+        value: none
       - key: EMAIL_PROVIDER
         value: resend
       - key: RESEND_API_KEY

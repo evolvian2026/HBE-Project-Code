@@ -52,7 +52,7 @@ keeps the external URLs identical to production.
 | **750 free instance hours per workspace per month** | One always-on service uses about 730 h | Run exactly **one** free service. Use a separate Render workspace (or local) for staging. |
 | **512 MB RAM, 0.1 CPU** | Heavy work could cause out-of-memory crashes | Snapshots happen in the grader, not the app; PDFs use pure-JS PDFKit; pg-boss concurrency = 2; Next.js `output: standalone`. |
 | **Render free blocks outbound SMTP** | Can't send email over SMTP from the app | Send email through the **Resend HTTP API**. Supabase Auth uses Resend SMTP from Supabase's side, which isn't affected. |
-| **Supabase free: 500 MB DB, 1 GB Storage, 50 MB max upload** | Records and artifacts outgrow it quickly | Demo retention overrides (`DEMO_MODE=true`): raw webhook payloads 7 days, non-final run artifacts 14 days, pg-boss archive 1 day, Playwright traces only on failure. Show storage usage in the super admin console. |
+| **Supabase free: 500 MB DB, 1 GB Storage, 50 MB max upload** | Records and artifacts outgrow it quickly | The `free` plan profile (`HBE_PLAN_PROFILE=free`, `config/profiles/free.yaml`) shortens retention: raw webhook payloads 7 days, non-final run artifacts 14 days, pg-boss archive 1 day; screenshots and traces are kept for failed browser tests only. |
 | **Supabase free pauses after 7 days of inactivity** | Demo goes dark | The always-awake app polls pg-boss continuously, which counts as activity. Still worth checking before each demo. |
 | **Supabase free has no backups/PITR, no SAML SSO, no custom auth domain** | Data loss risk; SSO can't be demoed | A nightly GitHub Actions workflow runs `pg_dump` and uploads it to R2 (keeping 14 days). SAML is demoed only after the Pro upgrade; use Google/Microsoft OAuth for the demo. |
 | **GitHub free org: 2,000 Actions minutes/month for private repos** | About 300 evaluation runs/month at roughly 6 min each | Demo quotas: 5 manual runs/student/day, push debounce, and a global monthly budget enforced by the worker. Apply for GitHub Education benefits. |
@@ -61,37 +61,89 @@ keeps the external URLs identical to production.
 **Demo capacity:** comfortably one or two institutions, about 30 students, and a handful of
 assignments. That's enough to show the full flow, including LMS grade passback.
 
-### 1.3 Demo setup checklist
+### 1.3 Demo runbook
 
-1. **Domain**: point `app.example.com` and `api.example.com` (CNAME) at the Render service,
-   and add both as custom domains in Render. Render issues TLS certificates automatically.
-2. **Supabase (Singapore)**:
-   - Enable GitHub and Google auth providers and set the Custom Access Token Hook.
-   - Set Site URL `https://app.example.com` and redirect URLs `https://app.example.com/**`.
-   - Use Resend for custom SMTP.
-   - Enable the `pg_cron` and `pg_net` extensions and add the keep-awake job.
-   - Create the Storage buckets.
-3. **GitHub**:
-   - Create a demo org with a private `hbe-grader` repo.
-   - Create the GitHub App, with webhook `https://api.example.com/webhooks/github`, and
-     install it on the demo org.
-   - Store the grader's App credentials as Actions secrets in `hbe-grader`.
-4. **Render**:
-   - Create a Blueprint from `render.yaml` (one free Docker web service, region `singapore`,
-     health check `/healthz`).
-   - Add env vars: Supabase URL and keys, `DATABASE_URL` (pooler, session mode),
-     GitHub App ID/key/secret, Resend key, R2 keys, `ROLES=web,api,worker`, `DEMO_MODE=true`.
-5. **Cloudflare R2**: create an `hbe-archive` bucket for replicas and database dumps.
-6. **LMS sandboxes**:
-   - Moodle: run it in Docker locally, or use a MoodleCloud trial.
-   - Canvas: use a sandbox from a pilot institution or a local open-source Canvas.
-   - Google Classroom: use a Google Workspace for Education test domain.
-7. **Monitoring**: Sentry free plan, plus an external uptime check (e.g. UptimeRobot free) on
-   `/healthz`.
+Everything below needs your own accounts; nothing in this repository creates them. Do the steps
+in order. Never paste keys into chat or commit them: they go into the Render dashboard, GitHub
+Actions secrets, or your password manager. Values are listed in
+`config/env/demo-render.env.example`.
 
-The ready-to-use files are `render.yaml`, `config/env/demo-render.env.example` and
-`supabase/snippets/demo-keep-awake.sql`. **[CONFIGURATION.md](./CONFIGURATION.md)** lists
-exactly which values change for each migration step.
+**Accounts**: a domain you control; Supabase (free); Render (free); a GitHub organisation for the
+platform (grader) and one per institution (or one for the demo); Cloudflare (R2); Resend; an
+authenticator app for admin two-factor sign-in.
+
+1. **Supabase project** (region *Southeast Asia (Singapore)*):
+   - Link and push the schema: `pnpm exec supabase link --project-ref <ref>`, then
+     `pnpm exec supabase db push`. The migrations create every table, policy, function, seed
+     profile and sample suite, and the private Storage buckets (`grade-reports`,
+     `submission-archive`, `run-artifacts`, `record-exports`).
+   - **Auth → Hooks**: enable *Customize Access Token (JWT) Claims* with the Postgres function
+     `public.custom_access_token_hook`.
+   - **Auth → URL configuration**: Site URL `https://app.example.com`; redirect URL
+     `https://app.example.com/**`.
+   - **Auth → Providers**: GitHub (the App's OAuth client ID and secret, step 3) and email
+     (magic links). **Auth → SMTP**: Resend's SMTP settings, so sign-in emails come from your
+     domain. Enable *MFA (TOTP)*.
+   - **Database → Extensions**: `pg_cron` and `pg_net`; then run
+     `supabase/snippets/demo-keep-awake.sql` (with your API hostname) in the SQL editor.
+   - Copy the project URL, publishable and secret keys, and the pooler connection strings
+     (transaction pooler for `DATABASE_URL`, session pooler for `QUEUE_DATABASE_URL`).
+2. **Cloudflare R2**: create the bucket `hbe-archive` and an API token with read/write access to
+   it (`ARCHIVE_S3_*`). It receives the nightly copies of record files, full exports and
+   database backups.
+3. **GitHub App** ([GITHUB_APP_SETUP.md](./GITHUB_APP_SETUP.md)): create it with webhook
+   `https://api.example.com/webhooks/github`, install it on the platform organisation and the
+   institution organisation, and note its ID, slug, private key, client ID/secret and webhook
+   secret.
+4. **Grader repository**: `scripts/publish-grader.sh <platform-org>/hbe-grader` creates the
+   private repository from `grader/`; then set its Actions variable `GRADER_APP_ID` and secret
+   `GRADER_APP_PRIVATE_KEY` (GITHUB_APP_SETUP.md §7). Later changes to `grader/` are published
+   the same way (as a pull request).
+5. **Starter templates**: publish the ones you need, e.g.
+   `scripts/publish-template.sh templates/mern-node20 <institution-org>/mern-starter`
+   ([templates/README.md](../templates/README.md)). Teachers name them as assignments' template
+   repositories.
+6. **Resend**: verify the sending domain; create an API key (`RESEND_API_KEY`); set `EMAIL_FROM`.
+7. **Render**: *New → Blueprint* from this repository (`render.yaml`: one free Docker web
+   service in Singapore, health check `/healthz`); enter the `sync: false` values from the steps
+   above. Add `app.example.com` and `api.example.com` as custom domains and create their CNAME
+   records.
+8. **Check before go-live** (from your computer, with the env file you entered in Render):
+   - `pnpm config:check demo.env` validates the values offline;
+   - `docker run --rm --env-file demo.env <image> node dist/main.js --check-config --connect`
+     (or `node --env-file=demo.env apps/server/dist/main.js --check-config --connect` after
+     `pnpm build`) also reaches the database (and counts applied migrations), Supabase Auth, the
+     Storage buckets, the R2 bucket and the GitHub App's installation on the grader repository.
+     Every line must say `ok`.
+9. **Database backups** (Supabase Free has none): in the platform repository's Actions settings,
+   set the variables and secrets listed at the top of `.github/workflows/db-backup.yml` (a GPG
+   public key whose private key you keep offline) and `DB_BACKUP_ENABLED=true`. Run it once by
+   hand and check `db-backups/` in R2.
+10. **First super admin**: sign in at `https://app.example.com` once, then in the Supabase SQL
+    editor: `insert into public.user_roles (user_id, role) select id, 'super_admin' from
+    auth.users where email = 'you@example.com';`. Sign in again and set up two-factor
+    authentication.
+11. **Smoke test** (about 20 minutes, with a test institution):
+    - Platform → create the institution with an admin's email; the admin receives the
+      invitation, signs in and sets up two-factor authentication.
+    - Admin: link the institution's GitHub organisation; create a course; invite a teacher and
+      a test student (the student signs in with GitHub).
+    - Teacher: create an assignment with a published template, the sample suite
+      (`starter-notes` for the MERN/Django templates) and lint and student tests turned on;
+      publish it. The student's repository appears in the organisation.
+    - Student: push a change. A test run starts, the check appears on the commit, and the run
+      page shows every step, the files (logs) and, for a failure, the screenshot.
+    - Teacher: review the code, comment on a line, score the rubric, release the grade. The
+      student gets the in-app notification and the email, downloads the grade report, and can
+      ask for a regrade.
+    - Admin: **Records → Export all records**, and download the ZIP.
+12. **Monitoring**: Sentry (`SENTRY_DSN`) and an external uptime check on
+    `https://api.example.com/healthz`.
+13. **Pilot course**: create the real institution, then follow step 11 with the teacher's course.
+    Brief students on the README in their template (how grading works, checks to run locally).
+
+The free tier's capacity (§1.2) is about 30 students; plan the pilot's size and test-run quota
+(`HBE__EVALUATION__RUNS_PER_STUDENT_PER_DAY`) around the 2,000 Actions minutes.
 
 ---
 
@@ -193,8 +245,8 @@ production env file before cutting over.
 1. **Prepare (about a week before)**
    - Set up an AWS Organization with accounts `hbe-prod` and `hbe-grader`; Terraform state
      bucket; ECR repositories.
-   - Upgrade Supabase to **Pro** and enable PITR. Turn `DEMO_MODE` off in config so the real
-     retention policy applies.
+   - Upgrade Supabase to **Pro** and enable PITR. Switch to `HBE_PLAN_PROFILE=paid` so the real
+     retention policy applies, and turn off the `db-backup` workflow (Pro has backups).
    - Run `terraform apply` for stage A and the S3 archive bucket.
    - Copy R2 objects to S3 with `rclone sync`. Switch the replication job to S3.
 2. **Parallel run (1–2 days before)**
