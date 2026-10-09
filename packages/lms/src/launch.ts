@@ -24,7 +24,7 @@ export interface Launch {
   nrps: { membershipsUrl: string } | null;
   /** Assignment and Grade Services (grade passback). */
   ags: { lineItemsUrl: string | null; lineItemUrl: string | null; scopes: string[] } | null;
-  deepLinking: { returnUrl: string; acceptTypes: string[]; data: string | null } | null;
+  deepLinking: { returnUrl: string; acceptTypes: string[]; acceptMultiple: boolean; data: string | null } | null;
   claims: JWTPayload;
 }
 
@@ -142,6 +142,7 @@ export async function verifyLaunch(
       ? {
           returnUrl: str(dl.deep_link_return_url)!,
           acceptTypes: Array.isArray(dl.accept_types) ? (dl.accept_types as string[]) : [],
+          acceptMultiple: dl.accept_multiple !== false,
           data: str(dl.data),
         }
       : null,

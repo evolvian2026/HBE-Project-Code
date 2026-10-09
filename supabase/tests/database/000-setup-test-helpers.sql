@@ -229,6 +229,15 @@ begin
     (tests.id('inst_a'), tests.id('lms_a'), 'ctx-web', 'Web Development (Canvas)', tests.id('course_a1')),
     (tests.id('inst_a'), tests.id('lms_a'), 'ctx-new', 'Not linked yet', null),
     (tests.id('inst_b'), tests.id('lms_b'), 'ctx-fs', 'Full-Stack Basics (Moodle)', tests.id('course_b1'));
+  -- Each institution's assignment has a gradebook column in its linked LMS course, and each
+  -- grade was sent there.
+  insert into public.lms_assignment_links (institution_id, assignment_id, lms_course_link_id, lineitem_url)
+    select l.institution_id, a.id, l.id, 'https://lms.test/lineitems/' || a.slug
+    from public.lms_course_links l join public.assignments a on a.course_id = l.course_id;
+  insert into public.lms_grade_syncs (institution_id, grade_id, submission_id, lms_assignment_link_id, status, score_given)
+    select g.institution_id, g.id, g.submission_id, al.id, 'synced', 75
+    from public.grades g join public.submissions s on s.id = g.submission_id
+    join public.lms_assignment_links al on al.assignment_id = s.assignment_id;
   insert into public.lti_registration_invites (institution_id, token_hash, type, name, expires_at) values
     (tests.id('inst_a'), repeat('1', 64), 'canvas', 'Alpha Canvas 2', now() + interval '7 days'),
     (tests.id('inst_b'), repeat('2', 64), 'moodle', 'Beta Moodle 2', now() + interval '7 days');
@@ -280,6 +289,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'lms_user_links', count(*) from public.lms_user_links where institution_id = p_institution
   union all select 'lms_course_links', count(*) from public.lms_course_links where institution_id = p_institution
   union all select 'lti_registration_invites', count(*) from public.lti_registration_invites where institution_id = p_institution
+  union all select 'lms_assignment_links', count(*) from public.lms_assignment_links where institution_id = p_institution
+  union all select 'lms_grade_syncs', count(*) from public.lms_grade_syncs where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

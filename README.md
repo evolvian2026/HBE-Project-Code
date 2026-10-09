@@ -60,13 +60,15 @@ Working today:
   and 30 days before the purge two years later, and the purge leaves only a certificate.
 - One Docker image running the web, api and worker roles, validated by end-to-end browser tests.
 
-- **LMS launches (LTI 1.3)**: admins connect Canvas, Moodle or another LTI 1.3 platform (one-time
-  Dynamic Registration URL, or by hand); opening the platform from the LMS signs people in and
-  takes them to their course or assignment. Instructors link each LMS course to a course on
-  their first launch, and people the platform can't match by email wait for an admin.
+- **LMS integration (LTI 1.3)**: admins connect Canvas, Moodle or another LTI 1.3 platform
+  (one-time Dynamic Registration URL, or by hand); opening the platform from the LMS signs people
+  in and takes them to their course or assignment, and people the platform can't match by email
+  wait for an admin. Instructors add assignments in the LMS (Deep Linking); released grades go to
+  the LMS gradebook, with a sync panel per assignment and a nightly check for grades changed in
+  the LMS; rosters are read from the LMS.
 
-Phase 2 (LMS integration and v1 hardening) is under way; grade passback to the LMS is next. The
-demo deployment and pilot wait for the project's accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Phase 2 (LMS integration and v1 hardening) is under way; Google Classroom is next. The demo
+deployment and pilot wait for the project's accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 

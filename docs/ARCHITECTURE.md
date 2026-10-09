@@ -607,7 +607,7 @@ platform audit log. Super admins see tenant data only through an audited, time-b
 | Feedback | `POST /v1/submissions/:id/feedback` (optionally mirrored to PR review) | Staff JWT |
 | Grades | `POST /v1/courses/:id/grades/release`, `GET /v1/courses/:id/grades.csv` | Staff JWT |
 | Records | `GET /v1/submissions/:id/snapshots/:sid/download`, `GET /v1/grade-reports/:id/versions/:v.pdf`, `GET /v1/students/:id/performance` | Staff/admin JWT; student JWT for own released reports |
-| LMS | `/lti/login`, `/lti/launch`, `/lti/deep-link`, `/lti/register`, `/.well-known/jwks.json`, `POST /v1/assignments/:id/lms-sync`, `GET /v1/oauth/google/callback` | LTI id_token / staff JWT |
+| LMS | `/lti/login`, `/lti/launch`, `/lti/deep-link/:token`, `/lti/register`, `/.well-known/jwks.json`, `POST /v1/assignments/:id/lms-sync`, `POST /v1/lms-course-links/:id/roster-sync`, `GET /v1/oauth/google/callback` | LTI id_token, single-use picker token / staff JWT |
 | Institution admin | `/v1/admin/users`, `/v1/admin/settings`, `/v1/admin/installations`, `/v1/admin/stack-profiles`, `/v1/admin/lms-connections` | Institution admin JWT + MFA |
 | Super admin | `/v1/platform/institutions`, `/v1/platform/stack-profiles`, `/v1/platform/health` | Super admin JWT + MFA |
 | Health | `GET /healthz` (liveness), `GET /readyz` (DB + queue) | none |
@@ -628,12 +628,12 @@ OpenAPI is generated from Zod schemas (`fastify-type-provider-zod`).
 | `notifications` | in-app + email (Resend/Postmark) | 5 |
 | `sync` | reconciliation, redelivery of failed webhooks | 3 |
 | `records` | source snapshots, grade report rendering (JSON + PDF), course-close archival | 5; a failure blocks grade release until resolved |
-| `lms-sync` | grade passback, roster sync, assignment linking | 8, exponential backoff; then shown on the teacher's sync panel |
+| `lms-grade-sync`, `lms-roster-sync` | grade passback (one job per released grade version), roster sync | 6 (about an hour, exponential backoff); then shown on the assignment's sync panel and retried by the nightly reconciliation |
 
 Schedules (pg-boss cron, run by the worker role; times in Asia/Singapore): `*/15` redeliver failed webhooks · `*/5` reap stale runs (queued for more than 30
 minutes or running for more than 45) · `0 * * * *` deadline cut-off and final graded runs · `0 2 * * *` activity rollups ·
 `0 3 * * 0` retention cleanup · `30 2 * * *` archive replication to the external bucket ·
-`0 4 * * *` LMS grade reconciliation and roster sync.
+`11 1 * * *` LMS roster sync · `29 3 * * *` LMS grade reconciliation.
 
 ---
 
@@ -836,20 +836,35 @@ configures its own connections in the admin panel (`lms_connections`).
 
 ### 13.1 Grade sync flow
 
-1. A teacher releases grades in the platform (per assignment or per student).
-2. The worker enqueues an `lms-sync` job per (submission, LMS link). Jobs are **idempotent**,
-   keyed on the grade version.
-3. The adapter in `packages/lms` maps the score to the LMS's points scale and posts it,
-   including a link to the grade report.
-4. The result is stored in `lms_grade_syncs` (status, LMS response, attempt count). Failures
-   retry with backoff and then show up on the teacher's sync panel with a "Retry" button.
-5. Overrides and regrades create a new grade version, which is synced again automatically.
-6. A nightly reconciliation compares platform grades with LMS grades and reports mismatches.
-   It never overwrites grades that were edited manually in the LMS without a teacher confirming.
+As built for LTI 1.3 (AGS); Google Classroom will follow the same flow.
+
+1. **Columns.** An instructor adds platform assignments in the LMS with Deep Linking (§13.2);
+   each link asks the LMS for a gradebook column (`lineItem`, `resourceId` = the assignment).
+   Launches from the link tell the platform the column's URL (`lms_assignment_links`). If an
+   assignment has no column yet (released before it was added in the LMS), the worker finds the
+   one it made earlier by `resourceId` or creates it.
+2. **Release.** Every released grade version queues an `lms-grade-sync` job (the same hook that
+   queues its grade report). The worker sends it to every LMS gradebook linked to the course:
+   `scoreGiven` on the column's scale, `FullyGraded`, a comment linking to the assignment, as the
+   student's LMS user (from their launches or the roster).
+3. **Idempotent.** `lms_grade_syncs` has one row per (grade version, column): a version is sent
+   once; an override or regrade is a new version and is sent again. Failures are recorded on
+   the row and retried with backoff for about an hour; students the LMS doesn't know yet are
+   `skipped` and sent after the next roster sync.
+4. **Sync panel.** Staff see each student's status on the assignment page (sent, failed with the
+   LMS's answer, not sent and why, changed in the LMS) and can send everything, or one student,
+   again.
+5. **Reconciliation** (nightly): compares each gradebook's results with what was sent and marks
+   grades changed in the LMS as `conflict`; they are never overwritten automatically. A
+   teacher changes the grade on the platform (a new version) or sends it again. It also queues
+   released grades that never reached a linked gradebook and retries failed ones.
+6. **Rosters** (nightly, or "Read the roster now" on the course page): NRPS members are matched
+   by email like launches; learners who are members join the course; people the platform
+   can't match wait in the admin's review queue. Nobody is removed automatically.
 
 ### 13.2 Implementation notes
 
-As built (Phase 2A: the LTI 1.3 core; deep linking, AGS, NRPS and Google Classroom follow):
+As built (Phases 2A and 2B: LTI 1.3 with deep linking, AGS and NRPS; Google Classroom follows):
 
 - `packages/lms` implements LTI 1.3 with `jose`: launch verification (platform signature from
   its JWKS, `iss`, `aud` and `azp`, expiry, `nonce`, LTI version, deployment, message type),
@@ -885,8 +900,17 @@ As built (Phase 2A: the LTI 1.3 core; deep linking, AGS, NRPS and Google Classro
   hash is stored) and paste it into Canvas or Moodle, or enter the platform's details by hand.
   Dynamic registration checks that the platform's configuration is served by its issuer, except
   for Canvas, whose schools serve it from their own domains under `https://canvas.instructure.com`.
+- **Deep linking.** An LtiDeepLinkingRequest from an instructor (or LMS administrator) opens a
+  picker of the published assignments of the courses they teach. It runs inside the LMS's
+  frame, where the platform's session cookie isn't available, so a single-use, one-hour URL
+  token (`lti_deep_link_requests`, only its hash stored) is its credential. The answer is a
+  signed LtiDeepLinkingResponse auto-posted to the LMS: one `ltiResourceLink` per assignment,
+  with `custom.assignment_id` and a `lineItem`. Choosing assignments for an unlinked LMS course
+  links it to their course.
+- **Services.** AGS and NRPS calls use OAuth 2 client-credentials tokens obtained with a client
+  assertion signed by the tool key (`private_key_jwt`), cached per connection and scope set.
 - **Keys.** `LTI_PRIVATE_KEY_BASE64` / `LTI_KEY_ID` sign the tool's messages (deep linking
-  responses and service tokens, Phase 2B). During a yearly rollover the previous key stays
+  responses and service token requests). During a yearly rollover the previous key stays
   published in the JWKS (`LTI_PREVIOUS_PRIVATE_KEY_BASE64`, `LTI_PREVIOUS_KEY_ID`). Locally a
   temporary key is generated at startup.
 - Google Classroom OAuth refresh tokens will be encrypted at rest (app-level AES-GCM with

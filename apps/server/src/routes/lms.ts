@@ -7,7 +7,8 @@ import { z } from "zod";
 import type { ApiDeps } from "../app.ts";
 import { authenticate } from "../auth.ts";
 import { conflict, notFound } from "../errors.ts";
-import { hashToken } from "./lti.ts";
+import { queueAssignmentSync, queueCourseSync } from "../lti/grades.ts";
+import { hashToken } from "../lti/platform.ts";
 
 const INVITE_TTL_DAYS = 7;
 const uuid = z.string().uuid();
@@ -30,7 +31,7 @@ const isUniqueViolation = (err: unknown) => (err as { code?: string }).code === 
  * one-time Dynamic Registration link), review LMS users who couldn't be matched, and instructors
  * link LMS courses to platform courses.
  */
-export async function lmsRoutes(app: FastifyInstance, { db, verifier, settings }: ApiDeps): Promise<void> {
+export async function lmsRoutes(app: FastifyInstance, { db, verifier, settings, queue }: ApiDeps): Promise<void> {
   const local = settings.env.HBE_ENV === "local";
   const platformUrl = z
     .string()
@@ -243,6 +244,8 @@ export async function lmsRoutes(app: FastifyInstance, { db, verifier, settings }
         .where("id", "=", link.id)
         .execute(),
     );
+    // Grades released before the link go to the LMS gradebook now.
+    await queueCourseSync(db, queue, course.id);
     return { id: link.id, courseId: course.id };
   });
 
@@ -264,5 +267,37 @@ export async function lmsRoutes(app: FastifyInstance, { db, verifier, settings }
         .execute(),
     );
     return { id: link.id, courseId: null };
+  });
+
+  /** Sends an assignment's released grades to the LMS gradebooks again (all, or some students). */
+  app.post<{ Params: { assignmentId: string } }>("/v1/assignments/:assignmentId/lms-sync", async (req, reply) => {
+    const actor = await authenticate(req, db, verifier);
+    const a = await db
+      .selectFrom("assignments")
+      .select(["id", "institution_id", "course_id"])
+      .where("id", "=", uuid.parse(req.params.assignmentId))
+      .executeTakeFirst();
+    if (!a) throw notFound("Assignment not found");
+    authorize(actor, "manageCourse", a.institution_id, await courseRoleOf(db, a.course_id, actor.userId));
+    const { submissionIds } = z.object({ submissionIds: z.array(uuid).max(1000).optional() }).parse(req.body ?? {});
+    const queued = await queueAssignmentSync(db, queue, a.id, { submissionIds, force: true });
+    return reply.code(202).send({ queued });
+  });
+
+  /** Reads the LMS course's roster now (it is also read every night). */
+  app.post<{ Params: { linkId: string } }>("/v1/lms-course-links/:linkId/roster-sync", async (req, reply) => {
+    const actor = await authenticate(req, db, verifier);
+    const link = await db
+      .selectFrom("lms_course_links")
+      .select(["id", "institution_id", "course_id", "nrps_url"])
+      .where("id", "=", uuid.parse(req.params.linkId))
+      .executeTakeFirst();
+    if (!link?.course_id) throw notFound("Linked LMS course not found");
+    authorize(actor, "manageCourse", link.institution_id, await courseRoleOf(db, link.course_id, actor.userId));
+    if (!link.nrps_url) {
+      throw conflict("no_roster_service", "This LMS course doesn't share its roster (NRPS) with the platform.");
+    }
+    await queue.send("lms-roster-sync", { courseLinkId: link.id }, { singletonKey: `roster-${link.id}` });
+    return reply.code(202).send({ queued: true });
   });
 }

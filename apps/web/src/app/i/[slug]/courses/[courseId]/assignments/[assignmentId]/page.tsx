@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { isActive, RunList, runOutcome, type RunSummary } from "@/components/evaluation";
+import { RunList, runOutcome, stillUpdating, type RunSummary } from "@/components/evaluation";
 import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { MarkdownView } from "@/components/markdown";
 import { ProcessBreakdown } from "@/components/process-breakdown";
@@ -11,6 +11,7 @@ import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
 import { CriterionForm, PublishForm, ReleaseGradesForm, RunTestsForm } from "./forms";
+import { LmsGradesCard } from "./lms-grades";
 import { RegradeRequestForm } from "./regrade-forms";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "./regrades";
 
@@ -414,7 +415,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
 
       {mine && mine.status === "active" && a.suite && a.status === "published" && (
         <Card title="Automated tests" description={`${a.weights.automated}% of your grade`}>
-          <AutoRefresh active={myRuns.some((r) => isActive(r.status))} />
+          <AutoRefresh active={myRuns.some(stillUpdating)} />
           {myRuns.length === 0 ? (
             <EmptyState title="No test runs yet">
               {a.triggers.on_push
@@ -513,6 +514,31 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         >
           <ReleaseGradesForm {...ids} disabled={gradeStats.complete === gradeStats.released} />
         </Card>
+      )}
+
+      {isCourseStaff && a.status !== "draft" && (
+        <LmsGradesCard
+          supabase={supabase}
+          slug={slug}
+          courseId={course.id}
+          assignmentId={a.id}
+          canManage={canManage}
+          timezone={course.timezone}
+          query={query}
+          students={subs.flatMap((s) => {
+            const g = gradeBySubmission.get(s.id);
+            return g?.released_at
+              ? [
+                  {
+                    submissionId: s.id,
+                    name: s.profile?.full_name ?? s.profile?.email ?? "Unknown",
+                    gradeId: g.id,
+                    finalScore: g.final_score,
+                  },
+                ]
+              : [];
+          })}
+        />
       )}
 
       {isCourseStaff && a.status !== "draft" && (

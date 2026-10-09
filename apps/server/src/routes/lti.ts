@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   authRedirectUrl,
   loginRequestSchema,
@@ -8,49 +8,19 @@ import {
   toolEndpoints,
   toolJwks,
   verifyLaunch,
-  type Platform,
 } from "@hbe/lms";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { ApiDeps } from "../app.ts";
+import { registerDeepLinking, startDeepLink } from "../lti/deep-link.ts";
+import { hashToken, platformOf } from "../lti/platform.ts";
 import { handleLaunch } from "../lti/launch.ts";
+import { escapeHtml, page } from "../lti/pages.ts";
 import { toolKeys } from "../lti/keys.ts";
 import type { SignInService } from "../lti/sign-in.ts";
 
 const STATE_TTL_MS = 10 * 60_000;
 const COOKIE = "hbe_lti_state";
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
-
-/** A small page for the browser (launches are navigations, not API calls). */
-function page(reply: FastifyReply, status: number, title: string, message: string, script = "") {
-  return reply
-    .code(status)
-    .header("content-type", "text/html; charset=utf-8")
-    .header("cache-control", "no-store")
-    .send(
-      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem;color:#1d2433}h1{font-size:1.25rem}</style></head>
-<body><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${script}</body></html>`,
-    );
-}
-
-export const platformOf = (c: {
-  issuer: string | null;
-  client_id: string | null;
-  deployment_ids: string[];
-  auth_login_url: string | null;
-  auth_token_url: string | null;
-  jwks_url: string | null;
-}): Platform => ({
-  issuer: c.issuer!,
-  clientId: c.client_id!,
-  deploymentIds: c.deployment_ids,
-  authLoginUrl: c.auth_login_url!,
-  authTokenUrl: c.auth_token_url!,
-  jwksUrl: c.jwks_url!,
-});
 
 /**
  * The LTI 1.3 tool (§13.2): JWKS, OIDC login initiation, launch, and Dynamic Registration. These
@@ -62,8 +32,14 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
   const endpoints = toolEndpoints(API_URL);
   const secure = API_URL.startsWith("https://");
 
+  // Form posts from the LMS and the deep linking picker (repeated fields become arrays).
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {
-    done(null, Object.fromEntries(new URLSearchParams(body as string)));
+    const fields: Record<string, string | string[]> = {};
+    for (const [key, value] of new URLSearchParams(body as string)) {
+      const prev = fields[key];
+      fields[key] = prev === undefined ? value : [...(Array.isArray(prev) ? prev : [prev]), value];
+    }
+    done(null, fields);
   });
 
   app.get("/.well-known/jwks.json", async (_req, reply) => {
@@ -154,7 +130,9 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
     try {
       const launch = await verifyLaunch(body.data.id_token, platformOf(conn), { nonce: consumed.nonce });
       if (launch.messageType === "LtiDeepLinkingRequest") {
-        return page(reply, 501, "Not available yet", "Adding platform assignments from the LMS is coming soon.");
+        const started = await startDeepLink(db, signIn, conn, launch);
+        if ("refused" in started) return page(reply, 403, "Couldn't add assignments", started.refused);
+        return reply.redirect(`/lti/deep-link/${started.token}`, 303);
       }
       const outcome = await handleLaunch(db, signIn, conn, launch);
       if (outcome.kind === "refused") return page(reply, 403, "Couldn't sign you in", outcome.message);
@@ -185,6 +163,8 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
       throw err;
     }
   });
+
+  registerDeepLinking(app, deps);
 
   /**
    * LTI Dynamic Registration: the LMS opens this URL (an admin's one-time invite) with its

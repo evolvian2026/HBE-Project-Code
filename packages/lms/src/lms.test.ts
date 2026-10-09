@@ -1,6 +1,12 @@
+import { createLocalJWKSet, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
 import {
   authRedirectUrl,
+  CLAIM,
+  deepLinkingResponse,
+  LtiServices,
+  SCOPE,
+  serviceUrl,
   courseRoleFromLti,
   generateToolKey,
   registerWithPlatform,
@@ -194,6 +200,116 @@ describe("dynamic registration", () => {
       issuer: "https://canvas.instructure.com",
       clientId: "10000000000001",
       deploymentId: null,
+    });
+  });
+});
+
+describe("LTI Advantage services", () => {
+  it("get a token with a signed client assertion, then manage line items, scores, results and the roster", async () => {
+    const lms = await TestPlatform.serve();
+    try {
+      const key = await generateToolKey("tool-1");
+      lms.trustTool(toolJwks({ current: key }));
+      const platform: Platform = {
+        issuer: lms.issuer,
+        clientId: "client-1",
+        deploymentIds: [],
+        authLoginUrl: lms.authUrl,
+        authTokenUrl: lms.tokenUrl,
+        jwksUrl: lms.jwksUrl,
+      };
+      const services = new LtiServices(platform, key);
+      const lineItems = lms.lineItemsUrl("ctx-1");
+
+      expect(await services.findLineItem(lineItems, "a-1")).toBeNull();
+      const created = await services.createLineItem(lineItems, {
+        label: "Todo API",
+        scoreMaximum: 50,
+        resourceId: "a-1",
+      });
+      expect(await services.findLineItem(lineItems, "a-1")).toMatchObject({ id: created.id, scoreMaximum: 50 });
+
+      await services.postScore(created.id, {
+        userId: "u-1",
+        scoreGiven: 42,
+        scoreMaximum: 50,
+        timestamp: new Date().toISOString(),
+        activityProgress: "Completed",
+        gradingProgress: "FullyGraded",
+      });
+      expect(lms.scores).toHaveLength(1);
+      lms.setResult(created.id, "u-2", 30, 50);
+      expect(await services.results(created.id)).toEqual([
+        { userId: "u-1", resultScore: 42, resultMaximum: 50 },
+        { userId: "u-2", resultScore: 30, resultMaximum: 50 },
+      ]);
+
+      lms.setMembers([
+        { user_id: "u-1", email: "Ada@Example.test", name: "Ada", roles: [ROLES.learner] },
+        { user_id: "u-2", email: "bob@example.test", roles: [ROLES.learner] },
+        { user_id: "u-3", roles: [ROLES.instructor], status: "Inactive" },
+      ]);
+      const members = await services.members(lms.membershipsUrl("ctx-1"));
+      expect(members.map((m) => [m.userId, m.email, m.status])).toEqual([
+        ["u-1", "ada@example.test", "Active"],
+        ["u-2", "bob@example.test", "Active"],
+        ["u-3", null, "Inactive"],
+      ]);
+
+      // One token per set of scopes, reused while it lasts.
+      expect(lms.tokenRequests.map((t) => t.scopes.join(" "))).toEqual([
+        SCOPE.lineItem,
+        SCOPE.score,
+        SCOPE.resultReadOnly,
+        SCOPE.nrps,
+      ]);
+      expect(lms.tokenRequests.every((t) => t.clientId === "client-1")).toBe(true);
+
+      // A tool the platform doesn't trust gets no token.
+      const stranger = new LtiServices(platform, await generateToolKey("other"));
+      await expect(stranger.results(created.id)).rejects.toThrow(/refused an access token/);
+    } finally {
+      await lms.close();
+    }
+  });
+
+  it("puts /scores and /results before a line item's query string", () => {
+    expect(serviceUrl("https://lms.test/api/lti/courses/1/line_items/7?x=1", "/scores")).toBe(
+      "https://lms.test/api/lti/courses/1/line_items/7/scores?x=1",
+    );
+  });
+});
+
+describe("deep linking", () => {
+  it("signs the response the browser posts back to the platform", async () => {
+    const key = await generateToolKey("tool-1");
+    const jwt = await deepLinkingResponse(
+      key,
+      { issuer: "https://lms.test", clientId: "client-1" },
+      {
+        deploymentId: "dep-1",
+        data: "opaque",
+        items: [
+          {
+            title: "Todo API",
+            url: "https://api.example.com/lti/launch",
+            custom: { assignment_id: "a-1" },
+            lineItem: { label: "Todo API", scoreMaximum: 100, resourceId: "a-1" },
+          },
+        ],
+      },
+    );
+    const { payload } = await jwtVerify(jwt, createLocalJWKSet(toolJwks({ current: key })), {
+      issuer: "client-1",
+      audience: "https://lms.test",
+    });
+    expect(payload).toMatchObject({
+      [CLAIM.messageType]: "LtiDeepLinkingResponse",
+      [CLAIM.deploymentId]: "dep-1",
+      [CLAIM.deepLinkingData]: "opaque",
+      [CLAIM.deepLinkingContentItems]: [
+        { type: "ltiResourceLink", title: "Todo API", custom: { assignment_id: "a-1" } },
+      ],
     });
   });
 });

@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { isActive, RunList, type RunSummary } from "@/components/evaluation";
+import { RunList, stillUpdating, type RunSummary } from "@/components/evaluation";
 import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
@@ -448,7 +448,7 @@ export default async function SubmissionPage({ params }: Props) {
           )}
 
           <Card title="Test runs" description={a.suite ? a.suite.title : "No automated tests for this assignment"}>
-            <AutoRefresh active={runList.some((r) => isActive(r.status))} />
+            <AutoRefresh active={runList.some(stillUpdating)} />
             {runList.length === 0 ? (
               <EmptyState title="No test runs yet">
                 {a.triggers.on_push ? "Tests run automatically when you push to the default branch." : undefined}

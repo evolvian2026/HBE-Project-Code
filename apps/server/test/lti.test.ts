@@ -282,7 +282,8 @@ describe("LTI 1.3 tool", () => {
     );
 
     const deepLink = await launch({ ...user, roles: [ROLES.instructor] }, {}, { messageType: "LtiDeepLinkingRequest" });
-    expect(deepLink.res.statusCode).toBe(501);
+    expect(deepLink.res.statusCode).toBe(303);
+    expect(deepLink.res.headers.location).toMatch(/^\/lti\/deep-link\//);
 
     // A connection that's turned off stops launches.
     const off = await app.inject({

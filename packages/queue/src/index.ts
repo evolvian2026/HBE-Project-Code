@@ -40,6 +40,14 @@ export interface QueuePayloads {
   "records-notices": Record<string, never>;
   /** Purge institutions whose retention has ended. */
   "records-purge": Record<string, never>;
+  /** Send a released grade version to the LMS gradebooks linked to its course. */
+  "lms-grade-sync": { gradeId: string; force: boolean };
+  /** Read an LMS course's roster (lms_course_links.id). */
+  "lms-roster-sync": { courseLinkId: string };
+  /** Queue a roster sync for every linked LMS course. */
+  "lms-roster-sweep": Record<string, never>;
+  /** Compare LMS gradebooks with the grades sent there; send what's missing. */
+  "lms-reconcile": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -78,6 +86,11 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "records-export": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
   "records-notices": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
   "records-purge": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
+  // Always sent with singletonKey `lms-<gradeId>`; LMS outages are retried for about an hour.
+  "lms-grade-sync": { retryLimit: 6, retryDelay: 60, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
+  "lms-roster-sync": { retryLimit: 2, retryDelay: 120, retryBackoff: true, expireInSeconds: 900, policy: "stately" },
+  "lms-roster-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
+  "lms-reconcile": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

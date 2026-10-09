@@ -36,6 +36,7 @@ export async function announceRelease(db: Db, queue: JobQueue | undefined, grade
     );
   }
   await queue?.send("grade-report", { gradeId }, { singletonKey: `report-${gradeId}` });
+  await queue?.send("lms-grade-sync", { gradeId, force: false }, { singletonKey: `lms-${gradeId}` });
 }
 
 /** JSON with keys sorted, so stored and freshly computed values compare equal. */

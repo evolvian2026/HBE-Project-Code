@@ -3,15 +3,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CourseMatrix, OVERVIEW_COLUMNS, type OverviewRow } from "@/components/course-matrix";
-import { Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
+import { AutoRefresh } from "@/components/auto-refresh";
+import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadMembers } from "../../members/data";
 import { InviteForm } from "../../members/forms";
 import { removeCourseMember, setCourseArchived } from "../actions";
 import { AddCourseMemberForm } from "../forms";
+import { syncLmsRoster } from "./lms-actions";
 
-type Props = { params: Promise<{ slug: string; courseId: string }> };
+type Props = {
+  params: Promise<{ slug: string; courseId: string }>;
+  searchParams?: Promise<Record<string, string | undefined>>;
+};
 
 const ROLE_ORDER = ["instructor", "ta", "student"] as const;
 const ROLE_TITLES: Record<string, string> = {
@@ -52,8 +57,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `${course.code} · ${course.name}` };
 }
 
-export default async function CoursePage({ params }: Props) {
+export default async function CoursePage({ params, searchParams }: Props) {
   const { slug, courseId } = await params;
+  const query = (await searchParams) ?? {};
   const { ctx, supabase, course } = await loadCourse(slug, courseId);
 
   const { data: assignmentRows } = await supabase
@@ -134,17 +140,28 @@ export default async function CoursePage({ params }: Props) {
   const { data: lmsLinks } = isCourseStaff
     ? await supabase
         .from("lms_course_links")
-        .select("id, context_title, context_id, connection:lms_connections(name)")
+        .select(
+          "id, context_title, context_id, nrps_url, roster_synced_at, roster_summary, connection:lms_connections(name)",
+        )
         .eq("course_id", course.id)
     : { data: [] };
-  const lmsCourses = (
-    (lmsLinks ?? []) as unknown as {
-      id: string;
-      context_title: string | null;
-      context_id: string;
-      connection: { name: string } | null;
-    }[]
-  ).map((l) => `${l.context_title ?? l.context_id} (${l.connection?.name ?? "LMS"})`);
+  const lmsLinkRows = (lmsLinks ?? []) as unknown as {
+    id: string;
+    context_title: string | null;
+    context_id: string;
+    nrps_url: string | null;
+    roster_synced_at: string | null;
+    roster_summary: { members: number; linked: number; waiting: number; added: number; inactive: number } | null;
+    connection: { name: string } | null;
+  }[];
+  const lmsName = (l: (typeof lmsLinkRows)[number]) =>
+    `${l.context_title ?? l.context_id} (${l.connection?.name ?? "LMS"})`;
+  const lmsCourses = lmsLinkRows.map(lmsName);
+  // After "Read the roster now": refresh until it has been read (for two minutes at most).
+  const rosterAsked = Number(query.roster) || 0;
+  const readingRoster =
+    Date.now() - rosterAsked < 120_000 &&
+    lmsLinkRows.some((l) => l.nrps_url && (!l.roster_synced_at || Date.parse(l.roster_synced_at) < rosterAsked));
 
   const candidates = canManage
     ? (await loadMembers(supabase, ctx.institution.id))
@@ -258,6 +275,45 @@ export default async function CoursePage({ params }: Props) {
             ))}
           </ul>
         </Card>
+      )}
+
+      {isCourseStaff && lmsLinkRows.length > 0 && (
+        <section id="lms">
+          <Card
+            title="LMS roster"
+            description="Read from the LMS every night: its students who are members here join this course."
+          >
+            <AutoRefresh active={readingRoster} intervalMs={4000} />
+            {query.roster_error && <Alert tone="error">{query.roster_error}</Alert>}
+            {readingRoster && <Alert tone="success">Reading the roster from the LMS…</Alert>}
+            <ul className="divide-y divide-border text-sm" data-testid="lms-roster">
+              {lmsLinkRows.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                  <span>
+                    {lmsName(l)}
+                    <span className="block text-xs text-muted">
+                      {!l.nrps_url
+                        ? "This LMS course doesn't share its roster with the platform."
+                        : l.roster_synced_at && l.roster_summary
+                          ? `Read ${formatInZone(l.roster_synced_at, course.timezone)}: ${l.roster_summary.members} people, ${l.roster_summary.added} added to this course, ${l.roster_summary.waiting} waiting for an admin to match them`
+                          : "Not read yet."}
+                    </span>
+                  </span>
+                  {canManage && l.nrps_url && (
+                    <form action={syncLmsRoster}>
+                      <input type="hidden" name="slug" value={slug} />
+                      <input type="hidden" name="courseId" value={course.id} />
+                      <input type="hidden" name="linkId" value={l.id} />
+                      <Button type="submit" variant="secondary">
+                        Read the roster now
+                      </Button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
       )}
 
       {isCourseStaff && (

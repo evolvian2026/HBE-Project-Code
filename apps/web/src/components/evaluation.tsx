@@ -34,6 +34,13 @@ const TRIGGER: Record<string, string> = {
 
 export const isActive = (status: RunStatus) => status === "queued" || status === "dispatched" || status === "running";
 
+/**
+ * Whether a run's page should keep refreshing: it is still running, or it has finished and its
+ * score is being worked out (the results arrive first, then the worker scores them).
+ */
+export const stillUpdating = (run: { status: RunStatus; summary: { total?: number } | null }) =>
+  isActive(run.status) || (run.status === "completed" && typeof run.summary?.total !== "number");
+
 export function RunStatusBadge({ status }: { status: RunStatus }) {
   const s = STATUS[status] ?? { label: status, tone: "neutral" as const };
   return <Badge tone={s.tone}>{s.label}</Badge>;

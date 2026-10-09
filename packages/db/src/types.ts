@@ -450,8 +450,58 @@ export interface LmsCourseLinksTable {
   nrps_url: string | null;
   ags_lineitems_url: string | null;
   linked_by: string | null;
+  roster_synced_at: Timestamp | null;
+  roster_summary: Json | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+export interface LmsAssignmentLinksTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  lms_course_link_id: string;
+  resource_link_id: string | null;
+  lineitem_url: string | null;
+  score_maximum: Generated<string>; // numeric
+  created_by: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export type LmsGradeSyncStatus = "pending" | "synced" | "failed" | "skipped" | "conflict";
+
+export interface LmsGradeSyncsTable {
+  id: Generated<string>;
+  institution_id: string;
+  grade_id: string;
+  submission_id: string;
+  lms_assignment_link_id: string;
+  lms_user_id: string | null;
+  status: Generated<LmsGradeSyncStatus>;
+  score_given: string | null; // numeric
+  lms_score: string | null; // numeric
+  attempts: Generated<number>;
+  last_error: string | null;
+  synced_at: Timestamp | null;
+  checked_at: Timestamp | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface LtiDeepLinkRequestsTable {
+  id: Generated<string>;
+  token_hash: string;
+  lms_connection_id: string;
+  lms_course_link_id: string | null;
+  profile_id: string;
+  deployment_id: string;
+  return_url: string;
+  data: string | null;
+  accept_multiple: Generated<boolean>;
+  expires_at: Timestamp;
+  used_at: Timestamp | null;
+  created_at: DefaultTimestamp;
 }
 
 export interface LtiLaunchStatesTable {
@@ -707,6 +757,9 @@ export interface Database {
   lms_connections: LmsConnectionsTable;
   lms_user_links: LmsUserLinksTable;
   lms_course_links: LmsCourseLinksTable;
+  lms_assignment_links: LmsAssignmentLinksTable;
+  lms_grade_syncs: LmsGradeSyncsTable;
+  lti_deep_link_requests: LtiDeepLinkRequestsTable;
   lti_launch_states: LtiLaunchStatesTable;
   lti_registration_invites: LtiRegistrationInvitesTable;
 }

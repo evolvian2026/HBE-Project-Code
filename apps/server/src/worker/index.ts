@@ -13,6 +13,7 @@ import { s3ArchiveStore } from "../archive.ts";
 import { buildExport } from "../records/export.ts";
 import { purgeDueInstitutions, sendPurgeNotices } from "../records/lifecycle.ts";
 import { replicateRecords } from "../records/replication.ts";
+import { queueRosterSyncs, reconcileGrades, syncGrade, syncRoster } from "../lti/grades.ts";
 import { sweepExpiredArtifacts } from "./artifacts.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
@@ -110,5 +111,24 @@ export async function startWorker(
     if (purged.length) log.warn({ purged }, "institutions purged");
   });
   await queue.schedule("records-purge", "53 4 * * *", {});
+
+  // LMS gradebooks and rosters (LTI Advantage).
+  const lms = { db: deps.db, settings, queue };
+  await queue.work("lms-grade-sync", async (job) => {
+    await syncGrade(lms, job.data.gradeId, { force: job.data.force });
+  });
+  await queue.work("lms-roster-sync", async (job) => {
+    const summary = await syncRoster(lms, job.data.courseLinkId);
+    if (summary) log.info({ courseLinkId: job.data.courseLinkId, ...summary }, "LMS roster synced");
+  });
+  await queue.work("lms-roster-sweep", async () => {
+    await queueRosterSyncs(deps.db, queue);
+  });
+  await queue.schedule("lms-roster-sweep", "11 1 * * *", {});
+  await queue.work("lms-reconcile", async () => {
+    const summary = await reconcileGrades(lms);
+    log.info(summary, "LMS gradebooks reconciled");
+  });
+  await queue.schedule("lms-reconcile", "29 3 * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

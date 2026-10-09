@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { isActive, RunStatusBadge, type RunStatus } from "@/components/evaluation";
+import { isActive, RunStatusBadge, stillUpdating, type RunStatus } from "@/components/evaluation";
 import { Alert, Badge, Card, EmptyState } from "@/components/ui";
 import { loadAssignment } from "../../../../../data";
 
@@ -143,7 +143,7 @@ export default async function RunPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <AutoRefresh active={isActive(status)} />
+      <AutoRefresh active={stillUpdating({ status, summary })} />
       <div>
         <p className="text-sm text-muted">
           <Link href={`/i/${slug}/courses/${course.id}/assignments/${a.id}`} className="hover:text-text">

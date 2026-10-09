@@ -76,12 +76,21 @@ report archived and downloadable.
 
 ## Phase 2: LMS and v1 hardening (5–6 weeks) — in progress
 
-Built so far (2A): the LTI 1.3 tool core. Institution admins connect Canvas, Moodle or another
-LTI 1.3 platform with a one-time Dynamic Registration URL or by hand; launches sign people in
-(matched by email, pending invitations, or an admin's review queue), instructors link LMS
-courses to platform courses on their first launch, and learners join the linked course and land
-on their assignment. Tested end to end against a stand-in platform; still to be tried against
-real Canvas and Moodle instances.
+Built so far:
+
+- **2A, LTI 1.3 core.** Institution admins connect Canvas, Moodle or another LTI 1.3 platform
+  with a one-time Dynamic Registration URL or by hand; launches sign people in (matched by
+  email, pending invitations, or an admin's review queue), instructors link LMS courses to
+  platform courses on their first launch, and learners join the linked course and land on
+  their assignment.
+- **2B, grades and rosters.** Instructors add platform assignments in the LMS with Deep Linking
+  (each gets a gradebook column); released grades go to the LMS gradebook (AGS) once per
+  version, with retries; the assignment page shows each student's sync status and can send
+  again; a nightly reconciliation flags grades changed in the LMS instead of overwriting them;
+  rosters are read from the LMS (NRPS) nightly or on request.
+
+Tested end to end against a stand-in LMS; still to be tried against real Canvas and Moodle
+instances.
 
 - **LMS integration**: LTI 1.3 tool (login, launch, deep linking, JWKS, dynamic registration)
   tested against Canvas and Moodle; AGS grade passback; Google Classroom courseWork + grade
