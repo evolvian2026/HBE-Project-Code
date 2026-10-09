@@ -207,12 +207,36 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
       [
         [`/v1/runs/${runId}/started`, "Bearer local-run-token"],
         [`/v1/runs/${runId}/snapshot-uploads`, "Bearer local-run-token"],
+        [`/v1/runs/${runId}/artifact-uploads`, "Bearer local-run-token"],
         [`/v1/runs/${runId}/results`, "Bearer local-run-token"],
       ],
     );
-    assert.equal(calls[2].body.run_id, runId);
-    assert.equal(calls[2].body.stages.length, 4);
-    assert.equal(calls[2].body.snapshot, undefined); // not a graded run
+    assert.equal(calls[3].body.run_id, runId);
+    assert.equal(calls[3].body.stages.length, 4);
+    assert.equal(calls[3].body.snapshot, undefined); // not a graded run
+  });
+
+  it("uploads the run's files: logs, and a failed browser test's screenshot and trace", async () => {
+    const { calls, uploads } = await withPlatform(
+      path.join(root, "test-fixtures/todo-api-buggy"),
+      () => ({}),
+      "suites/sample/todo-web",
+    );
+    const results = calls.find((c) => c.url.endsWith("/results")).body;
+    assert.deepEqual(results.artifacts.map((a) => a.name).sort(), [
+      "logs/app.log",
+      "logs/build.log",
+      "ui/ui.add.png",
+      "ui/ui.add.trace.zip",
+    ]);
+    const add = results.stages.find((s) => s.key === "ui").tests.find((t) => t.id === "ui.add");
+    assert.deepEqual(add.attachments, { screenshot: "ui/ui.add.png", trace: "ui/ui.add.trace.zip" });
+    const png = uploads.get("/upload/artifacts/ui/ui.add.png");
+    assert.equal(png.type, "image/png");
+    assert.deepEqual([...png.body.subarray(1, 4)], [...Buffer.from("PNG")]);
+    assert.equal(uploads.get("/upload/artifacts/ui/ui.add.trace.zip").body.subarray(0, 2).toString(), "PK");
+    assert.match(uploads.get("/upload/artifacts/logs/app.log").body.toString(), /todo api listening/);
+    for (const a of results.artifacts) assert.equal(a.size, uploads.get(`/upload/artifacts/${a.name}`).body.length);
   });
 
   it("archives a graded commit: a git bundle and a tarball, with their hashes", async () => {
@@ -258,7 +282,7 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
  * Runs the harness against a stand-in platform API that records callbacks and uploads.
  * `uploadTargets(port)` answers the snapshot-uploads callback.
  */
-async function withPlatform(submission, uploadTargets) {
+async function withPlatform(submission, uploadTargets, suite) {
   const calls = [];
   const uploads = new Map();
   const server = createServer((req, res) => {
@@ -272,13 +296,30 @@ async function withPlatform(submission, uploadTargets) {
         return;
       }
       calls.push({ url: req.url, auth: req.headers.authorization, body: body.length ? JSON.parse(body) : null });
-      const reply = req.url.endsWith("/snapshot-uploads") ? uploadTargets(server.address().port) : { ok: true };
+      const port = server.address().port;
+      const reply = req.url.endsWith("/snapshot-uploads")
+        ? uploadTargets(port)
+        : req.url.endsWith("/artifact-uploads")
+          ? {
+              uploads: Object.fromEntries(
+                JSON.parse(body).files.map((f) => [
+                  f.name,
+                  { path: `x/${f.name}`, url: `http://127.0.0.1:${port}/upload/artifacts/${f.name}` },
+                ]),
+              ),
+            }
+          : { ok: true };
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(reply));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
-    await harness(submission, ["--api-url", `http://127.0.0.1:${server.address().port}`, "--token", "local-run-token"]);
+    await harness(
+      submission,
+      ["--api-url", `http://127.0.0.1:${server.address().port}`, "--token", "local-run-token"],
+      profile,
+      suite,
+    );
   } finally {
     server.close();
   }

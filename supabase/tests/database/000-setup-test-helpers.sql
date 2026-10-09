@@ -157,6 +157,9 @@ begin
   insert into public.test_results (institution_id, run_id, stage, test_key, title, status, staff_notes)
     select r.institution_id, r.id, 'api', 'todos.create', 'Creates a todo', 'failed', 'Common cause: missing await'
     from public.evaluation_runs r;
+  insert into public.run_artifacts (institution_id, run_id, name, path, content_type, size)
+    select r.institution_id, r.id, 'logs/build.log', r.institution_id || '/' || r.id || '/logs/build.log', 'text/plain', 10
+    from public.evaluation_runs r;
   insert into public.grader_suites (institution_id, key, version, title, path)
     values (tests.id('inst_b'), 'beta-suite', 1, 'Beta suite', 'suites/beta');
   insert into public.branch_pushes (institution_id, repository_id, sha, pushed_at)
@@ -196,7 +199,8 @@ begin
     (tests.id('inst_b'), tests.id('student_b'), 'grade_released', 'Your grade for Shop is out', '/i/beta', 'seed-b');
   insert into storage.objects (bucket_id, name)
     select 'grade-reports', json_path from public.grade_reports
-    union all select 'submission-archive', bundle_path from public.submission_snapshots;
+    union all select 'submission-archive', bundle_path from public.submission_snapshots
+    union all select 'run-artifacts', path from public.run_artifacts;
 
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
@@ -242,6 +246,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'notifications', count(*) from public.notifications where institution_id = p_institution
   union all select 'review_comments', count(*) from public.review_comments where institution_id = p_institution
   union all select 'regrade_requests', count(*) from public.regrade_requests where institution_id = p_institution
+  union all select 'run_artifacts', count(*) from public.run_artifacts where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

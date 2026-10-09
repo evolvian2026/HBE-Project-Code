@@ -50,7 +50,23 @@ interface TestRow {
   message: string | null;
   hint: string | null;
   evidence: Record<string, string> | null;
+  attachments: { screenshot?: string; trace?: string } | null;
 }
+
+interface RunFile {
+  name: string;
+  content_type: string;
+  size: number;
+}
+
+const FILE_LABEL: Record<string, string> = {
+  "logs/build.log": "Build log",
+  "logs/app.log": "Your app's logs",
+  "lint/output.log": "Lint output",
+  "student_tests/output.log": "Your tests' output",
+  "student_tests/junit.xml": "Your tests' JUnit report",
+};
+const kib = (bytes: number) => (bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KB`);
 
 const EVIDENCE_LABEL: Record<string, string> = {
   request: "Request",
@@ -78,10 +94,12 @@ export default async function RunPage({ params }: Props) {
     .maybeSingle();
   if (!run) notFound(); // RLS: the student and course staff only
 
-  const [tests, submission, notes] = await Promise.all([
+  const [tests, submission, notes, files] = await Promise.all([
     supabase
       .from("test_results")
-      .select("id, stage, test_key, title, category, status, weight, expected, actual, message, hint, evidence")
+      .select(
+        "id, stage, test_key, title, category, status, weight, expected, actual, message, hint, evidence, attachments",
+      )
       .eq("run_id", run.id),
     supabase
       .from("submissions")
@@ -91,7 +109,12 @@ export default async function RunPage({ params }: Props) {
     isCourseStaff
       ? supabase.rpc("run_staff_notes", { p_run_id: run.id })
       : Promise.resolve({ data: [] as { stage: string; test_key: string; staff_notes: string }[] }),
+    supabase.from("run_artifacts").select("name, content_type, size").eq("run_id", run.id).order("name"),
   ]);
+  const runFiles = (files.data ?? []) as RunFile[];
+  const stored = new Set(runFiles.map((f) => f.name));
+  /** Downloads go through a route that signs the URL with the viewer's session. */
+  const fileUrl = (name: string) => `/i/${slug}/runs/${run.id}/files/${name}`;
   const sub = submission.data as unknown as {
     profile: { full_name: string | null; email: string | null } | null;
     repository: { owner: string; name: string } | null;
@@ -258,6 +281,25 @@ export default async function RunPage({ params }: Props) {
                             </pre>
                           </details>
                         ))}
+                      {t.attachments?.screenshot && stored.has(t.attachments.screenshot) && (
+                        <figure>
+                          <img
+                            src={fileUrl(t.attachments.screenshot)}
+                            alt={`The page when “${t.title}” failed`}
+                            className="max-h-96 rounded-md border border-border"
+                          />
+                          <figcaption className="mt-1 text-xs text-muted">The page when the test failed</figcaption>
+                        </figure>
+                      )}
+                      {t.attachments?.trace && stored.has(t.attachments.trace) && (
+                        <p className="text-xs text-muted">
+                          <a href={fileUrl(t.attachments.trace)} className="text-accent hover:underline">
+                            Download the Playwright trace
+                          </a>{" "}
+                          — step through what the browser did: open it with <code>npx playwright show-trace</code> or
+                          drop it on trace.playwright.dev.
+                        </p>
+                      )}
                       {note && (
                         <p className="rounded-md border border-warning/40 px-3 py-2">
                           <span className="font-medium">Staff note (students don&apos;t see this): </span>
@@ -270,6 +312,20 @@ export default async function RunPage({ params }: Props) {
                 </li>
               );
             })}
+          </ul>
+        </Card>
+      )}
+      {runFiles.length > 0 && (
+        <Card title="Files" description="Kept with the run: logs, reports, screenshots and traces.">
+          <ul className="divide-y divide-border text-sm" data-testid="run-files">
+            {runFiles.map((f) => (
+              <li key={f.name} className="flex items-center justify-between gap-3 py-2">
+                <a href={fileUrl(f.name)} className="text-accent hover:underline">
+                  {FILE_LABEL[f.name] ?? f.name}
+                </a>
+                <span className="text-xs tabular-nums text-muted">{kib(Number(f.size))}</span>
+              </li>
+            ))}
           </ul>
         </Card>
       )}

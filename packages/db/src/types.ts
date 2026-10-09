@@ -399,6 +399,18 @@ export interface ReviewCommentsTable {
   updated_at: DefaultTimestamp;
 }
 
+export interface RunArtifactsTable {
+  id: Generated<string>;
+  institution_id: string;
+  run_id: string;
+  name: string;
+  path: string;
+  content_type: "image/png" | "application/zip" | "text/plain" | "application/xml";
+  size: number;
+  expires_at: Timestamp | null;
+  created_at: DefaultTimestamp;
+}
+
 export type RegradeStatus = "open" | "accepted" | "declined" | "withdrawn";
 
 export interface RegradeRequestsTable {
@@ -548,6 +560,7 @@ export interface TestResultsTable {
   message: string | null;
   hint: string | null;
   evidence: Json | null;
+  attachments: Json | null;
   staff_notes: string | null;
 }
 
@@ -588,6 +601,7 @@ export interface Database {
   notifications: NotificationsTable;
   review_comments: ReviewCommentsTable;
   regrade_requests: RegradeRequestsTable;
+  run_artifacts: RunArtifactsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

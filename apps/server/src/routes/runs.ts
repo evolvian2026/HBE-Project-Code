@@ -19,6 +19,20 @@ const status = z.enum(["passed", "failed", "skipped", "error"]);
 /** What the grader harness reports (docs/ARCHITECTURE.md §6.5), with size limits. */
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 
+/** Run artifacts: <stage>/<file> names, a few content types, size limits per file and per run. */
+const artifactName = z.string().regex(/^[a-z0-9_-]{1,40}\/[A-Za-z0-9_.-]{1,160}$/);
+const artifactFile = z.object({
+  name: artifactName,
+  content_type: z.enum(["image/png", "application/zip", "text/plain", "application/xml"]),
+  size: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(25 * 1024 * 1024),
+});
+const MAX_ARTIFACTS = 60;
+const MAX_ARTIFACT_BYTES = 150 * 1024 * 1024;
+
 const resultsSchema = z.object({
   infra_error: text(2000).nullable().default(null),
   /** Source snapshot the harness uploaded (graded runs only). */
@@ -52,6 +66,7 @@ const resultsSchema = z.object({
               message: text(4000).optional(),
               hint: text(1000).optional(),
               evidence: z.record(z.string().max(40), text(8000)).optional(),
+              attachments: z.record(z.enum(["screenshot", "trace"]), artifactName).optional(),
               staff_notes: text(2000).optional(),
             }),
           )
@@ -60,9 +75,15 @@ const resultsSchema = z.object({
       }),
     )
     .max(20),
+  /** Files the grader uploaded (see /artifact-uploads). */
+  artifacts: z.array(artifactFile).max(MAX_ARTIFACTS).optional(),
 });
 
 export const ARCHIVE_BUCKET = "submission-archive";
+export const ARTIFACT_BUCKET = "run-artifacts";
+
+const artifactPath = (run: { institution_id: string; id: string }, name: string) =>
+  `${run.institution_id}/${run.id}/${name}`;
 
 /** Where a graded commit's source snapshot lives in the archive bucket. */
 const snapshotPaths = (run: { institution_id: string; submission_id: string; sha: string }) => {
@@ -236,6 +257,27 @@ export async function runRoutes(
     };
   });
 
+  /**
+   * Grader callback: where to upload the run's files (logs, JUnit reports, screenshots and
+   * traces). The results then list the files that were uploaded.
+   */
+  app.post<{ Params: { runId: string } }>("/v1/runs/:runId/artifact-uploads", async (req) => {
+    const run = await loadRun(req.params.runId);
+    await graderAuth.verify(req, run);
+    if (!["dispatched", "running"].includes(run.status))
+      throw new HttpError(409, "run_not_active", `Run is ${run.status}`);
+    const { files } = z.object({ files: z.array(artifactFile).max(MAX_ARTIFACTS) }).parse(req.body);
+    if (files.reduce((sum, f) => sum + f.size, 0) > MAX_ARTIFACT_BYTES) {
+      throw new HttpError(413, "too_large", "The run's files are too large to keep.");
+    }
+    const uploads: Record<string, { path: string; url: string }> = {};
+    for (const f of files) {
+      const path = artifactPath({ institution_id: run.institution_id, id: run.id }, f.name);
+      uploads[f.name] = { path, url: await store.signedUploadUrl(ARTIFACT_BUCKET, path) };
+    }
+    return { uploads };
+  });
+
   /** Grader callback: results. Stored, then scored and reported by the worker. */
   app.post<{ Params: { runId: string } }>("/v1/runs/:runId/results", { bodyLimit: 5 * 1024 * 1024 }, async (req) => {
     const run = await loadRun(req.params.runId);
@@ -261,6 +303,7 @@ export async function runRoutes(
           message: t.message ?? null,
           hint: t.hint ?? null,
           evidence: t.evidence ? (JSON.stringify(t.evidence) as Json) : null,
+          attachments: t.attachments ? (JSON.stringify(t.attachments) as Json) : null,
           staff_notes: t.staff_notes ?? null,
         })),
       );
@@ -292,6 +335,28 @@ export async function runRoutes(
           .insertInto("test_results")
           .values(tests.map((t) => ({ ...t, institution_id })))
           .execute();
+      if (results.artifacts?.length) {
+        // Graded runs' files are records; the others expire.
+        const graded = run.trigger === "deadline" || run.trigger === "regrade";
+        const expiresAt = graded
+          ? null
+          : new Date(Date.now() + deps.settings.profile.retention.nonfinal_artifact_days * 86_400_000);
+        await tx
+          .insertInto("run_artifacts")
+          .values(
+            results.artifacts.map((a) => ({
+              institution_id,
+              run_id: run.id,
+              name: a.name,
+              path: artifactPath({ institution_id, id: run.id }, a.name),
+              content_type: a.content_type,
+              size: a.size,
+              expires_at: expiresAt,
+            })),
+          )
+          .onConflict((oc) => oc.columns(["run_id", "name"]).doNothing())
+          .execute();
+      }
       await tx
         .updateTable("evaluation_runs")
         .set({

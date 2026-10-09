@@ -14,7 +14,8 @@ select throws_ok($$ select staff_notes from public.test_results $$, '42501', nul
 select throws_ok($$ select callback_token_hash from public.evaluation_runs $$, '42501', null, 'or the grader callback token');
 select is((select count(*)::int from public.run_staff_notes(tests.id('run_a'))), 0,
           'and the staff notes function returns nothing to them');
-select is((select count(*)::int from public.grader_suites where institution_id is null), 1, 'global suites are visible');
+select is((select count(*)::int from public.grader_suites where institution_id is null and key = 'todo-api'), 1,
+          'global suites are visible');
 reset role;
 
 select tests.authenticate_as(tests.id('teacher_a'));

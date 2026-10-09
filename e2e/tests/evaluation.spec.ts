@@ -20,7 +20,7 @@ test.afterAll(async () => {
 });
 
 test("a student runs the hidden tests and sees what to fix", async ({ page, baseURL, browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(480_000);
 
   // Setup: a published assignment with the sample suite, and a student with an active repository.
   const [inst] = await sql<{ id: string }>(
@@ -77,43 +77,41 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
 
   // The worker dispatches it to the grader (an in-memory GitHub here). Act as that grader:
   // give the run a token we know, then run the real harness against a buggy submission.
-  await expect
-    .poll(
-      async () =>
-        (await sql<{ status: string }>("select status from public.evaluation_runs where id = $1", [runId]))[0]?.status,
-      {
-        timeout: 30_000,
-      },
-    )
-    .toBe("dispatched");
-  const token = randomBytes(24).toString("base64url");
-  await sql("update public.evaluation_runs set callback_token_hash = $2 where id = $1", [
-    runId,
-    createHash("sha256").update(token).digest("hex"),
-  ]);
   const [profile] = await sql<{ definition: object }>(
     "select jsonb_build_object('key', key, 'version', version) || definition as definition from public.stack_profiles where key = 'node22-api'",
   );
-  await promisify(execFile)(
-    process.execPath,
-    [
-      path.join(grader, "harness/run.mjs"),
-      ...["--run-id", runId, "--sha", headSha],
-      ...["--submission", path.join(grader, "test-fixtures/todo-api-buggy")],
-      ...["--suite", path.join(grader, "suites/sample/todo-api")],
-      // What the worker sends for this assignment: the profile, with lint and the student's tests on.
-      ...[
-        "--profile",
-        JSON.stringify({
-          ...profile!.definition,
-          options: { stages: { lint: { share: 10 }, student_tests: { share: 20 } }, skip_kinds: [] },
-        }),
+  const grade = async (id: string, suite: string, options?: object) => {
+    await expect
+      .poll(
+        async () =>
+          (await sql<{ status: string }>("select status from public.evaluation_runs where id = $1", [id]))[0]?.status,
+        { timeout: 30_000 },
+      )
+      .toBe("dispatched");
+    const token = randomBytes(24).toString("base64url");
+    await sql("update public.evaluation_runs set callback_token_hash = $2 where id = $1", [
+      id,
+      createHash("sha256").update(token).digest("hex"),
+    ]);
+    await promisify(execFile)(
+      process.execPath,
+      [
+        path.join(grader, "harness/run.mjs"),
+        ...["--run-id", id, "--sha", headSha],
+        ...["--submission", path.join(grader, "test-fixtures/todo-api-buggy")],
+        ...["--suite", path.join(grader, suite)],
+        ...["--profile", JSON.stringify({ ...profile!.definition, ...(options ? { options } : {}) })],
+        ...["--api-url", baseURL!, "--token", token, "--timeout-minutes", "5"],
+        ...["--out", path.join(test.info().outputDir, `results-${id}.json`)],
       ],
-      ...["--api-url", baseURL!, "--token", token, "--timeout-minutes", "5"],
-      ...["--out", path.join(test.info().outputDir, "results.json")],
-    ],
-    { timeout: 300_000 },
-  );
+      { timeout: 300_000 },
+    );
+  };
+  // What the worker sends for this assignment: the profile, with lint and the student's tests on.
+  await grade(runId, "suites/sample/todo-api", {
+    stages: { lint: { share: 10 }, student_tests: { share: 20 } },
+    skip_kinds: [],
+  });
 
   // The page updates by itself: the score, and each failure with what was expected.
   // 10% lint (passed) + 20% own tests (one failed) + 70% × 70% of the hidden tests' weight = 59.
@@ -123,6 +121,16 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
   const own = page.getByTestId("test-student_tests");
   await expect(own.getByText("1 of 2 tests failed.")).toBeVisible();
   await own.getByText("Failing tests", { exact: true }).click();
+
+  // The run's files are kept: logs, the student's test output and JUnit report.
+  const runFiles = page.getByTestId("run-files");
+  for (const name of ["Build log", "Your app's logs", "Your tests' output", "Your tests' JUnit report"]) {
+    await expect(runFiles.getByRole("link", { name })).toBeVisible();
+  }
+  const appLog = await page.request.get(
+    (await runFiles.getByRole("link", { name: "Your app's logs" }).getAttribute("href"))!,
+  );
+  expect(await appLog.text()).toContain("todo api listening");
   await expect(own.getByText(/✗ test › rejects an empty title/)).toBeVisible();
   const validation = page.getByTestId("test-todos.create-requires-title");
   await expect(validation.getByText("POST /todos with a blank title should answer 400 Bad Request")).toBeVisible();
@@ -150,5 +158,25 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
   await expect(
     teacher.getByTestId("test-todos.delete").getByText(/usually means the delete handler is a stub/),
   ).toBeVisible();
+
+  // Browser tests: the instructor switches to the sample browser suite and runs it. The failed
+  // test shows a screenshot of the page and offers its Playwright trace.
+  await sql(
+    "update public.assignments set grader_suite_id = (select id from public.grader_suites where key = 'todo-web' and institution_id is null) where id = $1",
+    [assignment!.id],
+  );
+  await teacher.goto(`${assignmentUrl}/submissions/${submission!.id}`);
+  await teacher.getByRole("button", { name: "Run tests" }).click();
+  await expect(teacher).toHaveURL(/\/runs\/[0-9a-f-]{36}$/);
+  await grade(teacher.url().split("/").at(-1)!, "suites/sample/todo-web");
+  const add = teacher.getByTestId("test-ui.add");
+  const shot = add.getByRole("img", { name: "The page when “Adds a todo from the form” failed" });
+  await expect(shot).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(add.getByText(/^See “.+” in the list: locator.waitFor/)).toBeVisible();
+  const trace = await teacher.request.get(
+    (await add.getByRole("link", { name: "Download the Playwright trace" }).getAttribute("href"))!,
+  );
+  expect((await trace.body()).subarray(0, 2).toString()).toBe("PK");
   await teacherContext.close();
 });

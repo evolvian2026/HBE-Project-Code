@@ -9,6 +9,8 @@ export interface ObjectStore {
   signedUploadUrl(bucket: string, path: string): Promise<string>;
   /** Size and content of an object, or null if it doesn't exist. */
   get(bucket: string, path: string): Promise<Buffer | null>;
+  /** Deletes objects (missing ones are ignored). */
+  remove(bucket: string, paths: string[]): Promise<void>;
 }
 
 /** Supabase Storage, with the platform's secret key (the server side only). */
@@ -32,6 +34,11 @@ export function supabaseObjectStore(settings: Settings): ObjectStore {
       if (error || !data) return null;
       return Buffer.from(await data.arrayBuffer());
     },
+    async remove(bucket, paths) {
+      if (!paths.length) return;
+      const { error } = await client.storage.from(bucket).remove(paths);
+      if (error) throw new Error(`Storage delete in ${bucket} failed: ${error.message}`);
+    },
   };
 }
 
@@ -46,5 +53,8 @@ export class MemoryObjectStore implements ObjectStore {
   }
   async get(bucket: string, path: string) {
     return this.objects.get(`${bucket}/${path}`)?.body ?? null;
+  }
+  async remove(bucket: string, paths: string[]) {
+    for (const path of paths) this.objects.delete(`${bucket}/${path}`);
   }
 }

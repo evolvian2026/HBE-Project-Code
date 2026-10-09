@@ -9,6 +9,7 @@ import { buildApp } from "../src/app.ts";
 import { hashToken } from "../src/evaluation.ts";
 import { oidcGraderAuth, tokenGraderAuth } from "../src/grader-auth.ts";
 import { MemoryObjectStore } from "../src/storage.ts";
+import { sweepExpiredArtifacts } from "../src/worker/artifacts.ts";
 import { handlePullRequest, handlePush } from "../src/worker/activity.ts";
 import { dispatchRun, reapRuns, runnerMinutesThisMonth, scoreAndReport } from "../src/worker/evaluation.ts";
 import { FakeQueue, FakeVerifier, Fixtures, randomGithubId, testDb, testSettings } from "./helpers.ts";
@@ -518,6 +519,95 @@ describe("grader callbacks (per-run token)", () => {
       .where("submission_id", "=", s.submissionId)
       .executeTakeFirstOrThrow();
     expect(stored).toMatchObject({ sha: commit, run_id: graded.id, bundle_path: `${base}.bundle`, ...snapshot });
+  });
+
+  it("keeps the files a run uploads: graded runs' for good, others until they expire", async () => {
+    const s = await scenario();
+    const token = "artifact-run-token";
+    const insertRun = (trigger: "deadline" | "manual") =>
+      db
+        .insertInto("evaluation_runs")
+        .values({
+          institution_id: s.institutionId,
+          submission_id: s.submissionId,
+          sha: sha(),
+          trigger,
+          status: "running",
+          grader_suite_id: null,
+          stack_profile_id: null,
+          requested_by: null,
+          callback_token_hash: hashToken(token),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+    const files = [
+      { name: "logs/build.log", content_type: "text/plain", size: 2048 },
+      { name: "ui/ui.add.png", content_type: "image/png", size: 8000 },
+      { name: "ui/ui.add.trace.zip", content_type: "application/zip", size: 24000 },
+    ];
+    const withAttachments = {
+      stages: [
+        {
+          key: "ui",
+          status: "failed",
+          duration_ms: 3000,
+          tests: [
+            {
+              id: "ui.add",
+              title: "Adds a todo from the form",
+              status: "failed",
+              weight: 2,
+              attachments: { screenshot: "ui/ui.add.png", trace: "ui/ui.add.trace.zip" },
+            },
+          ],
+        },
+      ],
+      artifacts: files,
+    };
+
+    const manual = await insertRun("manual");
+    expect(
+      (await post(`/v1/runs/${manual.id}/artifact-uploads`, token, { files: [{ ...files[0], name: "../escape" }] }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await post(`/v1/runs/${manual.id}/artifact-uploads`, token, {
+          files: Array.from({ length: 7 }, (_, i) => ({ ...files[1], name: `ui/${i}.png`, size: 25 * 1024 * 1024 })),
+        })
+      ).statusCode,
+    ).toBe(413);
+    const { uploads } = (await post(`/v1/runs/${manual.id}/artifact-uploads`, token, { files })).json();
+    const prefix = `${s.institutionId}/${manual.id}`;
+    expect(uploads["ui/ui.add.png"]).toEqual({
+      path: `${prefix}/ui/ui.add.png`,
+      url: `memory://run-artifacts/${prefix}/ui/ui.add.png?token=test`,
+    });
+    expect((await post(`/v1/runs/${manual.id}/results`, token, withAttachments)).statusCode).toBe(200);
+    const kept = await db.selectFrom("run_artifacts").selectAll().where("run_id", "=", manual.id).execute();
+    expect(kept.map((a) => a.name).sort()).toEqual(["logs/build.log", "ui/ui.add.png", "ui/ui.add.trace.zip"]);
+    const days = (kept[0]!.expires_at!.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(settings.profile.retention.nonfinal_artifact_days - 1);
+    const test = await db
+      .selectFrom("test_results")
+      .select("attachments")
+      .where("run_id", "=", manual.id)
+      .executeTakeFirstOrThrow();
+    expect(test.attachments).toEqual({ screenshot: "ui/ui.add.png", trace: "ui/ui.add.trace.zip" });
+
+    const graded = await insertRun("deadline");
+    await post(`/v1/runs/${graded.id}/results`, token, withAttachments);
+    const gradedFiles = await db.selectFrom("run_artifacts").selectAll().where("run_id", "=", graded.id).execute();
+    expect(gradedFiles.every((a) => a.expires_at === null)).toBe(true);
+
+    // The daily sweep deletes expired files and their rows, and leaves graded runs' alone.
+    for (const a of [...kept, ...gradedFiles])
+      await store.put("run-artifacts", a.path, Buffer.from("x"), a.content_type);
+    const later = new Date(Date.now() + (settings.profile.retention.nonfinal_artifact_days + 1) * 86_400_000);
+    expect(await sweepExpiredArtifacts({ db, store }, later)).toBeGreaterThanOrEqual(3);
+    expect(await db.selectFrom("run_artifacts").select("id").where("run_id", "=", manual.id).execute()).toEqual([]);
+    expect(await store.get("run-artifacts", kept[0]!.path)).toBeNull();
+    expect(await store.get("run-artifacts", gradedFiles[0]!.path)).not.toBeNull();
   });
 
   it("rejects callbacks for runs that are not active", async () => {

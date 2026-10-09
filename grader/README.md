@@ -53,6 +53,14 @@ The worker passes these choices as `options` in the profile JSON:
 { "options": { "stages": { "lint": { "share": 10 }, "student_tests": { "share": 20 } }, "skip_kinds": [] } }
 ```
 
+Every run keeps its files: the build log, the app's full logs, the output (and JUnit report) of
+lint and the student's tests, and the screenshot and Playwright trace of each failed browser
+test. Before reporting, the harness asks the platform for signed upload URLs
+(`POST /v1/runs/:id/artifact-uploads`), uploads the files to the private `run-artifacts` bucket
+(text is redacted first) and lists them in the results; a failed upload never stops grading.
+Graded runs' files are kept with the institution's records; other runs' expire (the profile's
+`retention.nonfinal_artifact_days`).
+
 When a stage fails because of the platform (Docker Hub rate limits, a full disk, a broken
 suite), the results carry `infra_error` instead: the run is shown as a platform error and not
 graded.
@@ -145,4 +153,4 @@ the fixture apps with Docker; about 30 seconds).
 
 ## Not yet
 
-Uploading logs, screenshots and traces to Storage is planned (docs/ROADMAP.md).
+Nothing planned for the harness in Phase 1.

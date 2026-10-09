@@ -30,9 +30,11 @@ const LABELS = {
 
 /**
  * @param {{ project: string, submissionDir: string, workdir: string,
- *   remaining: (maxMs: number) => number, infra: (message: string) => never }} ctx
+ *   remaining: (maxMs: number) => number, infra: (message: string) => never,
+ *   keep: (name: string, source: { text?: string, file?: string }) => void }} ctx
+ *   `keep` saves a file to upload with the results (the full output, the JUnit report).
  */
-export function createToolchains({ project, submissionDir, workdir, remaining, infra }) {
+export function createToolchains({ project, submissionDir, workdir, remaining, infra, keep }) {
   const prepared = new Map();
   const volumes = [];
   let seq = 0;
@@ -108,7 +110,7 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
     try {
       if (statSync(local).size > 5 * 1024 * 1024) return null;
       const report = parseJUnit(readFileSync(local, "utf8"));
-      return report.total > 0 ? report : null;
+      return report.total > 0 ? { ...report, file: local } : null;
     } catch {
       return null;
     }
@@ -153,7 +155,9 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
     if (r.code !== 0 && !r.timedOut && looksLikeInfraFailure(r.output)) {
       infra(`${key} failed for a platform reason: ${tail(r.output, 5)}`);
     }
+    keep(`${key}/output.log`, { text: r.output });
     const junit = def.report === "junit" && def.junit ? await readJUnit(volume, def.image, def.junit) : null;
+    if (junit) keep(`${key}/junit.xml`, { file: junit.file });
     const passed = r.code === 0 && !(junit && junit.failed > 0);
     const evidence = { output: tail(r.output, 60) };
     if (junit?.failures.length) {

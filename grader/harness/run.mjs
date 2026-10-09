@@ -16,7 +16,7 @@
  * reported as `infra_error`: the run is not graded.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -114,6 +114,7 @@ const toolchains = createToolchains({
   infra: (message) => {
     throw new InfraError(message);
   },
+  keep: (name, source) => keepArtifact(name, source),
 });
 
 async function stage(key, fn) {
@@ -168,8 +169,56 @@ async function ensureBrowserImage() {
   if (r.code !== 0) throw new InfraError(`Could not build the browser test image: ${tailLines(r.stderr, 5)}`);
 }
 
-/** Files to upload with the results (screenshots and traces of failed browser tests). */
+/**
+ * Files to upload with the results: logs, the student's test output and JUnit report, and
+ * screenshots and traces of failed browser tests. Text is redacted like everything else.
+ */
 const artifacts = [];
+const CONTENT_TYPES = { ".png": "image/png", ".zip": "application/zip", ".xml": "application/xml" };
+const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+
+function keepArtifact(name, { text, file }) {
+  let local = file;
+  if (text !== undefined) {
+    local = path.join(workdir, "artifacts", name);
+    mkdirSync(path.dirname(local), { recursive: true });
+    writeFileSync(local, redact(text, secrets));
+  }
+  if (!local || !existsSync(local)) return;
+  const ext = path.extname(name).toLowerCase();
+  artifacts.push({ name, file: local, content_type: CONTENT_TYPES[ext] ?? "text/plain" });
+}
+
+/** Uploads the kept files to signed URLs from the platform; failures never stop grading. */
+async function uploadArtifacts() {
+  if (!callbacks || artifacts.length === 0) return;
+  const files = artifacts
+    .map((a) => ({ ...a, size: statSync(a.file).size }))
+    .filter((a) => a.size <= MAX_ARTIFACT_BYTES);
+  let uploads;
+  try {
+    ({ uploads } = await callbacks.artifactUploads(
+      files.map(({ name, content_type, size }) => ({ name, content_type, size })),
+    ));
+  } catch (err) {
+    log(`artifacts: no upload URLs (${err.message})`);
+    return;
+  }
+  const uploaded = [];
+  for (const f of files) {
+    const target = uploads?.[f.name];
+    if (!target) continue;
+    const res = await fetch(target.url, {
+      method: "PUT",
+      headers: { "content-type": f.content_type },
+      body: readFileSync(f.file),
+    }).catch((err) => ({ ok: false, status: err.message }));
+    if (res.ok) uploaded.push({ name: f.name, content_type: f.content_type, size: f.size });
+    else log(`artifacts: upload of ${f.name} failed (${res.status})`);
+  }
+  results.artifacts = uploaded;
+  log(`artifacts: ${uploaded.length} of ${files.length} uploaded`);
+}
 
 async function serviceLogs(services) {
   const r = await run("docker", compose("logs", "--no-color", "--tail", "80", ...services), { timeoutMs: 30_000 });
@@ -215,6 +264,7 @@ async function build() {
   const r = await run("docker", compose("build"), { timeoutMs: limit, maxOutput: 256 * 1024 });
   const output = `${r.stdout}${r.stderr}`;
   console.log(tailLines(output, 40));
+  keepArtifact("logs/build.log", { text: output });
   if (r.code === 0) return { status: "passed" };
   if (r.timedOut)
     return { status: "failed", message: `The build took longer than ${Math.round(limit / 60_000)} minutes.` };
@@ -335,7 +385,7 @@ async function testStage(def) {
       const local = path.join(outDir ?? "", path.basename(file));
       if (!outDir || !existsSync(local)) continue;
       attachments[kind] = `${def.key}/${path.basename(file)}`;
-      artifacts.push({ name: attachments[kind], file: local });
+      keepArtifact(attachments[kind], { file: local });
     }
     return Object.keys(attachments).length ? { ...cleaned, attachments } : cleaned;
   });
@@ -447,6 +497,15 @@ async function main() {
     results.infra_error = err instanceof InfraError ? err.message : `Grader error: ${err?.stack ?? err}`;
     log(`infra error: ${results.infra_error}`);
   } finally {
+    if (composePath) {
+      // The app's full logs (the stages only quote the end), then everything kept goes up.
+      const logs = await run("docker", compose("logs", "--no-color", "--timestamps"), {
+        timeoutMs: 60_000,
+        maxOutput: 1024 * 1024,
+      });
+      if (`${logs.stdout}${logs.stderr}`.trim()) keepArtifact("logs/app.log", { text: `${logs.stdout}${logs.stderr}` });
+    }
+    await uploadArtifacts();
     if (composePath && !args.keep) {
       await run("docker", compose("down", "-v", "--remove-orphans", "-t", "5"), { timeoutMs: 120_000 });
     }

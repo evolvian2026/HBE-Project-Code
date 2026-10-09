@@ -9,6 +9,7 @@ import { recomputeGrade } from "../grading.ts";
 import { remindDeadlines } from "../notifications.ts";
 import { generateGradeReport } from "../reports/index.ts";
 import type { ObjectStore } from "../storage.ts";
+import { sweepExpiredArtifacts } from "./artifacts.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
@@ -79,5 +80,10 @@ export async function startWorker(
     await remindDeadlines(deps.db, new Date(), queue);
   });
   await queue.schedule("deadline-reminder", "7 * * * *", {});
+  await queue.work("artifact-sweep", async () => {
+    const deleted = await sweepExpiredArtifacts(deps);
+    if (deleted) log.info({ deleted }, "expired run artifacts deleted");
+  });
+  await queue.schedule("artifact-sweep", "23 3 * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

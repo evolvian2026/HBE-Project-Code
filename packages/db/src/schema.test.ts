@@ -62,6 +62,7 @@ const declared: Record<string, string[]> = {
     "message",
     "hint",
     "evidence",
+    "attachments",
     "staff_notes",
   ],
   commits: [
@@ -299,6 +300,7 @@ const declared: Record<string, string[]> = {
     "created_at",
     "read_at",
   ],
+  run_artifacts: ["id", "institution_id", "run_id", "name", "path", "content_type", "size", "expires_at", "created_at"],
   regrade_requests: [
     "id",
     "institution_id",
