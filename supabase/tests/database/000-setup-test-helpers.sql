@@ -197,6 +197,10 @@ begin
   insert into public.notifications (institution_id, user_id, type, title, link, dedupe_key) values
     (tests.id('inst_a'), tests.id('student_a'), 'grade_released', 'Your grade for Todo API is out', '/i/alpha', 'seed-a'),
     (tests.id('inst_b'), tests.id('student_b'), 'grade_released', 'Your grade for Shop is out', '/i/beta', 'seed-b');
+  insert into public.record_exports (institution_id, status, location, path, size, files)
+    select id, 'ready', 'storage', id || '/export.zip', 100, 3 from public.institutions where id in (tests.id('inst_a'), tests.id('inst_b'));
+  insert into public.replicated_objects (bucket, path, institution_id, size)
+    select 'grade-reports', json_path, institution_id, 10 from public.grade_reports;
   insert into storage.objects (bucket_id, name)
     select 'grade-reports', json_path from public.grade_reports
     union all select 'submission-archive', bundle_path from public.submission_snapshots
@@ -247,6 +251,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'review_comments', count(*) from public.review_comments where institution_id = p_institution
   union all select 'regrade_requests', count(*) from public.regrade_requests where institution_id = p_institution
   union all select 'run_artifacts', count(*) from public.run_artifacts where institution_id = p_institution
+  union all select 'record_exports', count(*) from public.record_exports where institution_id = p_institution
+  union all select 'replicated_objects', count(*) from public.replicated_objects where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

@@ -58,7 +58,12 @@ jobs:
           pnpm db:lint
 
       - name: Integration tests (db, queue, server)
-        run: pnpm test:integration
+        run: |
+          # Local Storage's S3 API stands in for the external archive bucket.
+          eval "$(pnpm -s exec supabase status -o env | sed 's/^/export SB_/')"
+          export SUPABASE_S3_ACCESS_KEY_ID="$SB_S3_PROTOCOL_ACCESS_KEY_ID"
+          export SUPABASE_S3_SECRET_ACCESS_KEY="$SB_S3_PROTOCOL_ACCESS_KEY_SECRET"
+          pnpm test:integration
 
       - name: Build web and server
         run: pnpm build

@@ -371,7 +371,13 @@ export interface SubmissionSnapshotsTable {
 }
 
 export type NotificationType =
-  "run_finished" | "grade_released" | "deadline_soon" | "extension_granted" | "regrade_requested" | "regrade_answered";
+  | "run_finished"
+  | "grade_released"
+  | "deadline_soon"
+  | "extension_granted"
+  | "regrade_requested"
+  | "regrade_answered"
+  | "records_notice";
 
 export interface NotificationsTable {
   id: Generated<string>;
@@ -397,6 +403,30 @@ export interface ReviewCommentsTable {
   author_id: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+export interface ReplicatedObjectsTable {
+  bucket: string;
+  path: string;
+  institution_id: string;
+  size: number;
+  locked_until: Timestamp | null;
+  replicated_at: DefaultTimestamp;
+}
+
+export interface RecordExportsTable {
+  id: Generated<string>;
+  institution_id: string;
+  requested_by: string | null;
+  status: Generated<"queued" | "running" | "ready" | "failed">;
+  location: "archive" | "storage" | null;
+  path: string | null;
+  size: number | null;
+  sha256: string | null;
+  files: number | null;
+  error: string | null;
+  created_at: DefaultTimestamp;
+  finished_at: Timestamp | null;
 }
 
 export interface RunArtifactsTable {
@@ -602,6 +632,8 @@ export interface Database {
   review_comments: ReviewCommentsTable;
   regrade_requests: RegradeRequestsTable;
   run_artifacts: RunArtifactsTable;
+  replicated_objects: ReplicatedObjectsTable;
+  record_exports: RecordExportsTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

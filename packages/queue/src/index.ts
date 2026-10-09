@@ -32,6 +32,14 @@ export interface QueuePayloads {
   "deadline-reminder": Record<string, never>;
   /** Delete run artifacts past their expiry. */
   "artifact-sweep": Record<string, never>;
+  /** Copy new record files to the external archive bucket. */
+  "records-replication": Record<string, never>;
+  /** Build an institution's full export (record_exports.id). */
+  "records-export": { exportId: string };
+  /** Tell institution admins about the coming purge (90 and 30 days before). */
+  "records-notices": Record<string, never>;
+  /** Purge institutions whose retention has ended. */
+  "records-purge": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -60,6 +68,16 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "grade-report": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
   "deadline-reminder": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
   "artifact-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 900, policy: "stately" },
+  "records-replication": {
+    retryLimit: 0,
+    retryDelay: 0,
+    retryBackoff: false,
+    expireInSeconds: 1800,
+    policy: "stately",
+  },
+  "records-export": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
+  "records-notices": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
+  "records-purge": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

@@ -754,7 +754,8 @@ As built (Phase 1):
 - Students have a **My grades** page; staff open a **student profile** with the same record
   across every course they may see. Course staff get a students × assignments matrix, at-risk
   signals and a CSV export.
-- Not built yet: replication to the external bucket (§12.4) and the purge workflow (§12.5).
+- Replication (§12.4) and the end-of-contract workflow (§12.5) are built; see their "As built"
+  notes.
 
 ### 12.3 Performance views
 
@@ -778,6 +779,15 @@ As built (Phase 1):
 - When a course is archived, its GitHub repos are archived (read-only) too, and the platform
   keeps working from the snapshots.
 
+As built: a nightly worker job (`records-replication`) copies every grade report (JSON and PDF),
+source snapshot (bundle and tarball) and graded-run artifact to the archive bucket
+(`ARCHIVE_S3_*`), as `<bucket>/<path>`, streaming each object. With `ARCHIVE_OBJECT_LOCK` set,
+objects are locked until the institution's purge date, or `contract_grace_years` from the copy
+while the contract runs. `replicated_objects` records what was copied; files not in Storage yet
+are tried again the next night. Without `ARCHIVE_S3_BUCKET` (local development) nothing is
+replicated. The client is the AWS SDK, so S3, R2 and other S3-compatible stores work; CI tests it
+against local Supabase Storage's S3 API.
+
 ### 12.5 End of contract, purging and erasure requests
 
 - **Contract end**: an institution admin or super admin sets `contract_ended_at`. The
@@ -785,9 +795,23 @@ As built (Phase 1):
 - **Before the purge**: 90 days and 30 days before `purge_after`, institution admins are
   emailed and offered a **full export**: a ZIP with all grade report PDFs and JSON, source
   snapshots, and CSVs of grades and activity.
-- **Purge**: a monthly scheduled job deletes the institution's Storage objects (primary and
+- **Purge**: a scheduled job deletes the institution's Storage objects (primary and
   replica), then its database rows. It writes a purge certificate (counts and hashes) to the
   platform audit log, which keeps no student PII.
+- As built: institution admins (or super admins) end the contract on the institution's
+  **Records** page (`POST /v1/institutions/:id/contract`); only super admins can reopen it (a
+  renewal). Admins can start a **full export** there at any time, also after the contract ends: a
+  worker job streams a ZIP (every report version, every snapshot, `grades.csv`, and a README
+  manifest listing every file) to the archive bucket (or to the `record-exports` Storage bucket
+  locally), and the download is a 5-minute signed URL. Notices go to every institution admin 90
+  and 30 days before `purge_after`, in the app and always by email. The purge runs daily for
+  institutions past `purge_after`: it replicates first, deletes Storage objects and their
+  replicas (bypassing governance locks), then deletes the institution in one transaction with
+  row auditing switched off (so the audit log doesn't copy the data it removes), keeps the
+  institution row marked `purged` (name and dates only), deletes accounts that belonged to no
+  other institution, removes the institution's audit history and writes the certificate (row
+  counts per table, object counts per bucket, the number of replicas and accounts deleted, and a
+  SHA-256 of the deleted object list).
 - **Erasure requests during the contract**: the institution is the data controller. An
   institution admin either **anonymises** the student (removing PII from the profile and
   reports, and replacing it with a pseudonymous ID in grade records) or deletes the records

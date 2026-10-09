@@ -10,7 +10,9 @@ import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
 import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
 import { createGitHubClient, lazyGitHubClient } from "./github.ts";
+import { s3ArchiveStore, type ArchiveStore } from "./archive.ts";
 import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
+import { recordsRoutes } from "./routes/records.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
 import { codeRoutes } from "./routes/code.ts";
 import { gradingRoutes } from "./routes/grading.ts";
@@ -33,6 +35,8 @@ export interface AppDeps {
   graderAuth?: GraderAuth;
   /** Defaults to Supabase Storage. */
   store?: ObjectStore;
+  /** Defaults to the configured archive bucket (none locally). */
+  archive?: ArchiveStore | null;
   /** Defaults to the configured GitHub App (or the local fake). */
   github?: GitHubClient;
 }
@@ -90,6 +94,11 @@ export async function buildApp(
     });
     await app.register(gradingRoutes, apiDeps);
     await app.register(regradeRoutes, apiDeps);
+    await app.register(recordsRoutes, {
+      ...apiDeps,
+      store: deps.store ?? supabaseObjectStore(deps.settings),
+      archive: deps.archive === undefined ? s3ArchiveStore(deps.settings) : deps.archive,
+    });
     await app.register(codeRoutes, {
       ...apiDeps,
       github: deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings)),

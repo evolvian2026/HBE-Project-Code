@@ -5,7 +5,7 @@ import { Alert, Badge, Button, Card, EmptyState, Field } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 import { enforceAdminMfa } from "@/lib/mfa";
 import { requireSession } from "@/lib/session";
-import { createInstitution, mapInstallation } from "./actions";
+import { createInstitution, mapInstallation, reopenContract } from "./actions";
 
 export const metadata: Metadata = { title: "Platform console" };
 
@@ -14,6 +14,8 @@ interface InstitutionRow {
   name: string;
   slug: string;
   status: string;
+  contract_ended_at: string | null;
+  purge_after: string | null;
   member_count: number;
   admin_count: number;
 }
@@ -72,7 +74,18 @@ export default async function PlatformPage({
                     {institutionList.map((i) => (
                       <tr key={i.id}>
                         <td className="py-2.5 font-medium">
-                          {i.name} {i.status !== "active" && <Badge tone="warning">{i.status}</Badge>}
+                          {i.name} {i.status !== "active" && <Badge tone="warning">{i.status.replace("_", " ")}</Badge>}
+                          {i.purge_after && i.status === "read_only" && (
+                            <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted">
+                              records deleted {new Date(i.purge_after).toISOString().slice(0, 10)}
+                              <form action={reopenContract}>
+                                <input type="hidden" name="institutionId" value={i.id} />
+                                <button type="submit" className="text-accent hover:underline">
+                                  Reopen contract
+                                </button>
+                              </form>
+                            </span>
+                          )}
                         </td>
                         <td className="py-2.5 text-muted">{i.slug}</td>
                         <td className="py-2.5 text-right tabular-nums">{i.member_count}</td>

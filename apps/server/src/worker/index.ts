@@ -9,6 +9,10 @@ import { recomputeGrade } from "../grading.ts";
 import { remindDeadlines } from "../notifications.ts";
 import { generateGradeReport } from "../reports/index.ts";
 import type { ObjectStore } from "../storage.ts";
+import { s3ArchiveStore } from "../archive.ts";
+import { buildExport } from "../records/export.ts";
+import { purgeDueInstitutions, sendPurgeNotices } from "../records/lifecycle.ts";
+import { replicateRecords } from "../records/replication.ts";
 import { sweepExpiredArtifacts } from "./artifacts.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
@@ -85,5 +89,26 @@ export async function startWorker(
     if (deleted) log.info({ deleted }, "expired run artifacts deleted");
   });
   await queue.schedule("artifact-sweep", "23 3 * * *", {});
+
+  // The records lifecycle (docs/ARCHITECTURE.md §12.4-12.5).
+  const records = { ...deps, archive: s3ArchiveStore(settings), settings };
+  await queue.work("records-replication", async () => {
+    await replicateRecords(records, { budgetMs: 25 * 60_000 });
+  });
+  await queue.schedule("records-replication", "17 2 * * *", {});
+  await queue.work("records-export", async (job) => {
+    await buildExport(records, job.data.exportId);
+  });
+  await queue.work("records-notices", async () => {
+    await sendPurgeNotices(records);
+  });
+  await queue.schedule("records-notices", "41 1 * * *", {});
+  await queue.work("records-purge", async () => {
+    // Replicate first, so the purge removes every replica it knows of.
+    await replicateRecords(records, { budgetMs: 25 * 60_000 });
+    const purged = await purgeDueInstitutions(records);
+    if (purged.length) log.warn({ purged }, "institutions purged");
+  });
+  await queue.schedule("records-purge", "53 4 * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

@@ -69,6 +69,12 @@ instead, also replace `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECR
 | `ARCHIVE_S3_BUCKET` | `hbe-archive` | `hbe-prod-archive-sg` |
 | `ARCHIVE_S3_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | R2 keys | *(empty = EC2 instance role)* |
 | `ARCHIVE_OBJECT_LOCK` | `none` | `governance` |
+
+The archive bucket receives a nightly copy of every record file (grade reports, source snapshots,
+graded runs' artifacts) and holds full exports. With `ARCHIVE_OBJECT_LOCK=governance` the bucket
+must have Object Lock enabled; objects are locked until the institution's purge date, and the
+purge bypasses governance retention (the IAM role needs `s3:BypassGovernanceRetention`). Leave
+`ARCHIVE_S3_BUCKET` empty locally: nothing is replicated and exports go to Storage.
 | `HBE_IMAGE`, `APP_HOST`, `API_HOST`, `ACME_EMAIL` | — | set (used by Compose and Caddy) |
 | DNS for `app.` / `api.` | CNAME → Render | A → Elastic IP (or ALIAS → ALB) |
 | Keep-awake job | installed | run `remove-keep-awake.sql` |

@@ -43,3 +43,15 @@ export async function mapInstallation(formData: FormData) {
   revalidatePath("/platform");
   redirect("/platform?mapped=1");
 }
+
+/** Reopens an institution whose contract ended (a renewal): active again, nothing purged. */
+export async function reopenContract(formData: FormData) {
+  const institutionId = z.string().uuid().parse(formData.get("institutionId"));
+  const result = await apiFetch(`/v1/institutions/${institutionId}/contract`, {
+    method: "POST",
+    body: { action: "reopen" },
+  });
+  if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
+  revalidatePath("/platform");
+  redirect("/platform");
+}

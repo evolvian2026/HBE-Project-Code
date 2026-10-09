@@ -30,6 +30,8 @@ export async function platformRoutes(app: FastifyInstance, { db, verifier }: Api
         "i.slug",
         "i.status",
         "i.created_at",
+        "i.contract_ended_at",
+        "i.purge_after",
         sql<number>`count(m.id)::int`.as("member_count"),
         sql<number>`count(m.id) filter (where m.role = 'admin')::int`.as("admin_count"),
       ])
