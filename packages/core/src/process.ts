@@ -9,7 +9,11 @@ export interface ProcessPolicy {
   criteria: ProcessCriterion[];
   meaningful_commit_min_lines: number;
   max_commits_per_day: number;
+  /** Team assignments: a member below this share of the team's meaningful work is flagged for staff review. */
+  team_min_contribution_share?: number;
 }
+
+export const DEFAULT_TEAM_MIN_SHARE = 0.15;
 
 export type ProcessCriterion =
   | { key: "active_days"; target: number; weight: number }
@@ -22,6 +26,8 @@ export interface CommitFacts {
   authoredAt: Date;
   /** Attributed to the student by GitHub user id. */
   byStudent: boolean;
+  /** Attributed to another member of the student's team (team assignments). */
+  byTeammate?: boolean;
   isBot: boolean;
   parentCount: number | null;
   /** Changed lines outside ignored paths, excluding whitespace-only lines. Null while details are pending. */
@@ -30,7 +36,10 @@ export interface CommitFacts {
 
 export type CommitVerdict =
   | { meaningful: true }
-  | { meaningful: false; reason: "pending" | "not_student" | "bot" | "merge" | "after_deadline" | "too_small" };
+  | {
+      meaningful: false;
+      reason: "pending" | "not_student" | "teammate" | "bot" | "merge" | "after_deadline" | "too_small";
+    };
 
 export function classifyCommit(
   c: CommitFacts,
@@ -39,7 +48,7 @@ export function classifyCommit(
 ): CommitVerdict {
   if (c.effectiveLines === null) return { meaningful: false, reason: "pending" };
   if (c.isBot) return { meaningful: false, reason: "bot" };
-  if (!c.byStudent) return { meaningful: false, reason: "not_student" };
+  if (!c.byStudent) return { meaningful: false, reason: c.byTeammate ? "teammate" : "not_student" };
   if ((c.parentCount ?? 1) > 1) return { meaningful: false, reason: "merge" };
   if (c.authoredAt > deadline) return { meaningful: false, reason: "after_deadline" };
   if (c.effectiveLines < policy.meaningful_commit_min_lines) return { meaningful: false, reason: "too_small" };
@@ -68,6 +77,20 @@ export interface CriterionResult {
   explanation: string;
 }
 
+/**
+ * A team member's share of the team's meaningful work (changed lines of meaningful commits
+ * before the deadline). It only ever flags for staff review; it never changes the score.
+ */
+export interface Contribution {
+  share: number | null;
+  minShare: number;
+  flagged: boolean;
+  memberLines: number;
+  teamLines: number;
+  memberCommits: number;
+  teamCommits: number;
+}
+
 export interface ProcessResult {
   score: number;
   criteria: CriterionResult[];
@@ -75,6 +98,43 @@ export interface ProcessResult {
   creditedCommits: number;
   unattributedCommits: number;
   pendingCommits: number;
+  /** Team assignments only. */
+  contribution?: Contribution;
+}
+
+/** The member's share of the team's meaningful work, from the team repository's commits. */
+export function contributionShare(
+  commits: CommitFacts[],
+  policy: Pick<ProcessPolicy, "meaningful_commit_min_lines" | "team_min_contribution_share">,
+  deadline: Date,
+): Contribution {
+  let memberLines = 0;
+  let teamLines = 0;
+  let memberCommits = 0;
+  let teamCommits = 0;
+  for (const c of commits) {
+    if (!c.byStudent && !c.byTeammate) continue;
+    // A teammate's commit counts for the team as it would for them.
+    if (!classifyCommit({ ...c, byStudent: true }, policy, deadline).meaningful) continue;
+    const lines = c.effectiveLines ?? 0;
+    teamLines += lines;
+    teamCommits++;
+    if (c.byStudent) {
+      memberLines += lines;
+      memberCommits++;
+    }
+  }
+  const minShare = policy.team_min_contribution_share ?? DEFAULT_TEAM_MIN_SHARE;
+  const share = teamLines === 0 ? null : round(memberLines / teamLines, 4);
+  return {
+    share,
+    minShare,
+    flagged: share !== null && share < minShare,
+    memberLines,
+    teamLines,
+    memberCommits,
+    teamCommits,
+  };
 }
 
 const round = (n: number, places = 2) => Math.round(n * 10 ** places) / 10 ** places;
@@ -93,6 +153,8 @@ export function computeProcessScore(input: {
   issues: IssueFacts[];
   deadline: Date;
   timeZone: string;
+  /** A team assignment: also work out the member's contribution share. */
+  team?: boolean;
 }): ProcessResult {
   const { policy, deadline, timeZone } = input;
   const verdicts = input.commits.map((c) => ({ c, v: classifyCommit(c, policy, deadline) }));
@@ -194,6 +256,7 @@ export function computeProcessScore(input: {
     creditedCommits: credited.length,
     unattributedCommits: verdicts.filter((x) => !x.v.meaningful && x.v.reason === "not_student" && !x.c.isBot).length,
     pendingCommits: verdicts.filter((x) => !x.v.meaningful && x.v.reason === "pending").length,
+    ...(input.team ? { contribution: contributionShare(input.commits, policy, deadline) } : {}),
   };
 }
 

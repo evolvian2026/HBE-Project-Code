@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ApiDeps } from "../app.ts";
 import { authenticate } from "../auth.ts";
 import { HttpError, notFound } from "../errors.ts";
+import { teamSubmissionIds } from "../teams.ts";
 import { recomputeGrade, releaseGrades } from "../grading.ts";
 
 async function loadSubmission(db: Db, submissionId: string) {
@@ -54,8 +55,11 @@ export async function gradingRoutes(app: FastifyInstance, deps: ApiDeps): Promis
           .max(100)
           .default([]),
         feedback: z.string().max(50_000).optional(),
+        /** Team assignments: score the team's shared work for every member (the default). */
+        wholeTeam: z.boolean().default(true),
       })
       .parse(req.body);
+    const targets = body.wholeTeam ? await teamSubmissionIds(db, s.id) : [s.id];
 
     const criteria = new Set(
       (
@@ -67,41 +71,54 @@ export async function gradingRoutes(app: FastifyInstance, deps: ApiDeps): Promis
     }
 
     await withActor(db, actor.userId, async (tx) => {
-      for (const sc of body.scores) {
-        if (sc.points === null) {
+      for (const submissionId of targets) {
+        for (const sc of body.scores) {
+          if (sc.points === null) {
+            await tx
+              .deleteFrom("rubric_scores")
+              .where("submission_id", "=", submissionId)
+              .where("criterion_id", "=", sc.criterionId)
+              .execute();
+            continue;
+          }
+          const values = {
+            points: String(sc.points),
+            comment: sc.comment?.trim() || null,
+            scored_by: actor.userId,
+            scored_at: new Date(),
+          };
           await tx
-            .deleteFrom("rubric_scores")
-            .where("submission_id", "=", s.id)
-            .where("criterion_id", "=", sc.criterionId)
+            .insertInto("rubric_scores")
+            .values({
+              institution_id: s.institution_id,
+              submission_id: submissionId,
+              criterion_id: sc.criterionId,
+              ...values,
+            })
+            .onConflict((oc) => oc.columns(["submission_id", "criterion_id"]).doUpdateSet(values))
             .execute();
-          continue;
         }
-        const values = {
-          points: String(sc.points),
-          comment: sc.comment?.trim() || null,
-          scored_by: actor.userId,
-          scored_at: new Date(),
-        };
-        await tx
-          .insertInto("rubric_scores")
-          .values({ institution_id: s.institution_id, submission_id: s.id, criterion_id: sc.criterionId, ...values })
-          .onConflict((oc) => oc.columns(["submission_id", "criterion_id"]).doUpdateSet(values))
-          .execute();
-      }
-      if (body.feedback !== undefined) {
-        const values = { body_md: body.feedback, author_id: actor.userId, updated_at: new Date() };
-        await tx
-          .insertInto("feedback")
-          .values({ institution_id: s.institution_id, submission_id: s.id, ...values })
-          .onConflict((oc) => oc.column("submission_id").doUpdateSet(values))
-          .execute();
+        if (body.feedback !== undefined) {
+          const values = { body_md: body.feedback, author_id: actor.userId, updated_at: new Date() };
+          await tx
+            .insertInto("feedback")
+            .values({ institution_id: s.institution_id, submission_id: submissionId, ...values })
+            .onConflict((oc) => oc.column("submission_id").doUpdateSet(values))
+            .execute();
+        }
       }
     }).catch((err: { code?: string; message?: string }) => {
       if (err.code === "23514") throw new HttpError(400, "too_many_points", err.message ?? "Too many points");
       throw err;
     });
 
-    return { grade: gradeView(await recomputeGrade(db, s.id, { actorId: actor.userId, queue: deps.queue })) };
+    for (const other of targets.filter((id) => id !== s.id)) {
+      await recomputeGrade(db, other, { actorId: actor.userId, queue: deps.queue });
+    }
+    return {
+      grade: gradeView(await recomputeGrade(db, s.id, { actorId: actor.userId, queue: deps.queue })),
+      team: targets.length,
+    };
   });
 
   /** Instructors (not TAs) override a final grade, with a reason; `score: null` removes the override. */

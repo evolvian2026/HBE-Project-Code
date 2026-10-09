@@ -175,6 +175,7 @@ const declared: Record<string, string[]> = {
     "created_by",
     "created_at",
     "updated_at",
+    "mode",
   ],
   assignment_criteria: [
     "id",
@@ -228,7 +229,10 @@ const declared: Record<string, string[]> = {
     "grade_released_at",
     "created_at",
     "updated_at",
+    "team_id",
   ],
+  teams: ["id", "institution_id", "course_id", "name", "slug", "created_by", "created_at", "updated_at"],
+  team_members: ["id", "institution_id", "course_id", "team_id", "user_id", "created_at"],
   rubric_scores: [
     "id",
     "institution_id",

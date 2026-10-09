@@ -6,6 +6,7 @@ import type { ApiDeps } from "../app.ts";
 import { authenticate } from "../auth.ts";
 import { HttpError, notFound } from "../errors.ts";
 import { manualRunsToday, queueRun } from "../evaluation.ts";
+import { leadSubmissionId, teamSubmissionIds } from "../teams.ts";
 import type { GraderAuth } from "../grader-auth.ts";
 import type { ObjectStore } from "../storage.ts";
 
@@ -162,7 +163,8 @@ export async function runRoutes(
       const sha = body.sha ?? s.final_sha;
       if (!sha) throw new HttpError(409, "nothing_submitted", "Nothing was pushed before the cutoff.");
       const { runId } = await queueRun(deps, {
-        submissionId: s.id,
+        // A team's graded runs belong to its lead submission (they grade every member).
+        submissionId: await leadSubmissionId(db, s.id),
         sha,
         trigger: "regrade",
         requestedBy: actor.userId,
@@ -178,12 +180,14 @@ export async function runRoutes(
     if (!isStaff) {
       if (!(s.triggers as { manual?: boolean }).manual)
         throw new HttpError(403, "manual_runs_disabled", "Tests run automatically when you push.");
-      const used = await manualRunsToday(db, s.id, s.timezone);
+      // A team shares one daily quota (it's one repository).
+      const team = await teamSubmissionIds(db, s.id);
+      const used = await manualRunsToday(db, team, s.timezone);
       if (used >= s.run_quota_per_day) {
         throw new HttpError(
           429,
           "quota_exceeded",
-          `You've used all ${s.run_quota_per_day} test runs for today. Pushing still runs the tests automatically.`,
+          `${team.length > 1 ? "Your team has" : "You've"} used all ${s.run_quota_per_day} test runs for today. Pushing still runs the tests automatically.`,
         );
       }
     }
@@ -324,11 +328,14 @@ export async function runRoutes(
           tarball_sha256: results.snapshot.tarball_sha256,
           tarball_size: results.snapshot.tarball_size,
         };
-        await tx
-          .insertInto("submission_snapshots")
-          .values({ institution_id, submission_id: run.submission_id, sha: run.sha, ...values })
-          .onConflict((oc) => oc.columns(["submission_id", "sha"]).doUpdateSet(values))
-          .execute();
+        // A team's graded commit is every member's record.
+        for (const submissionId of await teamSubmissionIds(tx, run.submission_id)) {
+          await tx
+            .insertInto("submission_snapshots")
+            .values({ institution_id, submission_id: submissionId, sha: run.sha, ...values })
+            .onConflict((oc) => oc.columns(["submission_id", "sha"]).doUpdateSet(values))
+            .execute();
+        }
       }
       if (tests.length)
         await tx

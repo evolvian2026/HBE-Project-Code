@@ -48,6 +48,8 @@ export interface QueuePayloads {
   "lms-roster-sweep": Record<string, never>;
   /** Compare LMS gradebooks with the grades sent there; send what's missing. */
   "lms-reconcile": Record<string, never>;
+  /** Make a team's repositories' collaborators match its members. */
+  "team-access": { teamId: string };
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -91,6 +93,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "lms-roster-sync": { retryLimit: 2, retryDelay: 120, retryBackoff: true, expireInSeconds: 900, policy: "stately" },
   "lms-roster-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
   "lms-reconcile": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
+  "team-access": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

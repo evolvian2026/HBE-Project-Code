@@ -31,6 +31,7 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
           title: "",
           slug: "",
           stackProfileId: profiles[0]?.id ?? "",
+          mode: "individual",
           graderSuiteId: "",
           triggers: { on_push: true, on_pull_request: true, manual: true },
           templateRepo: "",

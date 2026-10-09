@@ -30,6 +30,7 @@ export default async function EditAssignmentPage({
           title: a.title,
           slug: a.slug,
           stackProfileId: a.profile?.id ?? "",
+          mode: a.mode,
           graderSuiteId: a.suite?.id ?? "",
           triggers: a.triggers,
           templateRepo: a.template_repo ?? "",

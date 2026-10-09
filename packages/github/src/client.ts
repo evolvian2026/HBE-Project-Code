@@ -91,6 +91,9 @@ export interface InstallationClient {
     username: string,
     permission: "push" | "pull",
   ): Promise<"invited" | "added">;
+  /** Direct collaborators (people added to the repository, not organisation teams). */
+  listCollaborators(owner: string, repo: string): Promise<string[]>;
+  removeCollaborator(owner: string, repo: string, username: string): Promise<void>;
   /** Every file and folder at a commit. */
   getTree(owner: string, repo: string, sha: string): Promise<CommitTree>;
   /** A file's bytes, by the blob sha from getTree. */
@@ -291,6 +294,30 @@ export class GitHubAppClient implements GitHubClient {
           permission,
         });
         return result === null ? "added" : "invited";
+      },
+      listCollaborators: async (owner, repo) => {
+        const people = await call<{ login: string }[]>(
+          "GET",
+          `/repos/${enc(owner)}/${enc(repo)}/collaborators?affiliation=direct&per_page=100`,
+        );
+        // Pending invitations count as access too (they can still be accepted).
+        const invites = await call<{ invitee: { login: string } | null }[]>(
+          "GET",
+          `/repos/${enc(owner)}/${enc(repo)}/invitations?per_page=100`,
+        );
+        return [...people.map((p) => p.login), ...invites.flatMap((i) => (i.invitee ? [i.invitee.login] : []))];
+      },
+      removeCollaborator: async (owner, repo, username) => {
+        await call<unknown>("DELETE", `/repos/${enc(owner)}/${enc(repo)}/collaborators/${enc(username)}`);
+        const invites = await call<{ id: number; invitee: { login: string } | null }[]>(
+          "GET",
+          `/repos/${enc(owner)}/${enc(repo)}/invitations?per_page=100`,
+        );
+        for (const i of invites) {
+          if (i.invitee?.login.toLowerCase() === username.toLowerCase()) {
+            await call<unknown>("DELETE", `/repos/${enc(owner)}/${enc(repo)}/invitations/${i.id}`);
+          }
+        }
       },
     };
   }

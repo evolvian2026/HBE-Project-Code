@@ -11,6 +11,7 @@ export interface AssignmentFormValues {
   title: string;
   slug: string;
   stackProfileId: string;
+  mode: "individual" | "team";
   graderSuiteId: string;
   triggers: { on_push: boolean; on_pull_request: boolean; manual: boolean };
   templateRepo: string;
@@ -87,9 +88,22 @@ export function AssignmentForm({
           hint={
             locked
               ? "Locked: student repositories are named after it."
-              : "Used in repository names: <short-name>-<github-username>."
+              : "Used in repository names: <short-name>-<github-username> (or <short-name>-<team> for team work)."
           }
         />
+        <label className="block text-sm">
+          <span className="font-medium">Individual or team work</span>
+          <select name="mode" defaultValue={values.mode} className={selectClass} disabled={locked}>
+            <option value="individual">Individual: a repository per student</option>
+            <option value="team">Team: a repository per team (the course&apos;s teams)</option>
+          </select>
+          {locked && <input type="hidden" name="mode" value={values.mode} />}
+          <span className="mt-1 block text-xs text-muted">
+            {locked
+              ? "Locked once published."
+              : "Team members share a repository and its tests; each keeps their own grade and process score."}
+          </span>
+        </label>
         <label className="block text-sm">
           <span className="font-medium">Stack profile</span>
           <select

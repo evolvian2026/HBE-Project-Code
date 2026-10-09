@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { isActive, RunStatusBadge, stillUpdating, type RunStatus } from "@/components/evaluation";
 import { Alert, Badge, Card, EmptyState } from "@/components/ui";
+import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../../../data";
 
 type Props = {
@@ -85,14 +86,23 @@ export default async function RunPage({ params }: Props) {
   const { course, supabase, isCourseStaff, assignment: a } = await loadAssignment(slug, courseId, assignmentId);
   if (!UUID.test(submissionId) || !UUID.test(runId)) notFound();
 
+  // A team's runs (on its lead submission) show under every member's submission.
+  const { data: own } = await supabase
+    .from("submissions")
+    .select("id, team_id")
+    .eq("id", submissionId)
+    .eq("assignment_id", assignmentId)
+    .maybeSingle();
+  if (!own) notFound();
+  const teamIds = await teamSubmissionIds(supabase, { id: own.id, assignment_id: assignmentId, team_id: own.team_id });
   // Columns are listed explicitly: the callback token hash is not readable.
   const { data: run } = await supabase
     .from("evaluation_runs")
     .select("id, sha, trigger, status, score, summary, error, queued_at, started_at, finished_at")
     .eq("id", runId)
-    .eq("submission_id", submissionId)
+    .in("submission_id", teamIds)
     .maybeSingle();
-  if (!run) notFound(); // RLS: the student and course staff only
+  if (!run) notFound(); // RLS: the student, their team and course staff only
 
   const [tests, submission, notes, files] = await Promise.all([
     supabase

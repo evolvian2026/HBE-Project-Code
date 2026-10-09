@@ -250,6 +250,25 @@ When a teacher **publishes** an assignment:
    grades PR workflow.
 4. It records the repo in `repositories` and links it to the `submission`.
 
+**Team assignments** (as built, Phase 2D): an assignment is individual or team work, fixed at
+publishing. Teams belong to the course (`teams`, one team per student), formed by instructors
+by hand or at random. Each team gets one repository, `{assignment-slug}-{team-slug}-{6 hex}`,
+and every member is a collaborator. Each member still has their own submission, so grades,
+grade reports, LMS scores, regrades and dashboards stay per student; the team's submissions
+share the repository and its work:
+
+- one automatic run per push for the team (on its *lead* submission, the earliest one), one
+  daily manual-run quota, and one deadline run that grades every member;
+- extensions are granted to the whole team (one deadline per repository);
+- staff score the rubric and write feedback once for the team, and comment on its code once;
+- each member's process score counts only their own commits (teammates' commits are labelled,
+  not "unattributed"), and their **contribution share** (meaningful changed lines) is shown
+  to staff, flagged below `team_min_contribution_share` (default 15%), never deducted.
+
+Moving a student to another team before the deadline moves their open submission to the new
+team's repository and removes their access to the old one (`team-access` job); graded
+submissions stay where they are.
+
 *Bring-your-own-repo* mode is also supported: the student installs the App on their own repo
 and the platform links it. Use this for capstones; provisioning is the default for consistency.
 

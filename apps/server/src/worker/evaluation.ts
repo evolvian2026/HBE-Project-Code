@@ -6,6 +6,7 @@ import type { Settings } from "@hbe/settings";
 import { randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import { hashToken, queueRun } from "../evaluation.ts";
+import { teamSubmissionIds } from "../teams.ts";
 import { notify, submissionLinks } from "../notifications.ts";
 
 export interface EvaluationDeps {
@@ -243,14 +244,17 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
     run.trigger === "deadline" ||
     run.trigger === "regrade" ||
     (run.trigger === "manual" && run.requested_by === run.user_id);
-  if (forStudent) {
-    const links = await submissionLinks(db, run.submission_id);
+  // A team's graded runs are every member's; a manual run is its requester's.
+  const graded = run.trigger === "deadline" || run.trigger === "regrade";
+  const recipients = forStudent ? (graded ? await teamSubmissionIds(db, run.submission_id) : [run.submission_id]) : [];
+  for (const submissionId of recipients) {
+    const links = await submissionLinks(db, submissionId);
     if (links) {
       await notify(
         db,
         {
           institutionId: links.institution_id,
-          userId: run.user_id,
+          userId: links.user_id,
           type: "run_finished",
           title: `Test results for ${links.title}: ${
             results.infra_error
@@ -267,13 +271,18 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
     }
   }
 
-  // The graded commit's run feeds the grade.
-  if (run.status === "completed" && run.finalized_at && run.final_sha === run.sha) {
-    await deps.queue.send(
-      "compute-grade",
-      { submissionId: run.submission_id },
-      { singletonKey: `grade-${run.submission_id}` },
-    );
+  // The graded commit's run feeds the grade (every member's, on a team).
+  if (run.status === "completed") {
+    const graded = await db
+      .selectFrom("submissions")
+      .select("id")
+      .where("id", "in", await teamSubmissionIds(db, run.submission_id))
+      .where("finalized_at", "is not", null)
+      .where("final_sha", "=", run.sha)
+      .execute();
+    for (const { id } of graded) {
+      await deps.queue.send("compute-grade", { submissionId: id }, { singletonKey: `grade-${id}` });
+    }
   }
 
   if (!run.check_run_id) {

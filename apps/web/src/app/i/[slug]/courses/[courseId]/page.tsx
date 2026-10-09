@@ -13,6 +13,7 @@ import { removeCourseMember, setCourseArchived } from "../actions";
 import { AddCourseMemberForm } from "../forms";
 import { ClassroomCard } from "./classroom-card";
 import { syncLmsRoster } from "./lms-actions";
+import { TeamsCard } from "./teams-card";
 
 type Props = {
   params: Promise<{ slug: string; courseId: string }>;
@@ -279,6 +280,17 @@ export default async function CoursePage({ params, searchParams }: Props) {
           </ul>
         </Card>
       )}
+
+      <TeamsCard
+        supabase={supabase}
+        slug={slug}
+        courseId={course.id}
+        canManage={canManage}
+        isStaff={isCourseStaff}
+        userId={ctx.session.userId}
+        students={students.map((st) => ({ userId: st.userId, name: st.name }))}
+        query={query}
+      />
 
       {isCourseStaff && (
         <ClassroomCard

@@ -61,11 +61,12 @@ export async function queueRun(
   return { runId: run.id, deduplicated: false };
 }
 
-/** Manual runs a student has started today (in the course's time zone). */
-export async function manualRunsToday(db: Db, submissionId: string, timeZone: string): Promise<number> {
+/** Manual runs started today (in the course's time zone) on these submissions (a team shares its quota). */
+export async function manualRunsToday(db: Db, submissionIds: string[], timeZone: string): Promise<number> {
+  if (!submissionIds.length) return 0;
   const { rows } = await sql<{ n: number }>`
     select count(*)::int as n from evaluation_runs
-    where submission_id = ${submissionId} and trigger = 'manual'
+    where submission_id in (${sql.join(submissionIds)}) and trigger = 'manual'
       and (queued_at at time zone ${timeZone})::date = (now() at time zone ${timeZone})::date`.execute(db);
   return rows[0]?.n ?? 0;
 }

@@ -14,6 +14,7 @@ import { RunList, stillUpdating, type RunSummary } from "@/components/evaluation
 import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
+import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../data";
 import { RunTestsForm } from "../../forms";
 import { ResolveRegradeForm } from "../../regrade-forms";
@@ -28,6 +29,7 @@ export const metadata: Metadata = { title: "Submission" };
 const REASON: Record<string, string> = {
   pending: "analysing",
   not_student: "not linked to the student",
+  teammate: "a teammate's",
   bot: "bot",
   merge: "merge commit",
   after_deadline: "after the deadline",
@@ -49,7 +51,7 @@ export default async function SubmissionPage({ params }: Props) {
   const { data: submission } = await supabase
     .from("submissions")
     .select(
-      "id, user_id, status, repository_id, final_sha, submitted_at, late_days, finalized_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
+      "id, user_id, team_id, status, repository_id, final_sha, submitted_at, late_days, finalized_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name), team:teams(name)",
     )
     .eq("id", submissionId)
     .eq("assignment_id", a.id)
@@ -66,7 +68,29 @@ export default async function SubmissionPage({ params }: Props) {
     finalized_at: string | null;
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
     repository: { owner: string; name: string } | null;
+    team_id: string | null;
+    team: { name: string } | null;
   };
+  // Team assignments share the repository's runs and code comments across the team.
+  const teamIds = await teamSubmissionIds(supabase, { id: s.id, assignment_id: a.id, team_id: s.team_id });
+  const { data: teamRows } = s.team_id
+    ? await supabase
+        .from("submissions")
+        .select("id, user_id, profile:profiles(full_name, email, github_login), process:process_snapshots(breakdown)")
+        .in("id", teamIds)
+    : { data: [] };
+  const team = (
+    (teamRows ?? []) as unknown as {
+      id: string;
+      user_id: string;
+      profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
+      process: { breakdown: ProcessResult } | { breakdown: ProcessResult }[] | null;
+    }[]
+  ).map((m) => ({
+    ...m,
+    contribution: (Array.isArray(m.process) ? m.process[0] : m.process)?.breakdown?.contribution ?? null,
+  }));
+  const teammateIds = new Set(team.filter((m) => m.user_id !== s.user_id).map((m) => m.user_id));
 
   const [snapshot, commits, prs, issues, extension, policyRow, runs, archive, reviewComments] = await Promise.all([
     supabase
@@ -108,7 +132,7 @@ export default async function SubmissionPage({ params }: Props) {
     supabase
       .from("evaluation_runs")
       .select("id, sha, trigger, status, score, summary, queued_at")
-      .eq("submission_id", s.id)
+      .in("submission_id", teamIds)
       .order("queued_at", { ascending: false })
       .limit(20),
     s.final_sha
@@ -123,7 +147,7 @@ export default async function SubmissionPage({ params }: Props) {
     supabase
       .from("review_comments")
       .select("id, sha, path, line, body")
-      .eq("submission_id", s.id)
+      .in("submission_id", teamIds)
       .order("path")
       .order("line"),
   ]);
@@ -467,6 +491,45 @@ export default async function SubmissionPage({ params }: Props) {
             )}
           </Card>
 
+          {s.team_id && (
+            <Card
+              title={`Team ${s.team?.name ?? ""}`.trim()}
+              description="Members share this repository; each has their own grade and process score. A small share of the team's work is flagged for review, never penalised."
+            >
+              <ul className="divide-y divide-border text-sm" data-testid="team-members">
+                {team.map((m) => (
+                  <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span>
+                      {isCourseStaff && m.id !== s.id ? (
+                        <Link
+                          href={`/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${m.id}`}
+                          className="hover:text-accent"
+                        >
+                          {m.profile?.full_name ?? m.profile?.email ?? "Unknown"}
+                        </Link>
+                      ) : (
+                        (m.profile?.full_name ?? m.profile?.email ?? "Unknown")
+                      )}
+                      {m.profile?.github_login && <span className="text-muted"> · @{m.profile.github_login}</span>}
+                    </span>
+                    {isCourseStaff && m.contribution && (
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums text-muted">
+                          {m.contribution.share === null
+                            ? "no work yet"
+                            : `${Math.round(m.contribution.share * 100)}% of the team's work · ${m.contribution.memberCommits} commits`}
+                        </span>
+                        {m.contribution.flagged && (
+                          <Badge tone="warning">below {Math.round(m.contribution.minShare * 100)}%: review</Badge>
+                        )}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           <Card title="Commits" description={`${(commits.data ?? []).length} pushed`}>
             {(commits.data ?? []).length === 0 ? (
               <EmptyState title="No commits yet" />
@@ -481,6 +544,7 @@ export default async function SubmissionPage({ params }: Props) {
                             sha: c.sha,
                             authoredAt: new Date(c.authored_at),
                             byStudent: c.author_profile_id === s.user_id,
+                            byTeammate: c.author_profile_id !== null && teammateIds.has(c.author_profile_id),
                             isBot: c.is_bot,
                             parentCount: c.parent_count,
                             effectiveLines: c.details_status === "done" ? c.effective_lines : null,

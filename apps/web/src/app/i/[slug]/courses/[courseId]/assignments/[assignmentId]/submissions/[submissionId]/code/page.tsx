@@ -6,6 +6,7 @@ import { Alert, Badge, Button, Card, EmptyState } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 import { deleteReviewComment } from "../../../../actions";
 import { loadAssignment } from "../../../../data";
+import { teamSubmissionIds } from "@/lib/team";
 import { CommentForm } from "./comment-form";
 
 export const metadata: Metadata = { title: "Review code" };
@@ -110,10 +111,16 @@ export default async function ReviewCodePage({ params, searchParams }: Props) {
   const base = `/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${submissionId}`;
   const { data: submission } = await supabase
     .from("submissions")
-    .select("final_sha, profile:profiles(full_name, email), repository:repositories(owner, name, head_sha)")
+    .select("final_sha, team_id, profile:profiles(full_name, email), repository:repositories(owner, name, head_sha)")
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission) notFound();
+  // A team's code is reviewed once: comments on any member's submission show for all.
+  const teamIds = await teamSubmissionIds(supabase, {
+    id: submissionId,
+    assignment_id: a.id,
+    team_id: (submission as { team_id: string | null }).team_id,
+  });
   const sub = submission as unknown as {
     final_sha: string | null;
     profile: { full_name: string | null; email: string | null } | null;
@@ -138,7 +145,7 @@ export default async function ReviewCodePage({ params, searchParams }: Props) {
     supabase
       .from("review_comments")
       .select("id, sha, path, line, body, author_id, created_at, author:profiles(full_name, email)")
-      .eq("submission_id", submissionId)
+      .in("submission_id", teamIds)
       .order("path")
       .order("line"),
   ]);

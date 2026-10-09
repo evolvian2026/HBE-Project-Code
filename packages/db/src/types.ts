@@ -183,7 +183,14 @@ export interface PlatformSettingsTable {
 
 export type AssignmentStatus = "draft" | "published" | "closed";
 export type SubmissionStatus =
-  "waiting_for_github" | "provisioning" | "active" | "provisioning_failed" | "submitted" | "missing" | "graded";
+  | "waiting_for_github"
+  | "waiting_for_team"
+  | "provisioning"
+  | "active"
+  | "provisioning_failed"
+  | "submitted"
+  | "missing"
+  | "graded";
 
 export interface StackProfilesTable {
   id: Generated<string>;
@@ -222,6 +229,7 @@ export interface AssignmentsTable {
   created_by: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+  mode: Generated<"individual" | "team">;
 }
 
 export interface AssignmentCriteriaTable {
@@ -279,8 +287,30 @@ export interface SubmissionsTable {
   late_days: number | null;
   finalized_at: Timestamp | null;
   grade_released_at: Timestamp | null;
+  /** Team assignments: the member's team (its repository is shared). */
+  team_id: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+export interface TeamsTable {
+  id: Generated<string>;
+  institution_id: string;
+  course_id: string;
+  name: string;
+  slug: string;
+  created_by: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface TeamMembersTable {
+  id: Generated<string>;
+  institution_id: string;
+  course_id: string;
+  team_id: string;
+  user_id: string;
+  created_at: DefaultTimestamp;
 }
 
 export interface RubricScoresTable {
@@ -760,6 +790,8 @@ export interface Database {
   assignment_extensions: AssignmentExtensionsTable;
   repositories: RepositoriesTable;
   submissions: SubmissionsTable;
+  teams: TeamsTable;
+  team_members: TeamMembersTable;
   commits: CommitsTable;
   pull_requests: PullRequestsTable;
   pr_reviews: PrReviewsTable;

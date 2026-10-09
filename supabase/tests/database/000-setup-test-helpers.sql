@@ -238,6 +238,14 @@ begin
     select g.institution_id, g.id, g.submission_id, al.id, 'synced', 75
     from public.grades g join public.submissions s on s.id = g.submission_id
     join public.lms_assignment_links al on al.assignment_id = s.assignment_id;
+  -- A team in each institution's course, with its student.
+  insert into public.teams (institution_id, course_id, name, slug) values
+    (tests.id('inst_a'), tests.id('course_a1'), 'Red', 'red'),
+    (tests.id('inst_b'), tests.id('course_b1'), 'Blue', 'blue');
+  insert into public.team_members (institution_id, course_id, team_id, user_id)
+    select t.institution_id, t.course_id, t.id, cm.user_id
+    from public.teams t join public.course_memberships cm on cm.course_id = t.course_id and cm.role = 'student';
+
   -- Google Classroom: on in each institution, with a teacher's (encrypted) Google connection.
   insert into public.lms_connections (institution_id, type, name)
     values (tests.id('inst_a'), 'google_classroom', 'Google Classroom'),
@@ -302,6 +310,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'lms_assignment_links', count(*) from public.lms_assignment_links where institution_id = p_institution
   union all select 'lms_grade_syncs', count(*) from public.lms_grade_syncs where institution_id = p_institution
   union all select 'google_accounts', count(*) from public.google_accounts where institution_id = p_institution
+  union all select 'teams', count(*) from public.teams where institution_id = p_institution
+  union all select 'team_members', count(*) from public.team_members where institution_id = p_institution
   union all select 'google_oauth_states', count(*) from public.google_oauth_states where institution_id = p_institution
 $$;
 

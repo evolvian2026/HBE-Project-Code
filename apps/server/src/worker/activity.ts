@@ -12,6 +12,7 @@ import type { JobQueue } from "@hbe/queue";
 import type { Settings } from "@hbe/settings";
 import type { FastifyBaseLogger } from "fastify";
 import { queueRun } from "../evaluation.ts";
+import { leadSubmissionId } from "../teams.ts";
 
 export interface ActivityDeps {
   db: Db;
@@ -70,10 +71,15 @@ export async function queueAutomaticRuns(
     .where("a.grader_suite_id", "is not", null)
     .execute();
   let queued = 0;
+  // A team shares its repository: one run per push for the whole team, on its lead submission.
+  const done = new Set<string>();
   for (const s of subs) {
     const triggers = s.triggers as { on_push?: boolean; on_pull_request?: boolean };
     if (!(trigger === "push" ? triggers.on_push : triggers.on_pull_request)) continue;
-    await queueRun(deps, { submissionId: s.id, sha, trigger, requestedBy: null });
+    const lead = await leadSubmissionId(deps.db, s.id);
+    if (done.has(lead)) continue;
+    done.add(lead);
+    await queueRun(deps, { submissionId: lead, sha, trigger, requestedBy: null });
     queued++;
   }
   return queued;
@@ -342,6 +348,8 @@ export async function computeSubmissionProcess(
       "s.institution_id",
       "s.user_id",
       "s.repository_id",
+      "s.team_id",
+      "s.assignment_id",
       "a.process_policy",
       "a.due_at",
       "x.due_at as extended_due_at",
@@ -357,11 +365,26 @@ export async function computeSubmissionProcess(
     db.selectFrom("pull_requests").selectAll().where("repository_id", "=", s.repository_id).execute(),
     db.selectFrom("issues").selectAll().where("repository_id", "=", s.repository_id).execute(),
   ]);
+  // Team assignments: the member's own work counts; teammates' commits are theirs, not "unattributed".
+  const teammates = new Set(
+    s.team_id
+      ? (
+          await db
+            .selectFrom("submissions")
+            .select("user_id")
+            .where("assignment_id", "=", s.assignment_id)
+            .where("team_id", "=", s.team_id)
+            .where("user_id", "!=", s.user_id)
+            .execute()
+        ).map((m) => m.user_id)
+      : [],
+  );
   const policy = s.process_policy as unknown as ProcessPolicy;
   const result = computeProcessScore({
     policy,
     deadline: new Date(s.extended_due_at ?? s.due_at),
     timeZone: s.timezone,
+    team: Boolean(s.team_id),
     // Commits GitHub no longer has (force-pushed away) are left out entirely.
     commits: commits
       .filter((c) => c.details_status !== "unavailable")
@@ -369,6 +392,7 @@ export async function computeSubmissionProcess(
         sha: c.sha,
         authoredAt: new Date(c.authored_at),
         byStudent: c.author_profile_id === s.user_id,
+        byTeammate: c.author_profile_id !== null && teammates.has(c.author_profile_id),
         isBot: c.is_bot,
         parentCount: c.parent_count,
         effectiveLines: c.details_status === "done" ? c.effective_lines : null,

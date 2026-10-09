@@ -35,6 +35,14 @@ export function ProcessBreakdown({ result, weightInGrade }: { result: ProcessRes
           ` (${result.creditedCommits} counted: at most a few per day count)`}
         {result.pendingCommits > 0 && ` · ${result.pendingCommits} still being analysed`}
       </p>
+      {result.contribution && result.contribution.share !== null && (
+        <p className="text-sm text-muted" data-testid="contribution">
+          Your share of the team&apos;s work: {Math.round(result.contribution.share * 100)}% (
+          {result.contribution.memberCommits} of {result.contribution.teamCommits} meaningful commits). Your process
+          score counts your own commits; a share below {Math.round(result.contribution.minShare * 100)}% is shown to
+          your instructor, who decides what it means.
+        </p>
+      )}
       {result.unattributedCommits > 0 && (
         <Alert tone="info">
           {result.unattributedCommits} commit{result.unattributedCommits === 1 ? " isn't" : "s aren't"} linked to your

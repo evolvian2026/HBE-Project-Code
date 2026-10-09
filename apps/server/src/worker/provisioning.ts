@@ -1,4 +1,4 @@
-import { repositoryName } from "@hbe/core";
+import { repositoryName, teamRepositoryName } from "@hbe/core";
 import { sql, type Db } from "@hbe/db";
 import { GitHubError, type GitHubClient } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
@@ -11,16 +11,17 @@ export interface ProvisionDeps {
   log: FastifyBaseLogger;
 }
 
-export type ProvisionOutcome = "active" | "failed" | "waiting_for_github" | "skipped";
+export type ProvisionOutcome = "active" | "failed" | "waiting_for_github" | "waiting_for_team" | "skipped";
 
 const STALE_SECONDS = 60;
 const MAX_ATTEMPTS = 10;
 
 /**
- * Creates the student's repository from the assignment's template in the course's GitHub
- * organisation and gives them push access. Idempotent: an existing repository (for example
- * created by an attempt that crashed before recording it) is adopted, not recreated.
- * Permanent errors mark the submission failed; transient ones throw so pg-boss retries.
+ * Creates the student's repository (or, on a team assignment, their team's) from the
+ * assignment's template in the course's GitHub organisation and gives them push access.
+ * Idempotent: an existing repository (created by a teammate's job, or by an attempt that
+ * crashed before recording it) is adopted, not recreated. Permanent errors mark the
+ * submission failed; transient ones throw so pg-boss retries.
  */
 export async function provisionSubmission(deps: ProvisionDeps, submissionId: string): Promise<ProvisionOutcome> {
   const { db, github, log } = deps;
@@ -30,6 +31,7 @@ export async function provisionSubmission(deps: ProvisionDeps, submissionId: str
     .innerJoin("courses as c", "c.id", "a.course_id")
     .innerJoin("profiles as p", "p.id", "s.user_id")
     .leftJoin("github_installations as g", "g.id", "c.github_installation_id")
+    .leftJoin("teams as t", "t.id", "s.team_id")
     .select([
       "s.id",
       "s.institution_id",
@@ -38,6 +40,10 @@ export async function provisionSubmission(deps: ProvisionDeps, submissionId: str
       "a.slug as assignment_slug",
       "a.title as assignment_title",
       "a.template_repo",
+      "a.mode",
+      "t.id as team_id",
+      "t.slug as team_slug",
+      "t.name as team_name",
       "p.github_login",
       "p.full_name",
       "g.id as installation_row_id",
@@ -60,6 +66,14 @@ export async function provisionSubmission(deps: ProvisionDeps, submissionId: str
     return "failed";
   };
 
+  if (s.mode === "team" && !s.team_id) {
+    await db
+      .updateTable("submissions")
+      .set({ status: "waiting_for_team", status_detail: null })
+      .where("id", "=", s.id)
+      .execute();
+    return "waiting_for_team";
+  }
   if (!s.github_login) {
     await db
       .updateTable("submissions")
@@ -81,16 +95,26 @@ export async function provisionSubmission(deps: ProvisionDeps, submissionId: str
     .execute();
 
   const gh = github.forInstallation(s.installation_id);
-  const name = repositoryName(s.assignment_slug, s.github_login);
+  const team = s.team_id ? { id: s.team_id, slug: s.team_slug!, name: s.team_name! } : null;
+  const name = team
+    ? teamRepositoryName(s.assignment_slug, team.slug, team.id)
+    : repositoryName(s.assignment_slug, s.github_login);
   try {
-    const repo =
-      (await gh.getRepo(s.org, name)) ??
-      (await gh.createRepoFromTemplate({
+    const create = () =>
+      gh.createRepoFromTemplate({
         templateOwner,
         templateRepo,
-        owner: s.org,
+        owner: s.org!,
         name,
-        description: `${s.assignment_title} — ${s.full_name ?? s.github_login}`,
+        description: `${s.assignment_title} — ${team ? `team ${team.name}` : (s.full_name ?? s.github_login)}`,
+      });
+    // Teammates' jobs may race to create the team's repository: the loser adopts it.
+    const repo =
+      (await gh.getRepo(s.org, name)) ??
+      (await create().catch(async (err: unknown) => {
+        const existing = err instanceof GitHubError && err.status === 422 ? await gh.getRepo(s.org!, name) : null;
+        if (existing) return existing;
+        throw err;
       }));
 
     const repoRow = await db

@@ -127,6 +127,56 @@ describe("computeProcessScore", () => {
   });
 });
 
+describe("team assignments", () => {
+  it("scores each member on their own commits and flags a small share of the team's work", () => {
+    const commits = [
+      commit("2026-10-12T04:00:00Z", 100, { byStudent: false, byTeammate: true }),
+      commit("2026-10-13T04:00:00Z", 100, { byStudent: false, byTeammate: true }),
+      commit("2026-10-14T04:00:00Z", 100, { byStudent: false, byTeammate: true }),
+      commit("2026-10-15T04:00:00Z", 30),
+      commit("2026-10-16T04:00:00Z", 2), // too small: counts for nobody
+      commit("2026-10-16T05:00:00Z", 40, { byStudent: false }), // someone outside the team
+      commit("2026-10-21T04:00:00Z", 500, { byStudent: false, byTeammate: true }), // after the deadline
+    ];
+    expect(classifyCommit(commits[0]!, policy, deadline)).toEqual({ meaningful: false, reason: "teammate" });
+    const result = computeProcessScore({
+      policy,
+      commits,
+      pullRequests: [],
+      issues: [],
+      deadline,
+      timeZone: "Asia/Singapore",
+      team: true,
+    });
+    expect(result.meaningfulCommits).toBe(1);
+    expect(result.unattributedCommits).toBe(1); // a teammate's commit isn't "unattributed"
+    expect(result.contribution).toEqual({
+      share: 0.0909,
+      minShare: 0.15,
+      flagged: true,
+      memberLines: 30,
+      teamLines: 330,
+      memberCommits: 1,
+      teamCommits: 4,
+    });
+
+    const alone = computeProcessScore({
+      policy: { ...policy, team_min_contribution_share: 0.05 },
+      commits,
+      pullRequests: [],
+      issues: [],
+      deadline,
+      timeZone: "Asia/Singapore",
+      team: true,
+    });
+    expect(alone.contribution).toMatchObject({ flagged: false, minShare: 0.05 });
+    expect(
+      computeProcessScore({ policy, commits: [], pullRequests: [], issues: [], deadline, timeZone: "UTC", team: true })
+        .contribution,
+    ).toMatchObject({ share: null, flagged: false });
+  });
+});
+
 describe("effective lines", () => {
   it("matches globs like the stack profiles use", () => {
     expect(globToRegExp("**/node_modules/**").test("frontend/node_modules/react/index.js")).toBe(true);

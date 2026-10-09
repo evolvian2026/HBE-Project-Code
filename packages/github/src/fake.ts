@@ -134,6 +134,16 @@ export class FakeGitHub implements GitHubClient {
         this.collaborators.set(key, members);
         return existed ? "added" : "invited";
       },
+      listCollaborators: async (owner, repo) => {
+        this.calls.push(`listCollaborators ${owner}/${repo}`);
+        fail();
+        return [...(this.collaborators.get(`${owner}/${repo}`.toLowerCase())?.keys() ?? [])];
+      },
+      removeCollaborator: async (owner, repo, username) => {
+        this.calls.push(`removeCollaborator ${owner}/${repo} ${username}`);
+        fail();
+        this.collaborators.get(`${owner}/${repo}`.toLowerCase())?.delete(username.toLowerCase());
+      },
     };
   }
 }

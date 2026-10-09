@@ -14,6 +14,7 @@ import { buildExport } from "../records/export.ts";
 import { purgeDueInstitutions, sendPurgeNotices } from "../records/lifecycle.ts";
 import { replicateRecords } from "../records/replication.ts";
 import { queueRosterSyncs, reconcileGrades, syncGrade, syncRoster } from "../lti/grades.ts";
+import { syncTeamAccess } from "../teams.ts";
 import { sweepExpiredArtifacts } from "./artifacts.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
@@ -130,5 +131,10 @@ export async function startWorker(
     log.info(summary, "LMS gradebooks reconciled");
   });
   await queue.schedule("lms-reconcile", "29 3 * * *", {});
+
+  // Team repositories' collaborators follow team membership.
+  await queue.work("team-access", async (job) => {
+    await syncTeamAccess({ db: deps.db, github: deps.github, log }, job.data.teamId);
+  });
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

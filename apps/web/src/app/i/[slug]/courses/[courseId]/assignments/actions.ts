@@ -27,6 +27,7 @@ const assignmentSchema = z
       .trim()
       .regex(ASSIGNMENT_SLUG_PATTERN, "Short name: lowercase letters, digits and hyphens (2–40)"),
     stackProfileId: z.string().uuid("Choose a stack profile"),
+    mode: z.enum(["individual", "team"]).default("individual"),
     graderSuiteId: z.union([z.string().uuid(), z.literal("")]).transform((v) => v || null),
     onPush: z.literal("on").optional(),
     onPullRequest: z.literal("on").optional(),
@@ -83,6 +84,7 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
     title: v.title,
     slug: v.assignmentSlug,
     stack_profile_id: v.stackProfileId,
+    mode: v.mode,
     grader_suite_id: v.graderSuiteId,
     triggers: { on_push: Boolean(v.onPush), on_pull_request: Boolean(v.onPullRequest), manual: Boolean(v.manualRuns) },
     template_repo: v.templateRepo,
@@ -217,20 +219,39 @@ export async function saveExtension(_prev: ActionState, formData: FormData): Pro
   const { course, canManage, ctx } = await requireCourse(v.slug, v.courseId);
   if (!canManage) return { ok: false, message: "Only the course's instructors and institution admins can do that." };
   const supabase = await createSupabaseServerClient();
+  // A team shares one repository, so its members share one deadline.
+  const members = await teamMemberIds(supabase, v.assignmentId, v.submissionId, v.studentId);
   const { error } = await supabase.from("assignment_extensions").upsert(
-    {
+    members.map((userId) => ({
       institution_id: ctx.institution.id,
       assignment_id: v.assignmentId,
-      user_id: v.studentId,
+      user_id: userId,
       due_at: zonedLocalToUtc(v.dueAt, course.timezone).toISOString(),
       reason: v.reason || null,
       granted_by: ctx.session.userId,
-    },
+    })),
     { onConflict: "assignment_id,user_id" },
   );
   if (error) return { ok: false, message: friendlyError(error) };
   revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
-  return { ok: true, message: "Extension saved." };
+  return { ok: true, message: members.length > 1 ? "Extension saved for the whole team." : "Extension saved." };
+}
+
+/** The student, or every member of their team on a team assignment. */
+async function teamMemberIds(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  assignmentId: string,
+  submissionId: string,
+  studentId: string,
+): Promise<string[]> {
+  const { data: s } = await supabase.from("submissions").select("team_id").eq("id", submissionId).maybeSingle();
+  if (!s?.team_id) return [studentId];
+  const { data } = await supabase
+    .from("submissions")
+    .select("user_id")
+    .eq("assignment_id", assignmentId)
+    .eq("team_id", s.team_id);
+  return [...new Set([studentId, ...(data ?? []).map((m) => m.user_id as string)])];
 }
 
 export async function removeExtension(formData: FormData) {
@@ -238,7 +259,8 @@ export async function removeExtension(formData: FormData) {
     .extend({ submissionId: z.string().uuid(), studentId: z.string().uuid() })
     .parse(Object.fromEntries(formData));
   const supabase = await createSupabaseServerClient();
-  await supabase.from("assignment_extensions").delete().eq("assignment_id", v.assignmentId).eq("user_id", v.studentId);
+  const members = await teamMemberIds(supabase, v.assignmentId, v.submissionId, v.studentId);
+  await supabase.from("assignment_extensions").delete().eq("assignment_id", v.assignmentId).in("user_id", members);
   revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
 }
 

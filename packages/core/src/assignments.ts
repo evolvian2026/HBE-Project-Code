@@ -57,6 +57,15 @@ export function repositoryName(assignmentSlug: string, githubLogin: string): str
   return `${assignmentSlug}-${githubLogin}`.toLowerCase().slice(0, 100);
 }
 
+/**
+ * A team's repository name: `{assignment-slug}-{team-slug}-{6 characters of the team id}`, so
+ * teams with the same name in different courses never share a repository.
+ */
+export function teamRepositoryName(assignmentSlug: string, teamSlug: string, teamId: string): string {
+  const suffix = teamId.replace(/-/g, "").slice(0, 6);
+  return `${assignmentSlug}-${teamSlug.slice(0, 40)}-${suffix}`.toLowerCase().slice(0, 100);
+}
+
 export function slugifyAssignment(title: string): string {
   return title
     .normalize("NFKD")

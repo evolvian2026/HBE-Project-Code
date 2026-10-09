@@ -4,6 +4,7 @@ import type { JobQueue } from "@hbe/queue";
 import type { Settings } from "@hbe/settings";
 import type { FastifyBaseLogger } from "fastify";
 import { queueRun } from "../evaluation.ts";
+import { leadSubmissionId } from "../teams.ts";
 import { computeSubmissionProcess } from "./activity.ts";
 
 export interface DeadlineDeps {
@@ -83,7 +84,17 @@ export async function finalizeDueSubmissions(deps: DeadlineDeps, now = new Date(
 
     await computeSubmissionProcess(deps, s.id, { final: true });
     if (push && s.grader_suite_id) {
-      await queueRun(deps, { submissionId: s.id, sha: push.sha, trigger: "deadline", requestedBy: null });
+      // A team gets one graded run of its commit (on its lead submission), which grades every member.
+      const lead = await leadSubmissionId(db, s.id);
+      const already = await db
+        .selectFrom("evaluation_runs")
+        .select("id")
+        .where("submission_id", "=", lead)
+        .where("sha", "=", push.sha)
+        .where("trigger", "=", "deadline")
+        .where("status", "not in", ["cancelled", "failed", "infra_error"])
+        .executeTakeFirst();
+      if (!already) await queueRun(deps, { submissionId: lead, sha: push.sha, trigger: "deadline", requestedBy: null });
     }
     // A first grade version now (missing work is complete already); the graded run updates it.
     await deps.queue.send("compute-grade", { submissionId: s.id }, { singletonKey: `grade-${s.id}` });

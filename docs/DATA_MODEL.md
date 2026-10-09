@@ -66,7 +66,8 @@ erDiagram
 |-------|-------------|-------|
 | `courses` | institution_id, code, name, term, timezone, github_installation_id, archived_at | |
 | `course_memberships` | institution_id, course_id, user_id, role (`instructor`/`ta`/`student`), section, source (`manual`/`csv`/`lms`) | unique(course_id, user_id) |
-| `teams` / `team_members` | institution_id, course_id, name, github_team_slug / team_id, user_id | |
+| `teams` | institution_id, course_id, name, slug | unique(course_id, slug); the slug names team repositories. Everyone in the course reads them; the api writes them. |
+| `team_members` | institution_id, course_id, team_id, user_id | unique(course_id, user_id): one team per student per course; members must be in the course (FK to course_memberships). Staff and teammates read them. |
 
 ### Stack profiles, assignments & evaluation config
 | Table | Key columns | Notes |
@@ -94,7 +95,7 @@ erDiagram
 ### Submissions, runs & grading
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `submissions` | institution_id, assignment_id, user_id or team_id, repository_id, status (`provisioning`/`active`/`submitted`/`graded`), final_sha | One per student/team per assignment. |
+| `submissions` | institution_id, assignment_id, user_id, team_id (team assignments), repository_id, status (`waiting_for_github`/`waiting_for_team`/`provisioning`/`active`/`submitted`/`missing`/`graded`), final_sha | One per student per assignment, also on team assignments: members' submissions share the team's repository, runs and graded commit, and keep their own grade, process score and reports. |
 | `evaluation_runs` | institution_id, submission_id, sha, stack_profile_id, grader_suite_id, trigger, status (`queued`/`dispatched`/`running`/`completed`/`failed`/`infra_error`/`cancelled`), gh_workflow_run_id, score, summary jsonb (stages, with each stage's share of the score), queued_at, started_at, finished_at, requested_by | Files: `run_artifacts`. |
 | `test_results` | institution_id, run_id, stage, test_key, title, category, status, weight, duration_ms, expected, actual, message, hint, evidence jsonb, **staff_notes** | `staff_notes` is not granted to `authenticated` (column privileges); course staff read it through `run_staff_notes(run_id)`. `evaluation_runs.callback_token_hash` (local development only) is withheld the same way. |
 | `run_artifacts` | institution_id, run_id, name (`<stage>/<file>`), path, content_type, size, expires_at | Files a run keeps in the private `run-artifacts` bucket (logs, JUnit reports, screenshots, Playwright traces). Written by the API from the grader's results; readable (and downloadable through user-session signed URLs) by whoever can see the run. `expires_at` is null for graded runs (kept with the records); a daily job deletes expired files. `test_results.attachments` names a test's screenshot and trace. |

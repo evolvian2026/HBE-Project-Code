@@ -26,6 +26,7 @@ const SUBMISSION_LABEL: Record<
   { label: string; tone: "neutral" | "accent" | "success" | "warning" | "danger" }
 > = {
   waiting_for_github: { label: "waiting for GitHub link", tone: "warning" },
+  waiting_for_team: { label: "waiting for a team", tone: "warning" },
   provisioning: { label: "creating repository", tone: "accent" },
   active: { label: "repository ready", tone: "success" },
   provisioning_failed: { label: "repository failed", tone: "danger" },
@@ -64,7 +65,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     supabase
       .from("submissions")
       .select(
-        "id, user_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name)",
+        "id, user_id, team_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name), team:teams(name)",
       )
       .eq("assignment_id", a.id),
     supabase
@@ -128,14 +129,21 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     grade_released_at: string | null;
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
     repository: { owner: string; name: string } | null;
+    team_id: string | null;
+    team: { name: string } | null;
   };
-  const subs = ((submissions.data ?? []) as unknown as Submission[]).sort((x, y) =>
-    (x.profile?.full_name ?? x.profile?.email ?? "").localeCompare(y.profile?.full_name ?? y.profile?.email ?? ""),
+  const subs = ((submissions.data ?? []) as unknown as Submission[]).sort(
+    (x, y) =>
+      (x.team?.name ?? "").localeCompare(y.team?.name ?? "") ||
+      (x.profile?.full_name ?? x.profile?.email ?? "").localeCompare(y.profile?.full_name ?? y.profile?.email ?? ""),
   );
   const mine = subs.find((s) => s.user_id === ctx.session.userId);
   const totalPoints = (criteria.data ?? []).reduce((sum, c) => sum + Number(c.max_points), 0);
   const effectiveDue = extension.data?.due_at ?? a.due_at;
-  const myRuns = mine ? allRuns.filter((r) => r.submission_id === mine.id) : [];
+  // On a team assignment the team's runs (and quota) are shared.
+  const myTeam = mine?.team_id ? subs.filter((x) => x.team_id === mine.team_id) : mine ? [mine] : [];
+  const myTeamIds = new Set(myTeam.map((x) => x.id));
+  const myRuns = mine ? allRuns.filter((r) => myTeamIds.has(r.submission_id)) : [];
   const today = utcToZonedLocal(new Date(), course.timezone).slice(0, 10);
   const manualToday = myRuns.filter(
     (r) => r.trigger === "manual" && utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
@@ -228,19 +236,40 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
 
       {published !== null && Number.isFinite(published) && (
         <Alert tone="success">
-          Published. {published} student{published === 1 ? "" : "s"} will get a repository.
+          {a.mode === "team"
+            ? `Published. Each team gets a repository, shared by its members (${published} student${published === 1 ? "" : "s"}).`
+            : `Published. ${published} student${published === 1 ? "" : "s"} will get a repository.`}
         </Alert>
       )}
 
       {canManage && a.status === "draft" && (
-        <Card title="Publish" description="Students get their own repository from the template and can start working.">
+        <Card
+          title="Publish"
+          description={
+            a.mode === "team"
+              ? "Each team gets a repository from the template; students without a team wait until you put them in one."
+              : "Students get their own repository from the template and can start working."
+          }
+        >
           <PublishForm {...ids} />
         </Card>
       )}
 
       {mine && (
-        <Card title="Your repository">
-          {mine.status === "waiting_for_github" ? (
+        <Card
+          title={a.mode === "team" ? "Your team's repository" : "Your repository"}
+          description={
+            mine.team
+              ? `Team ${mine.team.name}: ${myTeam.map((x) => x.profile?.full_name ?? x.profile?.github_login ?? "?").join(", ")}`
+              : undefined
+          }
+        >
+          {mine.status === "waiting_for_team" ? (
+            <Alert tone="info">
+              This is a team assignment. Your instructor will put you in a team, and you&apos;ll get your team&apos;s
+              repository then.
+            </Alert>
+          ) : mine.status === "waiting_for_github" ? (
             <div className="space-y-3">
               <Alert tone="info">
                 Link your GitHub account so we can create your repository and credit your commits to you.
@@ -560,6 +589,13 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center justify-end gap-3">
+                      {s.team && <span className="text-xs text-muted">{s.team.name}</span>}
+                      {processBySubmission.get(s.id)?.breakdown.contribution?.flagged && (
+                        <Badge tone="warning">
+                          {Math.round((processBySubmission.get(s.id)!.breakdown.contribution!.share ?? 0) * 100)}% of
+                          the team&apos;s work
+                        </Badge>
+                      )}
                       {regradeOpen.has(s.id) && <Badge tone="warning">regrade requested</Badge>}
                       {s.status === "submitted" && s.late_days ? (
                         <span className="text-xs text-warning">{lateLabel(s.late_days)}</span>

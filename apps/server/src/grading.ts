@@ -1,6 +1,7 @@
 import { computeGrade, type LatePolicy, type Weights } from "@hbe/core";
 import { sql, withActor, type Db, type Json } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
+import { teamSubmissionIds } from "./teams.ts";
 import { notify, submissionLinks } from "./notifications.ts";
 
 /**
@@ -89,11 +90,13 @@ export async function recomputeGrade(
       .executeTakeFirst();
     if (!s?.finalized_at) return null;
 
+    // A team's graded run may belong to a teammate's (the lead) submission.
+    const runSubmissions = await teamSubmissionIds(tx, s.id);
     const run = s.final_sha
       ? await tx
           .selectFrom("evaluation_runs")
           .select(["id", "score"])
-          .where("submission_id", "=", s.id)
+          .where("submission_id", "in", runSubmissions)
           .where("sha", "=", s.final_sha)
           .where("status", "=", "completed")
           .where("score", "is not", null)
