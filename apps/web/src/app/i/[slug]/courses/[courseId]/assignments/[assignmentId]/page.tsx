@@ -11,6 +11,7 @@ import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components
 import { deleteAssignment, removeCriterion, retryProvisioning } from "../actions";
 import { loadAssignment } from "../data";
 import { CriterionForm, PublishForm, ReleaseGradesForm, RunTestsForm } from "./forms";
+import { ClaimCommitsCard } from "./claims";
 import { LmsGradesCard } from "./lms-grades";
 import { RegradeRequestForm } from "./regrade-forms";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "./regrades";
@@ -65,7 +66,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     supabase
       .from("submissions")
       .select(
-        "id, user_id, team_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name), team:teams(name)",
+        "id, user_id, team_id, repository_id, status, status_detail, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name), team:teams(name)",
       )
       .eq("assignment_id", a.id),
     supabase
@@ -130,6 +131,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
     repository: { owner: string; name: string } | null;
     team_id: string | null;
+    repository_id: string | null;
     team: { name: string } | null;
   };
   const subs = ((submissions.data ?? []) as unknown as Submission[]).sort(
@@ -418,6 +420,17 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
           The deadline has passed. Pushes until {formatInZone(cutoff, course.timezone)} are accepted as late work, at −
           {a.late_policy.per_day_percent}% for each started day; your latest push before then is graded.
         </Alert>
+      )}
+
+      {mine && mine.repository_id && (
+        <ClaimCommitsCard
+          supabase={supabase}
+          ids={{ ...ids, submissionId: mine.id }}
+          repositoryId={mine.repository_id}
+          userId={ctx.session.userId}
+          timezone={course.timezone}
+          query={query}
+        />
       )}
 
       {mine && mine.repository && ["active", "submitted", "graded"].includes(mine.status) && (

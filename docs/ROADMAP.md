@@ -94,9 +94,11 @@ Built so far:
   post assignments as Classroom coursework; released grades are written to the student's
   submission and returned, with the same sync panel and nightly reconciliation as LTI.
 
-- **2D, team assignments.** Teams per course (by hand or at random), a repository per team,
-  shared runs, deadline and rubric, individual grades and process scores, and each member's
-  contribution share flagged for staff review (never deducted).
+- **2D, team assignments and commit claims.** Teams per course (by hand or at random), a
+  repository per team, shared runs, deadline and rubric, individual grades and process scores,
+  and each member's contribution share flagged for staff review (never deducted). Students
+  claim commits whose git email isn't on their GitHub account; staff confirm, optionally
+  remembering the email, and process scores (frozen ones too) are recomputed.
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's

@@ -357,6 +357,24 @@ team:
   the policy version used to compute it.
 - Teachers can override any criterion with a reason, which is audited.
 
+**Commit claims** (as built, Phase 2D). Push events record the git author's email and name with
+each commit; GitHub then links the commit to an account by that email, or to nobody. A commit
+linked to nobody counts for nobody, so the student's assignment page lists them, grouped by git
+email, and the student claims theirs ("These are mine", with an optional note). Only commits
+GitHub has finished analysing, that aren't a bot's and aren't credited to anyone can be claimed;
+a declined claim can be asked again. Course staff of the repository (instructors and TAs) are
+notified and confirm or decline on the submission page:
+
+- confirming credits the commit to the student (`commits.attribution = 'claim'`; one approved
+  claim per commit) and declines anyone else's claim to it;
+- "also credit their later commits from this email" (on by default) stores the email in
+  `commit_author_aliases` for the institution: the student's other unclaimed commits from it are
+  credited at once, and later ones as they arrive (`attribution = 'alias'`);
+- the process scores of the repository's submissions are recomputed. A frozen score stays frozen
+  and still counts only work from before the deadline; finalized submissions are regraded.
+
+GitHub's own match always wins over a claim or an alias. Students hear about the decision.
+
 ---
 
 ## 6. Automated evaluation pipeline

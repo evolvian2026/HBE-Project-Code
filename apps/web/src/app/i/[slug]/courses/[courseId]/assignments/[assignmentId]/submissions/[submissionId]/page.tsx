@@ -16,13 +16,17 @@ import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../data";
+import { ReviewClaimsCard } from "../../claims";
 import { RunTestsForm } from "../../forms";
 import { ResolveRegradeForm } from "../../regrade-forms";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "../../regrades";
 import { ExtensionForm } from "./extension-form";
 import { OverrideForm, ReviewForm } from "./grading-forms";
 
-type Props = { params: Promise<{ slug: string; courseId: string; assignmentId: string; submissionId: string }> };
+type Props = {
+  params: Promise<{ slug: string; courseId: string; assignmentId: string; submissionId: string }>;
+  searchParams?: Promise<Record<string, string | undefined>>;
+};
 
 export const metadata: Metadata = { title: "Submission" };
 
@@ -37,8 +41,9 @@ const REASON: Record<string, string> = {
   unavailable: "no longer on GitHub",
 };
 
-export default async function SubmissionPage({ params }: Props) {
+export default async function SubmissionPage({ params, searchParams }: Props) {
   const { slug, courseId, assignmentId, submissionId } = await params;
+  const query = (await searchParams) ?? {};
   const {
     course,
     supabase,
@@ -102,7 +107,7 @@ export default async function SubmissionPage({ params }: Props) {
       ? supabase
           .from("commits")
           .select(
-            "sha, message, authored_at, author_login, author_profile_id, is_bot, parent_count, effective_lines, details_status",
+            "sha, message, authored_at, author_login, author_email, author_profile_id, attribution, is_bot, parent_count, effective_lines, details_status",
           )
           .eq("repository_id", s.repository_id)
           .order("authored_at", { ascending: false })
@@ -311,6 +316,17 @@ export default async function SubmissionPage({ params }: Props) {
             </div>
           )}
         </Card>
+      )}
+
+      {isCourseStaff && s.repository_id && (
+        <ReviewClaimsCard
+          supabase={supabase}
+          ids={gradingIds}
+          repositoryId={s.repository_id}
+          userId={s.user_id}
+          timezone={course.timezone}
+          query={query}
+        />
       )}
 
       {isCourseStaff && (
@@ -566,7 +582,10 @@ export default async function SubmissionPage({ params }: Props) {
                           )}
                           {" · "}
                           {formatInZone(c.authored_at, course.timezone)}
-                          {c.author_login && ` · ${c.author_login}`}
+                          {(c.author_login ?? (c.author_profile_id ? null : c.author_email)) &&
+                            ` · ${c.author_login ?? c.author_email}`}
+                          {c.attribution === "claim" && " · claimed"}
+                          {c.attribution === "alias" && " · known email"}
                           {c.effective_lines !== null && ` · ${c.effective_lines} lines`}
                         </p>
                       </div>

@@ -111,7 +111,10 @@ export const pushEventSchema = z.object({
         message: z.string(),
         timestamp: z.string(),
         distinct: z.boolean().default(true),
-        author: z.object({ username: z.string().optional() }).passthrough().optional(),
+        author: z
+          .object({ username: z.string().optional(), email: z.string().optional(), name: z.string().optional() })
+          .passthrough()
+          .optional(),
       }),
     )
     .default([]),

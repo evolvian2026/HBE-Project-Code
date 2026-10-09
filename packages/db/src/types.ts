@@ -407,7 +407,8 @@ export type NotificationType =
   | "extension_granted"
   | "regrade_requested"
   | "regrade_answered"
-  | "records_notice";
+  | "records_notice"
+  | "commit_claim";
 
 export interface NotificationsTable {
   id: Generated<string>;
@@ -653,6 +654,33 @@ export interface CommitsTable {
   effective_lines: number | null;
   is_bot: Generated<boolean>;
   created_at: DefaultTimestamp;
+  /** What git says (from the push): who wrote it, before anyone is matched. */
+  author_email: string | null;
+  author_name: string | null;
+  /** How author_profile_id was set: GitHub's match, an approved claim, or a confirmed email. */
+  attribution: "github" | "claim" | "alias" | null;
+}
+
+export interface CommitClaimsTable {
+  id: Generated<string>;
+  institution_id: string;
+  commit_id: string;
+  repository_id: string;
+  claimed_by: string;
+  note: string | null;
+  status: Generated<"pending" | "approved" | "rejected">;
+  reviewed_by: string | null;
+  reviewed_at: Timestamp | null;
+  created_at: DefaultTimestamp;
+}
+
+export interface CommitAuthorAliasesTable {
+  id: Generated<string>;
+  institution_id: string;
+  email: string;
+  profile_id: string;
+  confirmed_by: string | null;
+  created_at: DefaultTimestamp;
 }
 
 export interface PullRequestsTable {
@@ -793,6 +821,8 @@ export interface Database {
   teams: TeamsTable;
   team_members: TeamMembersTable;
   commits: CommitsTable;
+  commit_claims: CommitClaimsTable;
+  commit_author_aliases: CommitAuthorAliasesTable;
   pull_requests: PullRequestsTable;
   pr_reviews: PrReviewsTable;
   issues: IssuesTable;

@@ -259,6 +259,17 @@ begin
   insert into public.lti_registration_invites (institution_id, token_hash, type, name, expires_at) values
     (tests.id('inst_a'), repeat('1', 64), 'canvas', 'Alpha Canvas 2', now() + interval '7 days'),
     (tests.id('inst_b'), repeat('2', 64), 'moodle', 'Beta Moodle 2', now() + interval '7 days');
+
+  -- Commit claims: a commit from an unlinked git email in each student repository, claimed by
+  -- its student, and an email staff confirmed as theirs.
+  insert into public.commits (institution_id, repository_id, sha, authored_at, author_email)
+    select r.institution_id, r.id, repeat('0', 39) || '1', now(), 'laptop@home.test' from public.repositories r;
+  insert into public.commit_claims (institution_id, commit_id, repository_id, claimed_by, note)
+    select c.institution_id, c.id, c.repository_id, s.user_id, 'My laptop'
+    from public.commits c join public.submissions s on s.repository_id = c.repository_id
+    where c.sha = repeat('0', 39) || '1';
+  insert into public.commit_author_aliases (institution_id, email, profile_id)
+    select s.institution_id, 'old@home.test', s.user_id from public.submissions s where s.repository_id is not null;
 end;
 $$;
 
@@ -313,6 +324,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'teams', count(*) from public.teams where institution_id = p_institution
   union all select 'team_members', count(*) from public.team_members where institution_id = p_institution
   union all select 'google_oauth_states', count(*) from public.google_oauth_states where institution_id = p_institution
+  union all select 'commit_claims', count(*) from public.commit_claims where institution_id = p_institution
+  union all select 'commit_author_aliases', count(*) from public.commit_author_aliases where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

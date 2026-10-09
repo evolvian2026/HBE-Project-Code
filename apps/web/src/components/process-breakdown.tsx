@@ -47,7 +47,8 @@ export function ProcessBreakdown({ result, weightInGrade }: { result: ProcessRes
         <Alert tone="info">
           {result.unattributedCommits} commit{result.unattributedCommits === 1 ? " isn't" : "s aren't"} linked to your
           GitHub account, so {result.unattributedCommits === 1 ? "it doesn't" : "they don't"} count. Make sure{" "}
-          <code>git config user.email</code> is an email address verified on your GitHub account.
+          <code>git config user.email</code> is an email address verified on your GitHub account. If they&apos;re yours,
+          claim them under “Commits not credited to you”.
         </Alert>
       )}
     </div>

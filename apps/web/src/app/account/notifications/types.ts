@@ -6,4 +6,5 @@ export const EMAIL_TYPES = [
   { type: "extension_granted", label: "Deadline extensions" },
   { type: "run_finished", label: "Test results (after every graded or requested run)" },
   { type: "regrade_requested", label: "Regrade requests from students (course staff)" },
+  { type: "commit_claim", label: "Commit claims (to confirm, or the decision on yours)" },
 ] as const;

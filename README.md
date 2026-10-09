@@ -69,9 +69,15 @@ Working today:
 - **Google Classroom**: teachers connect their Google account, link their classes to courses
   (students join from the class roster) and post assignments to Classroom; released grades are
   written there too.
+- **Team assignments**: instructors form teams (by hand or at random); each team shares a
+  repository, runs, deadline and rubric, while grades and process scores stay per student and
+  low contribution shares are flagged for staff review.
+- **Commit claims**: students claim commits whose git email isn't on their GitHub account;
+  staff confirm (optionally remembering the email) and process scores are recomputed.
 
-Phase 2 (LMS integration and v1 hardening) is under way; team assignments are next. The demo
-deployment and pilot wait for the project's accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Phase 2 (LMS integration and v1 hardening) is under way; PR review mirroring, bulk re-runs
+and realtime run status are next. The demo deployment and pilot wait for the project's
+accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 

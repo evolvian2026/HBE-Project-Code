@@ -10,7 +10,7 @@ insert into public.institution_memberships (institution_id, user_id, role) value
 insert into public.course_memberships (institution_id, course_id, user_id, role) values (tests.id('inst_a'), tests.id('course_a1'), tests.id('student_a2'), 'student');
 
 select tests.authenticate_as(tests.id('student_a'));
-select is((select count(*)::int from public.commits), 1, 'a student sees the commits of their own repository');
+select is((select count(*)::int from public.commits), 2, 'a student sees the commits of their own repository');
 select is((select count(*)::int from public.process_snapshots), 1, 'and their own process score');
 reset role;
 

@@ -1,5 +1,5 @@
 import { computeProcessScore, effectiveLines, linkedIssues, type ProcessPolicy } from "@hbe/core";
-import type { Db } from "@hbe/db";
+import { sql, type Db } from "@hbe/db";
 import {
   GitHubError,
   type GitHubClient,
@@ -40,6 +40,19 @@ async function profileIdForGithubUser(db: Db, githubUserId: number | null | unde
     .where("github_user_id", "=", githubUserId)
     .executeTakeFirst();
   return row?.id ?? null;
+}
+
+/**
+ * Credits a repository's unattributed commits whose git email staff confirmed as someone's
+ * (commit_author_aliases). Returns how many were credited.
+ */
+export async function creditAliases(db: Db, repositoryId: string): Promise<number> {
+  const result = await sql`
+    update commits c set author_profile_id = a.profile_id, attribution = 'alias'
+    from commit_author_aliases a
+    where c.repository_id = ${repositoryId} and c.author_profile_id is null and not c.is_bot
+      and a.institution_id = c.institution_id and a.email = c.author_email`.execute(db);
+  return Number(result.numAffectedRows ?? 0n);
 }
 
 /** Queues a process-score refresh for every submission using this repository. */
@@ -104,10 +117,13 @@ export async function handlePush(deps: ActivityDeps, event: PushEvent): Promise<
           message: c.message.slice(0, 1000),
           authored_at: new Date(c.timestamp),
           author_login: c.author?.username ?? null,
+          author_email: c.author?.email?.trim().toLowerCase().slice(0, 320) || null,
+          author_name: c.author?.name?.slice(0, 200) || null,
         })),
       )
       .onConflict((oc) => oc.columns(["repository_id", "sha"]).doNothing())
       .execute();
+    await creditAliases(deps.db, repo.id);
     await deps.queue.send("commit-details", { repositoryId: repo.id });
   }
 
@@ -297,13 +313,15 @@ export async function fetchCommitDetails(
   for (const c of pending) {
     try {
       const d = await gh.getCommit(repo.owner, repo.name, c.sha);
+      // GitHub's match wins; without one, a claim or a confirmed email keeps the commit's author.
+      const matched = await profileIdForGithubUser(db, d.authorId);
       await db
         .updateTable("commits")
         .set({
           details_status: "done",
           author_github_id: d.authorId,
           author_login: d.authorLogin,
-          author_profile_id: await profileIdForGithubUser(db, d.authorId),
+          ...(matched ? { author_profile_id: matched, attribution: "github" as const } : {}),
           is_bot: d.authorIsBot,
           parent_count: d.parentCount,
           additions: d.additions,
@@ -321,19 +339,24 @@ export async function fetchCommitDetails(
       }
     }
   }
-  if (pending.length) await refreshProcessScores(deps, repositoryId);
+  if (pending.length) {
+    await creditAliases(db, repositoryId);
+    await refreshProcessScores(deps, repositoryId);
+  }
   if (pending.length === 50) await deps.queue.send("commit-details", { repositoryId }); // more to do
   return pending.length;
 }
 
 /**
  * Recomputes and stores a submission's process score, unless it is already frozen.
- * `final` freezes it (at the deadline): later activity no longer changes it.
+ * `final` freezes it (at the deadline): later activity no longer changes it. `refreeze`
+ * recomputes a frozen score (and keeps it frozen) when attribution was corrected (an approved
+ * commit claim): only commits from before the deadline count, so no later work slips in.
  */
 export async function computeSubmissionProcess(
   { db, log }: Pick<ActivityDeps, "db" | "log">,
   submissionId: string,
-  { final = false }: { final?: boolean } = {},
+  { final = false, refreeze = false }: { final?: boolean; refreeze?: boolean } = {},
 ): Promise<number | null> {
   const s = await db
     .selectFrom("submissions as s")
@@ -358,7 +381,8 @@ export async function computeSubmissionProcess(
     ])
     .where("s.id", "=", submissionId)
     .executeTakeFirst();
-  if (!s || !s.repository_id || s.is_final) return null;
+  if (!s || !s.repository_id || (s.is_final && !refreeze)) return null;
+  const frozen = final || Boolean(s.is_final);
 
   const [commits, prs, issues] = await Promise.all([
     db.selectFrom("commits").selectAll().where("repository_id", "=", s.repository_id).execute(),
@@ -418,20 +442,18 @@ export async function computeSubmissionProcess(
       score: String(result.score),
       breakdown,
       policy: JSON.stringify(policy),
-      is_final: final,
+      is_final: frozen,
     })
-    .onConflict((oc) =>
-      oc
-        .column("submission_id")
-        .doUpdateSet({
-          score: String(result.score),
-          breakdown,
-          policy: JSON.stringify(policy),
-          computed_at: new Date(),
-          is_final: final,
-        })
-        .where("process_snapshots.is_final", "=", false),
-    )
+    .onConflict((oc) => {
+      const update = oc.column("submission_id").doUpdateSet({
+        score: String(result.score),
+        breakdown,
+        policy: JSON.stringify(policy),
+        computed_at: new Date(),
+        is_final: frozen,
+      });
+      return refreeze ? update : update.where("process_snapshots.is_final", "=", false);
+    })
     .execute();
   log.debug({ submissionId, score: result.score }, "process score updated");
   return result.score;

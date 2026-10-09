@@ -22,6 +22,7 @@ import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
+import { claimRoutes } from "./routes/claims.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
 import { lmsRoutes } from "./routes/lms.ts";
 import { ltiRoutes } from "./routes/lti.ts";
@@ -114,6 +115,7 @@ export async function buildApp(
     await app.register(lmsRoutes, apiDeps);
     await app.register(googleRoutes, apiDeps);
     await app.register(teamRoutes, apiDeps);
+    await app.register(claimRoutes, apiDeps);
   }
 
   return app;
