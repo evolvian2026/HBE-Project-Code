@@ -79,8 +79,12 @@ export const envSchema = z.object({
   /** During a key rollover: the previous key, still published in the JWKS. */
   LTI_PREVIOUS_PRIVATE_KEY_BASE64: optional,
   LTI_PREVIOUS_KEY_ID: optional,
+  /** The platform's Google OAuth client (Google Classroom). */
   GOOGLE_OAUTH_CLIENT_ID: optional,
   GOOGLE_OAUTH_CLIENT_SECRET: optional,
+  /** A stand-in for Google's OAuth and Classroom APIs (tests; local only). */
+  GOOGLE_FAKE_URL: z.string().url().optional(),
+  /** Encrypts stored OAuth refresh tokens: 32 random bytes, base64. */
   TOKEN_ENCRYPTION_KEY: optional,
 
   SENTRY_DSN: optional,
@@ -135,6 +139,21 @@ const rules: Rule[] = [
   {
     when: (e) => e.GITHUB_FAKE,
     check: (e) => (e.HBE_ENV === "local" ? undefined : "GITHUB_FAKE is only allowed when HBE_ENV=local"),
+  },
+  {
+    when: (e) => Boolean(e.GOOGLE_FAKE_URL),
+    check: (e) => (e.HBE_ENV === "local" ? undefined : "GOOGLE_FAKE_URL is only allowed when HBE_ENV=local"),
+  },
+  {
+    when: (e) => Boolean(e.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(e.GOOGLE_OAUTH_CLIENT_SECRET),
+    check: () => "set both GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET, or neither",
+  },
+  {
+    when: (e, r) => deployed(e) && serverSide(e, r) && Boolean(e.TOKEN_ENCRYPTION_KEY),
+    check: (e) =>
+      Buffer.from(e.TOKEN_ENCRYPTION_KEY!, "base64").length === 32
+        ? undefined
+        : "TOKEN_ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)",
   },
   {
     // Provider hostnames baked into GitHub/LTI/OAuth config would break the AWS migration.

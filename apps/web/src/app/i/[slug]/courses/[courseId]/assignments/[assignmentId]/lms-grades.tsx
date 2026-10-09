@@ -3,7 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { fmt } from "@/components/grade";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
-import { sendGradesToLms } from "./lms-actions";
+import { postToClassroom, sendGradesToLms } from "./lms-actions";
 
 type Supabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -11,7 +11,8 @@ interface Gradebook {
   id: string;
   context_title: string | null;
   context_id: string;
-  connection: { name: string } | null;
+  ags_lineitems_url: string | null;
+  connection: { name: string; type: string; status: string } | null;
 }
 
 interface SyncRow {
@@ -67,17 +68,31 @@ export async function LmsGradesCard({
 }) {
   const { data: bookRows } = await supabase
     .from("lms_course_links")
-    .select("id, context_title, context_id, connection:lms_connections(name)")
-    .eq("course_id", courseId)
-    .not("ags_lineitems_url", "is", null);
-  const books = (bookRows ?? []) as unknown as Gradebook[];
+    .select("id, context_title, context_id, ags_lineitems_url, connection:lms_connections(name, type, status)")
+    .eq("course_id", courseId);
+  // Gradebooks that take grades: LTI courses with AGS, and Google Classroom classes.
+  const books = ((bookRows ?? []) as unknown as Gradebook[]).filter(
+    (b) => b.connection?.status === "active" && (b.ags_lineitems_url || b.connection.type === "google_classroom"),
+  );
   if (!books.length) return null;
 
   const { data: columnRows } = await supabase
     .from("lms_assignment_links")
-    .select("id, lms_course_link_id, lineitem_url")
+    .select("id, lms_course_link_id, lineitem_url, classroom_coursework_id, classroom_link")
     .eq("assignment_id", assignmentId);
-  const columns = (columnRows ?? []) as { id: string; lms_course_link_id: string; lineitem_url: string | null }[];
+  const columns = (columnRows ?? []) as {
+    id: string;
+    lms_course_link_id: string;
+    lineitem_url: string | null;
+    classroom_coursework_id: string | null;
+    classroom_link: string | null;
+  }[];
+  // Classroom only takes grades for coursework the platform posted.
+  const unposted = books.filter(
+    (b) =>
+      b.connection?.type === "google_classroom" &&
+      !columns.find((c) => c.lms_course_link_id === b.id)?.classroom_coursework_id,
+  );
   const { data: syncRows } = columns.length
     ? await supabase
         .from("lms_grade_syncs")
@@ -120,19 +135,37 @@ export async function LmsGradesCard({
         title="LMS gradebook"
         description={`Released grades are sent to ${books.map(bookName).join(" and ")} automatically.`}
         actions={
-          canManage &&
-          students.length > 0 && (
-            <form action={sendGradesToLms}>
-              {ids}
-              <Button type="submit" variant="secondary">
-                Send all grades again
-              </Button>
-            </form>
+          canManage && (
+            <div className="flex flex-wrap gap-2">
+              {unposted.length > 0 && (
+                <form action={postToClassroom}>
+                  {ids}
+                  <Button type="submit">Post to Google Classroom</Button>
+                </form>
+              )}
+              {students.length > 0 && (
+                <form action={sendGradesToLms}>
+                  {ids}
+                  <Button type="submit" variant="secondary">
+                    Send all grades again
+                  </Button>
+                </form>
+              )}
+            </div>
           )
         }
       >
         <AutoRefresh active={sending} intervalMs={5000} />
         {query.lms_error && <Alert tone="error">{query.lms_error}</Alert>}
+        {query.classroom_posted && (
+          <Alert tone="success">Posted to Google Classroom. Released grades are sent there now.</Alert>
+        )}
+        {unposted.length > 0 && (
+          <p className="mb-3 text-sm text-muted">
+            Not posted to {unposted.map(bookName).join(" and ")} yet: grades go to Google Classroom once the assignment
+            is posted there.
+          </p>
+        )}
         {query.lms_sent && sending && (
           <Alert tone="success">
             Sending {query.lms_sent} grade{query.lms_sent === "1" ? "" : "s"} to the LMS. This page updates as they go.

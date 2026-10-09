@@ -26,3 +26,24 @@ export async function sendGradesToLms(formData: FormData) {
   revalidatePath(page);
   redirect(`${page}?lms_sent=${result.data.queued}&lms_at=${Date.now()}#lms`);
 }
+
+/** Posts the assignment to the course's Google Classroom classes as coursework. */
+export async function postToClassroom(formData: FormData) {
+  const { slug, courseId, assignmentId } = z
+    .object({ slug: z.string(), courseId: z.string().uuid(), assignmentId: z.string().uuid() })
+    .parse(Object.fromEntries(formData));
+  await requireMembership(slug);
+  const page = `/i/${slug}/courses/${courseId}/assignments/${assignmentId}`;
+  const result = await apiFetch<{ posted: number; failed: { classroom: string; error: string }[] }>(
+    `/v1/assignments/${assignmentId}/classroom-coursework`,
+    { method: "POST", body: {} },
+  );
+  if (!result.ok) redirect(`${page}?lms_error=${encodeURIComponent(result.message)}#lms`);
+  const failed = result.data.failed.map((f) => `${f.classroom}: ${f.error}`).join(" · ");
+  revalidatePath(page);
+  redirect(
+    failed
+      ? `${page}?lms_error=${encodeURIComponent(`Couldn't post to ${failed}`)}#lms`
+      : `${page}?classroom_posted=${result.data.posted}&lms_at=${Date.now()}#lms`,
+  );
+}

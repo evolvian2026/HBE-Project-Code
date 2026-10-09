@@ -6,7 +6,8 @@ select plan(13);
 select tests.seed_two_institutions();
 
 select tests.authenticate_as(tests.id('admin_a'));
-select is((select count(*)::int from public.lms_connections), 1, 'admins see their LMS connection');
+select is((select count(*)::int from public.lms_connections where type <> 'google_classroom'), 1,
+  'admins see their LMS connection');
 select is((select count(*)::int from public.lms_user_links), 2, 'and every LMS user, the review queue included');
 select is((select count(*)::int from public.lms_course_links), 2, 'and every LMS course');
 select is((select count(*)::int from public.lti_registration_invites), 0, 'but not registration invites (hashes)');
@@ -20,7 +21,8 @@ select throws_ok(
 reset role;
 
 select tests.authenticate_as(tests.id('teacher_a'));
-select is((select count(*)::int from public.lms_connections), 1, 'teachers see the connection');
+select is((select count(*)::int from public.lms_connections where type <> 'google_classroom'), 1,
+  'teachers see the connection');
 select is((select count(*)::int from public.lms_user_links), 0, 'but not LMS users');
 select results_eq(
   $$ select context_id from public.lms_course_links order by context_id $$,

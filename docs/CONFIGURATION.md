@@ -152,6 +152,31 @@ put a new key and ID in place, and remove the previous key a week later. LMS con
 themselves are made per institution on the **LMS** page (one-time Dynamic Registration URL, or
 the platform's details entered by hand); the tool's URLs are shown there.
 
+### 5.2 Google Classroom
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | — | The platform's OAuth client. Without them, institutions can't turn Google Classroom on. |
+| `TOKEN_ENCRYPTION_KEY` | — | Encrypts teachers' Google refresh tokens. Outside local development it must be 32 random bytes, base64 (`openssl rand -base64 32`). Keep it forever: a new key makes stored tokens unreadable, and every teacher must connect Google again. |
+| `GOOGLE_FAKE_URL` | — | A stand-in Google for tests (`packages/lms/src/google-testing.ts`). **Refused unless `HBE_ENV=local`.** |
+
+Setting up the OAuth client, once for the platform (Google Cloud console, a project owned by
+the platform team):
+
+1. **APIs & Services → Library:** enable the *Google Classroom API*.
+2. **OAuth consent screen:** user type *External*, app name *HBE Projects*, your support
+   email and domain, and these scopes: `openid`, `email`, `classroom.courses.readonly`,
+   `classroom.rosters.readonly`, `classroom.profile.emails`, `classroom.coursework.students`.
+   Classroom scopes are sensitive, so Google reviews the app before people outside your test
+   users can consent; plan a few weeks for verification before the first school uses it.
+3. **Credentials → Create OAuth client ID:** type *Web application*, authorised redirect URI
+   `https://<API_URL host>/v1/oauth/google/callback` (add the local one,
+   `http://localhost:4000/v1/oauth/google/callback`, to a separate development client).
+4. Put the client ID and secret in the hosting dashboard (never in a chat or a commit).
+
+Each school's Google Workspace admin may need to allow the app (Admin console → Security →
+API controls → App access control) before its teachers can connect.
+
 ## 6. Platform settings in the database
 
 A few switches must be enforced by the database itself, so they live in the

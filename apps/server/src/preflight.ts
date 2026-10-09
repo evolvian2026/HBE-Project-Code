@@ -48,6 +48,15 @@ export async function preflight({ connect }: { connect: boolean }): Promise<{ ok
       }),
     );
   }
+  if (settings.roles.has("api") || settings.roles.has("worker")) {
+    checks.push(
+      await check("google classroom", async () => {
+        const { GOOGLE_OAUTH_CLIENT_ID: id, GOOGLE_FAKE_URL: fake } = settings.env;
+        if (!id) return "not set: institutions can't turn on Google Classroom until GOOGLE_OAUTH_CLIENT_ID is set";
+        return `OAuth client ${id.slice(0, 12)}…, redirect URI ${settings.env.API_URL.replace(/\/$/, "")}/v1/oauth/google/callback${fake ? ` (stand-in at ${fake})` : ""}`;
+      }),
+    );
+  }
   if (!connect) return { ok: checks.every((c) => c.ok), checks };
   const { env, roles } = settings;
 

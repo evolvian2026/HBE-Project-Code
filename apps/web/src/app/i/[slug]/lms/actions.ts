@@ -102,3 +102,25 @@ export async function unlinkLmsCourse(formData: FormData) {
   revalidatePath(`/i/${slug}/lms`);
   redirect(back(slug, { done: "The LMS course is no longer linked." }));
 }
+
+/** Turns Google Classroom on or off for the institution. */
+export async function setGoogleClassroom(formData: FormData) {
+  const { slug, enabled } = z
+    .object({ slug: z.string(), enabled: z.enum(["true", "false"]) })
+    .parse(Object.fromEntries(formData));
+  const ctx = await requireMembership(slug);
+  const result = await apiFetch(`/v1/institutions/${ctx.institution.id}/google-classroom`, {
+    method: "PUT",
+    body: { enabled: enabled === "true" },
+  });
+  if (!result.ok) redirect(back(slug, { error: result.message }));
+  revalidatePath(`/i/${slug}/lms`);
+  redirect(
+    back(slug, {
+      done:
+        enabled === "true"
+          ? "Google Classroom is on: teachers can connect their Google account on their course pages."
+          : "Google Classroom is off.",
+    }),
+  );
+}

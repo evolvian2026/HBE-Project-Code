@@ -11,6 +11,7 @@ import { loadMembers } from "../../members/data";
 import { InviteForm } from "../../members/forms";
 import { removeCourseMember, setCourseArchived } from "../actions";
 import { AddCourseMemberForm } from "../forms";
+import { ClassroomCard } from "./classroom-card";
 import { syncLmsRoster } from "./lms-actions";
 
 type Props = {
@@ -141,7 +142,7 @@ export default async function CoursePage({ params, searchParams }: Props) {
     ? await supabase
         .from("lms_course_links")
         .select(
-          "id, context_title, context_id, nrps_url, roster_synced_at, roster_summary, connection:lms_connections(name)",
+          "id, context_title, context_id, nrps_url, roster_synced_at, roster_summary, connection:lms_connections(name, type)",
         )
         .eq("course_id", course.id)
     : { data: [] };
@@ -152,8 +153,10 @@ export default async function CoursePage({ params, searchParams }: Props) {
     nrps_url: string | null;
     roster_synced_at: string | null;
     roster_summary: { members: number; linked: number; waiting: number; added: number; inactive: number } | null;
-    connection: { name: string } | null;
+    connection: { name: string; type: string } | null;
   }[];
+  const hasRoster = (l: (typeof lmsLinkRows)[number]) =>
+    Boolean(l.nrps_url) || l.connection?.type === "google_classroom";
   const lmsName = (l: (typeof lmsLinkRows)[number]) =>
     `${l.context_title ?? l.context_id} (${l.connection?.name ?? "LMS"})`;
   const lmsCourses = lmsLinkRows.map(lmsName);
@@ -161,7 +164,7 @@ export default async function CoursePage({ params, searchParams }: Props) {
   const rosterAsked = Number(query.roster) || 0;
   const readingRoster =
     Date.now() - rosterAsked < 120_000 &&
-    lmsLinkRows.some((l) => l.nrps_url && (!l.roster_synced_at || Date.parse(l.roster_synced_at) < rosterAsked));
+    lmsLinkRows.some((l) => hasRoster(l) && (!l.roster_synced_at || Date.parse(l.roster_synced_at) < rosterAsked));
 
   const candidates = canManage
     ? (await loadMembers(supabase, ctx.institution.id))
@@ -277,6 +280,18 @@ export default async function CoursePage({ params, searchParams }: Props) {
         </Card>
       )}
 
+      {isCourseStaff && (
+        <ClassroomCard
+          supabase={supabase}
+          slug={slug}
+          courseId={course.id}
+          institutionId={ctx.institution.id}
+          userId={ctx.session.userId}
+          canManage={canManage}
+          query={query}
+        />
+      )}
+
       {isCourseStaff && lmsLinkRows.length > 0 && (
         <section id="lms">
           <Card
@@ -292,14 +307,14 @@ export default async function CoursePage({ params, searchParams }: Props) {
                   <span>
                     {lmsName(l)}
                     <span className="block text-xs text-muted">
-                      {!l.nrps_url
+                      {!hasRoster(l)
                         ? "This LMS course doesn't share its roster with the platform."
                         : l.roster_synced_at && l.roster_summary
                           ? `Read ${formatInZone(l.roster_synced_at, course.timezone)}: ${l.roster_summary.members} people, ${l.roster_summary.added} added to this course, ${l.roster_summary.waiting} waiting for an admin to match them`
                           : "Not read yet."}
                     </span>
                   </span>
-                  {canManage && l.nrps_url && (
+                  {canManage && hasRoster(l) && (
                     <form action={syncLmsRoster}>
                       <input type="hidden" name="slug" value={slug} />
                       <input type="hidden" name="courseId" value={course.id} />

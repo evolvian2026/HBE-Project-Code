@@ -6,7 +6,7 @@ import { webConfig } from "@/lib/config";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadMembers } from "../members/data";
-import { resolveLmsUser, setConnectionStatus, unlinkLmsCourse } from "./actions";
+import { resolveLmsUser, setConnectionStatus, setGoogleClassroom, unlinkLmsCourse } from "./actions";
 import { ManualConnectionForm, RegistrationLinkForm } from "./forms";
 
 export const metadata: Metadata = { title: "LMS" };
@@ -65,7 +65,7 @@ export default async function LmsPage({
   const ctx = await requireMembership(slug);
   if (!ctx.isAdmin) notFound();
   const supabase = await createSupabaseServerClient();
-  const [connections, userLinks, courseLinks, members] = await Promise.all([
+  const [connections, userLinks, courseLinks, members, googleAccounts] = await Promise.all([
     supabase
       .from("lms_connections")
       .select("id, type, name, status, issuer, client_id, deployment_ids, registered_by, created_at")
@@ -85,9 +85,24 @@ export default async function LmsPage({
       .order("created_at", { ascending: false })
       .limit(200),
     loadMembers(supabase, ctx.institution.id),
+    supabase
+      .from("google_accounts")
+      .select("id, profile_id, email, connected_at, revoked_at")
+      .eq("institution_id", ctx.institution.id)
+      .order("connected_at"),
   ]);
-  const conns = (connections.data ?? []) as Connection[];
-  const connName = new Map(conns.map((c) => [c.id, c.name]));
+  const allConns = (connections.data ?? []) as Connection[];
+  const conns = allConns.filter((c) => c.type !== "google_classroom");
+  const classroom = allConns.find((c) => c.type === "google_classroom");
+  const teachers = (googleAccounts.data ?? []) as {
+    id: string;
+    profile_id: string;
+    email: string | null;
+    connected_at: string;
+    revoked_at: string | null;
+  }[];
+  const memberName = new Map(members.map((m) => [m.user_id, m.profile?.full_name ?? m.profile?.email ?? ""]));
+  const connName = new Map(allConns.map((c) => [c.id, c.name]));
   const waiting = (userLinks.data ?? []) as UserLink[];
   const courses = (courseLinks.data ?? []) as unknown as CourseLink[];
   const activeMembers = members.filter((m) => m.status === "active");
@@ -130,6 +145,44 @@ export default async function LmsPage({
                       {c.status === "active" ? "Turn off" : "Turn on"}
                     </Button>
                   </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card
+        title="Google Classroom"
+        description="Teachers connect their own Google account on their course pages, link their classes, and post assignments there; released grades follow."
+        actions={
+          writable && (
+            <form action={setGoogleClassroom}>
+              <input type="hidden" name="slug" value={slug} />
+              <input type="hidden" name="enabled" value={classroom?.status === "active" ? "false" : "true"} />
+              <Button type="submit" variant={classroom?.status === "active" ? "secondary" : "primary"}>
+                {classroom?.status === "active" ? "Turn off" : "Turn on Google Classroom"}
+              </Button>
+            </form>
+          )
+        }
+      >
+        {classroom?.status !== "active" ? (
+          <p className="text-sm text-muted">Off.</p>
+        ) : teachers.length === 0 ? (
+          <p className="text-sm text-muted">On. No teacher has connected a Google account yet.</p>
+        ) : (
+          <ul className="divide-y divide-border text-sm" data-testid="google-accounts">
+            {teachers.map((t) => (
+              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span>
+                  {memberName.get(t.profile_id) || t.email}
+                  <span className="text-muted"> · {t.email}</span>
+                </span>
+                {t.revoked_at ? (
+                  <Badge tone="warning">access expired</Badge>
+                ) : (
+                  <span className="text-xs text-muted">connected {formatInZone(t.connected_at, tz)}</span>
                 )}
               </li>
             ))}

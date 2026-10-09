@@ -1,6 +1,7 @@
 export * from "./claims.ts";
 export * from "./deep-linking.ts";
 export * from "./errors.ts";
+export * from "./google.ts";
 export * from "./keys.ts";
 export * from "./launch.ts";
 export * from "./platform.ts";

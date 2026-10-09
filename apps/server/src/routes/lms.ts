@@ -14,7 +14,7 @@ const INVITE_TTL_DAYS = 7;
 const uuid = z.string().uuid();
 const LTI_TYPES = ["canvas", "moodle", "lti"] as const;
 
-async function courseRoleOf(db: Db, courseId: string, userId: string): Promise<string | null> {
+export async function courseRoleOf(db: Db, courseId: string, userId: string): Promise<string | null> {
   const row = await db
     .selectFrom("course_memberships")
     .select("role")
@@ -288,13 +288,14 @@ export async function lmsRoutes(app: FastifyInstance, { db, verifier, settings, 
   app.post<{ Params: { linkId: string } }>("/v1/lms-course-links/:linkId/roster-sync", async (req, reply) => {
     const actor = await authenticate(req, db, verifier);
     const link = await db
-      .selectFrom("lms_course_links")
-      .select(["id", "institution_id", "course_id", "nrps_url"])
-      .where("id", "=", uuid.parse(req.params.linkId))
+      .selectFrom("lms_course_links as l")
+      .innerJoin("lms_connections as c", "c.id", "l.lms_connection_id")
+      .select(["l.id", "l.institution_id", "l.course_id", "l.nrps_url", "c.type"])
+      .where("l.id", "=", uuid.parse(req.params.linkId))
       .executeTakeFirst();
     if (!link?.course_id) throw notFound("Linked LMS course not found");
     authorize(actor, "manageCourse", link.institution_id, await courseRoleOf(db, link.course_id, actor.userId));
-    if (!link.nrps_url) {
+    if (!link.nrps_url && link.type !== "google_classroom") {
       throw conflict("no_roster_service", "This LMS course doesn't share its roster (NRPS) with the platform.");
     }
     await queue.send("lms-roster-sync", { courseLinkId: link.id }, { singletonKey: `roster-${link.id}` });

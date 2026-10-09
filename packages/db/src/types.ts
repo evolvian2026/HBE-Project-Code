@@ -452,6 +452,7 @@ export interface LmsCourseLinksTable {
   linked_by: string | null;
   roster_synced_at: Timestamp | null;
   roster_summary: Json | null;
+  google_account_id: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }
@@ -465,8 +466,33 @@ export interface LmsAssignmentLinksTable {
   lineitem_url: string | null;
   score_maximum: Generated<string>; // numeric
   created_by: string | null;
+  classroom_coursework_id: string | null;
+  classroom_link: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
+}
+
+export interface GoogleAccountsTable {
+  id: Generated<string>;
+  institution_id: string;
+  profile_id: string;
+  google_user_id: string;
+  email: string | null;
+  refresh_token_encrypted: string;
+  scopes: Generated<string[]>;
+  connected_at: DefaultTimestamp;
+  revoked_at: Timestamp | null;
+  last_error: string | null;
+}
+
+export interface GoogleOauthStatesTable {
+  state: string;
+  institution_id: string;
+  profile_id: string;
+  code_verifier: string;
+  next: string;
+  created_at: DefaultTimestamp;
+  consumed_at: Timestamp | null;
 }
 
 export type LmsGradeSyncStatus = "pending" | "synced" | "failed" | "skipped" | "conflict";
@@ -760,6 +786,8 @@ export interface Database {
   lms_assignment_links: LmsAssignmentLinksTable;
   lms_grade_syncs: LmsGradeSyncsTable;
   lti_deep_link_requests: LtiDeepLinkRequestsTable;
+  google_accounts: GoogleAccountsTable;
+  google_oauth_states: GoogleOauthStatesTable;
   lti_launch_states: LtiLaunchStatesTable;
   lti_registration_invites: LtiRegistrationInvitesTable;
 }

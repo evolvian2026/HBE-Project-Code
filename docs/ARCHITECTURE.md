@@ -836,7 +836,8 @@ configures its own connections in the admin panel (`lms_connections`).
 
 ### 13.1 Grade sync flow
 
-As built for LTI 1.3 (AGS); Google Classroom will follow the same flow.
+As built for LTI 1.3 (AGS) and Google Classroom (where step 1 is "Post to Google Classroom",
+which creates the coursework).
 
 1. **Columns.** An instructor adds platform assignments in the LMS with Deep Linking (§13.2);
    each link asks the LMS for a gradebook column (`lineItem`, `resourceId` = the assignment).
@@ -864,7 +865,7 @@ As built for LTI 1.3 (AGS); Google Classroom will follow the same flow.
 
 ### 13.2 Implementation notes
 
-As built (Phases 2A and 2B: LTI 1.3 with deep linking, AGS and NRPS; Google Classroom follows):
+As built (Phases 2A–2C: LTI 1.3 with deep linking, AGS and NRPS, and Google Classroom):
 
 - `packages/lms` implements LTI 1.3 with `jose`: launch verification (platform signature from
   its JWKS, `iss`, `aud` and `azp`, expiry, `nonce`, LTI version, deployment, message type),
@@ -913,5 +914,18 @@ As built (Phases 2A and 2B: LTI 1.3 with deep linking, AGS and NRPS; Google Clas
   responses and service token requests). During a yearly rollover the previous key stays
   published in the JWKS (`LTI_PREVIOUS_PRIVATE_KEY_BASE64`, `LTI_PREVIOUS_KEY_ID`). Locally a
   temporary key is generated at startup.
-- Google Classroom OAuth refresh tokens will be encrypted at rest (app-level AES-GCM with
-  `TOKEN_ENCRYPTION_KEY`) and scoped per teacher or service account per institution.
+- **Google Classroom** (Phase 2C). An admin turns it on for the institution (one
+  `google_classroom` connection). Each teacher connects their own Google account from a course
+  page: OAuth 2.0 with PKCE and offline access, consent for their classes, rosters (with
+  emails) and coursework; the refresh token is stored AES-256-GCM-encrypted under
+  `TOKEN_ENCRYPTION_KEY` (`google_accounts`, never readable through the API or by users, and
+  not copied into the audit log). They link one of their classes to the course (its students
+  who are members join it, others wait for an admin, as with NRPS) and post assignments there:
+  the platform creates the coursework, because Classroom only accepts grades on coursework made
+  by the same OAuth client. Released grades are written with `studentSubmissions.patch`
+  (`assignedGrade`, `draftGrade`) and the submission is returned so the student sees it.
+  Everything runs as the teacher who linked the class; when Google reports their consent
+  revoked, the account is marked and the course page asks them to connect again.
+- **One gradebook model.** `apps/server/src/lti/gradebook.ts` gives LTI (AGS + NRPS) and
+  Classroom the same shape (column, post score, results, roster), so passback, the sync panel,
+  roster sync and reconciliation work the same for both.

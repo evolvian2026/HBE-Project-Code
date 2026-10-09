@@ -20,6 +20,7 @@ import { gradingRoutes } from "./routes/grading.ts";
 import { regradeRoutes } from "./routes/regrades.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { googleRoutes } from "./routes/google.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
 import { lmsRoutes } from "./routes/lms.ts";
 import { ltiRoutes } from "./routes/lti.ts";
@@ -110,6 +111,7 @@ export async function buildApp(
     });
     await app.register(ltiRoutes, { ...apiDeps, signIn: deps.signIn ?? supabaseSignIn(deps.settings) });
     await app.register(lmsRoutes, apiDeps);
+    await app.register(googleRoutes, apiDeps);
   }
 
   return app;

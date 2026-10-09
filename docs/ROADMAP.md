@@ -89,8 +89,14 @@ Built so far:
   again; a nightly reconciliation flags grades changed in the LMS instead of overwriting them;
   rosters are read from the LMS (NRPS) nightly or on request.
 
-Tested end to end against a stand-in LMS; still to be tried against real Canvas and Moodle
-instances.
+- **2C, Google Classroom.** Admins turn it on; teachers connect their Google account (tokens
+  encrypted at rest), link their classes to courses (students join from the class roster) and
+  post assignments as Classroom coursework; released grades are written to the student's
+  submission and returned, with the same sync panel and nightly reconciliation as LTI.
+
+Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
+against real Canvas, Moodle and Google Classroom (Google must also verify the app's
+Classroom scopes, see CONFIGURATION.md §5.2).
 
 - **LMS integration**: LTI 1.3 tool (login, launch, deep linking, JWKS, dynamic registration)
   tested against Canvas and Moodle; AGS grade passback; Google Classroom courseWork + grade

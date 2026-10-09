@@ -1,8 +1,12 @@
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
 import {
+  authorizationUrl,
   authRedirectUrl,
   CLAIM,
+  ClassroomClient,
+  exchangeCode,
+  pkce,
   deepLinkingResponse,
   LtiServices,
   SCOPE,
@@ -15,6 +19,7 @@ import {
   type LtiError,
   type Platform,
 } from "./index.ts";
+import { FakeGoogle } from "./google-testing.ts";
 import { ROLES, TestPlatform } from "./testing.ts";
 
 const platformFor = (p: TestPlatform): Platform => ({
@@ -311,5 +316,86 @@ describe("deep linking", () => {
         { type: "ltiResourceLink", title: "Todo API", custom: { assignment_id: "a-1" } },
       ],
     });
+  });
+});
+
+describe("Google Classroom", () => {
+  it("connects a teacher with PKCE, then reads classes and rosters and grades coursework", async () => {
+    const google = await FakeGoogle.serve();
+    try {
+      const ep = google.endpoints;
+      google.signInAs = { sub: "g-teacher", email: "Teacher@School.test" };
+      google.addClass({
+        id: "c-1",
+        name: "Web Development",
+        teacherSub: "g-teacher",
+        students: [
+          { userId: "g-ada", email: "ada@school.test", name: "Ada" },
+          { userId: "g-bob", email: "bob@school.test" },
+          { userId: "g-cy", email: "cy@school.test" },
+        ],
+      });
+      google.addClass({ id: "c-other", name: "Someone else's", teacherSub: "g-other" });
+
+      // Consent: the browser goes to Google and comes back with a code.
+      const { verifier, challenge } = pkce();
+      const redirectUri = "https://api.example.com/v1/oauth/google/callback";
+      const consent = await fetch(
+        authorizationUrl(ep, { clientId: google.clientId, redirectUri, state: "s-1", codeChallenge: challenge }),
+        { redirect: "manual" },
+      );
+      const back = new URL(consent.headers.get("location")!);
+      expect(back.searchParams.get("state")).toBe("s-1");
+      const creds = { clientId: google.clientId, clientSecret: google.clientSecret, redirectUri };
+      await expect(
+        exchangeCode(ep, { ...creds, code: back.searchParams.get("code")!, codeVerifier: "wrong" }),
+      ).rejects.toThrow(/refused/);
+
+      const again = await fetch(
+        authorizationUrl(ep, { clientId: google.clientId, redirectUri, state: "s-2", codeChallenge: challenge }),
+        { redirect: "manual" },
+      );
+      const grant = await exchangeCode(ep, {
+        ...creds,
+        code: new URL(again.headers.get("location")!).searchParams.get("code")!,
+        codeVerifier: verifier,
+      });
+      expect(grant).toMatchObject({ googleUserId: "g-teacher", email: "teacher@school.test" });
+
+      const classroom = new ClassroomClient(ep, { ...creds, refreshToken: grant.refreshToken });
+      expect((await classroom.courses()).map((c) => c.name)).toEqual(["Web Development"]);
+      expect((await classroom.students("c-1")).map((s) => s.email)).toEqual([
+        "ada@school.test",
+        "bob@school.test",
+        "cy@school.test",
+      ]);
+      const work = await classroom.createCourseWork("c-1", {
+        title: "Todo API",
+        description: "Open it on HBE Projects.",
+        link: "https://app.example.com/a/1",
+        maxPoints: 100,
+        due: new Date("2026-11-01T15:59:00Z"),
+      });
+      expect(google.courseWork.get(work.id)).toMatchObject({
+        maxPoints: 100,
+        dueDate: { year: 2026, month: 11, day: 1 },
+        dueTime: { hours: 15, minutes: 59 },
+      });
+      const [ada] = await classroom.submissions("c-1", work.id, "g-ada");
+      await classroom.grade("c-1", work.id, ada!.id, 87.5);
+      expect(await classroom.submissions("c-1", work.id, "g-ada")).toEqual([
+        expect.objectContaining({ assignedGrade: 87.5, state: "RETURNED" }),
+      ]);
+      await expect(classroom.students("c-other")).rejects.toThrow(/403/);
+
+      google.revoke("g-teacher");
+      await expect(
+        new ClassroomClient(ep, { ...creds, refreshToken: grant.refreshToken }).courses(),
+      ).rejects.toMatchObject({
+        code: "auth_revoked",
+      });
+    } finally {
+      await google.close();
+    }
   });
 });

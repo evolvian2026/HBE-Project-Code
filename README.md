@@ -66,8 +66,11 @@ Working today:
   wait for an admin. Instructors add assignments in the LMS (Deep Linking); released grades go to
   the LMS gradebook, with a sync panel per assignment and a nightly check for grades changed in
   the LMS; rosters are read from the LMS.
+- **Google Classroom**: teachers connect their Google account, link their classes to courses
+  (students join from the class roster) and post assignments to Classroom; released grades are
+  written there too.
 
-Phase 2 (LMS integration and v1 hardening) is under way; Google Classroom is next. The demo
+Phase 2 (LMS integration and v1 hardening) is under way; team assignments are next. The demo
 deployment and pilot wait for the project's accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
@@ -80,7 +83,7 @@ packages/db       Kysely database access and table types
 packages/queue    Typed job queue and schedules on pg-boss
 packages/github   GitHub App client, webhook verification and payload parsing, in-memory fake
 packages/core     Permission rules and shared domain helpers
-packages/lms      LTI 1.3: launch verification, tool keys, Dynamic Registration, a test platform
+packages/lms      LTI 1.3 (launches, deep linking, AGS, NRPS, registration) and Google Classroom, with test stand-ins
 grader/           Grader harness, hidden test suites and the evaluate workflow (its own repo when deployed)
 templates/        Starter repositories for the stack profiles (published as GitHub template repositories)
 scripts/          Local env setup; publishing the grader and the templates to GitHub
@@ -138,7 +141,9 @@ credential goes, and how to forward webhooks are in [docs/GITHUB_APP_SETUP.md](d
 | `pnpm test:e2e` | Playwright: real sign-in emails, onboarding, access control, grading, LMS launches | `pnpm db:start`, the app running on :3000, and Docker |
 
 For the end-to-end tests, run the app the way the demo runs it (one process, all roles). Make a
-copy of `.env.local` with `ROLES=web,api,worker`, `PORT=3000` and `API_URL=http://localhost:3000`, then:
+copy of `.env.local` with `ROLES=web,api,worker`, `PORT=3000` and `API_URL=http://localhost:3000`,
+plus the stand-in Google the Classroom test starts (`GOOGLE_OAUTH_CLIENT_ID=fake-google-client`,
+`GOOGLE_OAUTH_CLIENT_SECRET=fake-google-secret`, `GOOGLE_FAKE_URL=http://127.0.0.1:54390`), then:
 
 ```bash
 pnpm build

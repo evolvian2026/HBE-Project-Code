@@ -238,6 +238,16 @@ begin
     select g.institution_id, g.id, g.submission_id, al.id, 'synced', 75
     from public.grades g join public.submissions s on s.id = g.submission_id
     join public.lms_assignment_links al on al.assignment_id = s.assignment_id;
+  -- Google Classroom: on in each institution, with a teacher's (encrypted) Google connection.
+  insert into public.lms_connections (institution_id, type, name)
+    values (tests.id('inst_a'), 'google_classroom', 'Google Classroom'),
+           (tests.id('inst_b'), 'google_classroom', 'Google Classroom');
+  insert into public.google_accounts (institution_id, profile_id, google_user_id, email, refresh_token_encrypted)
+    values (tests.id('inst_a'), tests.id('teacher_a'), 'g-teacher-a', 'teacher.a@test.local', 'v1:sealed-a'),
+           (tests.id('inst_b'), tests.id('admin_b'), 'g-admin-b', 'admin.b@test.local', 'v1:sealed-b');
+  insert into public.google_oauth_states (state, institution_id, profile_id, code_verifier, next)
+    values ('state-a', tests.id('inst_a'), tests.id('teacher_a'), 'verifier-a', '/'),
+           ('state-b', tests.id('inst_b'), tests.id('admin_b'), 'verifier-b', '/');
   insert into public.lti_registration_invites (institution_id, token_hash, type, name, expires_at) values
     (tests.id('inst_a'), repeat('1', 64), 'canvas', 'Alpha Canvas 2', now() + interval '7 days'),
     (tests.id('inst_b'), repeat('2', 64), 'moodle', 'Beta Moodle 2', now() + interval '7 days');
@@ -291,6 +301,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'lti_registration_invites', count(*) from public.lti_registration_invites where institution_id = p_institution
   union all select 'lms_assignment_links', count(*) from public.lms_assignment_links where institution_id = p_institution
   union all select 'lms_grade_syncs', count(*) from public.lms_grade_syncs where institution_id = p_institution
+  union all select 'google_accounts', count(*) from public.google_accounts where institution_id = p_institution
+  union all select 'google_oauth_states', count(*) from public.google_oauth_states where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

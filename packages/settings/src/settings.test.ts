@@ -27,7 +27,7 @@ const demo = {
   EMAIL_PROVIDER: "resend",
   RESEND_API_KEY: "re_x",
   EMAIL_FROM: "HBE <no-reply@example.com>",
-  TOKEN_ENCRYPTION_KEY: "k",
+  TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
 };
 
 /** The documented migration: only these keys change between demo and AWS production. */
@@ -89,6 +89,15 @@ describe("loadSettings", () => {
   it("only allows the fake GitHub locally", () => {
     expect(() => loadSettings({ ...demo, GITHUB_FAKE: "true" })).toThrow(/GITHUB_FAKE is only allowed/);
     expect(loadSettings({ ...demo, HBE_ENV: "local", GITHUB_FAKE: "true" }).env.GITHUB_FAKE).toBe(true);
+  });
+
+  it("only allows the fake Google locally, and wants a real encryption key when deployed", () => {
+    expect(() => loadSettings({ ...demo, GOOGLE_FAKE_URL: "http://127.0.0.1:9" })).toThrow(/GOOGLE_FAKE_URL/);
+    expect(() => loadSettings({ ...demo, TOKEN_ENCRYPTION_KEY: "short" })).toThrow(/32 random bytes/);
+    expect(() => loadSettings({ ...demo, GOOGLE_OAUTH_CLIENT_ID: "id" })).toThrow(/GOOGLE_OAUTH_CLIENT_SECRET/);
+    expect(loadSettings({ ...demo, HBE_ENV: "local", TOKEN_ENCRYPTION_KEY: "dev" }).env.TOKEN_ENCRYPTION_KEY).toBe(
+      "dev",
+    );
   });
 
   it("keeps both plan profiles in sync (same keys)", () => {
