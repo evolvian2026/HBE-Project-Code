@@ -1,0 +1,26 @@
+# How the grader (and you) run the app. Keep this file at the top of the repository.
+#
+# The grader provides its own MongoDB and sets MONGODB_URI and JWT_SECRET for the backend, so the
+# `mongo` service here is for your computer only: `docker compose --profile local up --build`.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/app
+      JWT_SECRET: local-development-only
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+  mongo:
+    image: mongo:7
+    profiles: ["local"]
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

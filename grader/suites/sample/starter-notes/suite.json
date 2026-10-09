@@ -1,0 +1,9 @@
+{
+  "key": "starter-notes",
+  "version": 1,
+  "title": "Starter notes app (sample suite for the MERN and Django + React templates)",
+  "stages": [
+    { "key": "api", "file": "api.test.mjs" },
+    { "key": "ui", "file": "ui.test.mjs", "kind": "browser" }
+  ]
+}

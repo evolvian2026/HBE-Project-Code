@@ -3,7 +3,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/next-env.d.ts", "supabase/.temp/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/next-env.d.ts",
+      "supabase/.temp/**",
+      // Standalone starter repositories, each with its own lint setup.
+      "templates/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

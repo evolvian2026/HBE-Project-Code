@@ -386,6 +386,20 @@ and adapter. No platform code changes are needed.
 - Each assignment's template repo is generated from the profile's template, so students start
   from a working skeleton. `.hbe/contract.yaml` is protected by CODEOWNERS and a ruleset.
 
+As built:
+
+- The global profiles are `node22-api`, `mern-node20` and `django-react`; their definitions are
+  in `grader/stacks/<key>.json` (a test keeps the database seed identical). `lint` and
+  `student_tests` name an `image`, a `setup` command (run once per image and command) and a `run`
+  command; `report: junit` points at the JUnit file the run writes. The harness runs them in
+  fresh containers on a copy of the repository (§6.4); assignments turn them on and give each a
+  share of the automated score (`assignments.stage_settings`), and can turn off hidden API or
+  browser stages.
+- Starter templates for the three profiles are in `templates/` (published to GitHub as template
+  repositories with `scripts/publish-template.sh`); CI grades each one with the real harness.
+  The harness provides the profile's datastores, so templates keep their own database behind a
+  `local` Compose profile for students' computers.
+
 ### 6.2 Trigger policies (per assignment)
 
 - `on_push` to the default branch (debounced: newest SHA wins within a 5-minute window)

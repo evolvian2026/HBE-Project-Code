@@ -129,6 +129,18 @@ jobs:
       - name: Grade the fixture apps with the real harness
         run: node --test --test-concurrency=1 grader/test/harness.docker.test.mjs
 
+  templates:
+    name: Starter templates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Grade every starter template with the real harness
+        run: node --test --test-concurrency=1 grader/test/templates.docker.test.mjs
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest

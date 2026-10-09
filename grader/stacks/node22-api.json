@@ -1,0 +1,30 @@
+{
+  "detect": ["package.json", "compose.yaml"],
+  "stages": {
+    "lint": {
+      "run": "npm run lint",
+      "image": "node:22-bookworm-slim",
+      "setup": "npm ci --no-audit --no-fund",
+      "report": "text"
+    },
+    "build": {
+      "run": "docker compose build"
+    },
+    "student_tests": {
+      "run": "npm test",
+      "image": "node:22-bookworm-slim",
+      "junit": "junit.xml",
+      "setup": "npm ci --no-audit --no-fund",
+      "report": "junit"
+    }
+  },
+  "services": {
+    "backend": {
+      "port": 4000,
+      "health": "/health"
+    }
+  },
+  "datastores": [],
+  "env_required": [],
+  "ignore_paths": ["**/node_modules/**", "**/dist/**", "**/package-lock.json"]
+}

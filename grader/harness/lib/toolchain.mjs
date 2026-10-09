@@ -4,8 +4,10 @@
  * Each runs in a fresh container of the stage's `image`, on a Docker volume holding a copy of
  * the student's repository (never the suite, never a host mount), with memory, CPU and process
  * limits and a minimal environment. `setup` (installing dependencies) runs once per image and
- * setup command; it has internet access, like the build. A stage passes when its command exits
- * 0 and, for `report: junit`, the JUnit file lists no failures.
+ * setup command; it has internet access, like the build. What it installs must outlive its
+ * container: npm installs into the repository copy (node_modules), and pip into a second volume
+ * mounted at /opt/hbe-tools (PIP_USER, PYTHONUSERBASE; its bin directory is on PATH). A stage
+ * passes when its command exits 0 and, for `report: junit`, the JUnit file lists no failures.
  */
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -13,6 +15,8 @@ import { looksLikeInfraFailure, run } from "./exec.mjs";
 import { parseJUnit } from "./junit.mjs";
 
 const LIMITS = ["--memory", "2g", "--pids-limit", "1024", "--cpus", "2"];
+const TOOLS = "/opt/hbe-tools";
+const ENV = ["CI=true", "HOME=/tmp", "PIP_USER=1", `PYTHONUSERBASE=${TOOLS}/python`, "PIP_DISABLE_PIP_VERSION_CHECK=1"];
 const tail = (s, n) => s.trimEnd().split("\n").slice(-n).join("\n");
 
 const LABELS = {
@@ -50,18 +54,17 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
         name,
         "-v",
         `${volume}:/work`,
+        "-v",
+        `${volume}-tools:${TOOLS}`,
         "-w",
         "/work",
         ...LIMITS,
-        "-e",
-        "CI=true",
-        "-e",
-        "HOME=/tmp",
+        ...ENV.flatMap((e) => ["-e", e]),
         "--entrypoint",
         "sh",
         image,
         "-c",
-        command,
+        `export PATH="${TOOLS}/python/bin:$PATH"; ${command}`,
       ],
       { timeoutMs, maxOutput: 256 * 1024 },
     );
@@ -71,7 +74,7 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
 
   async function prepareVolume(def) {
     const volume = `${project}-vol${volumes.length}`;
-    volumes.push(volume);
+    volumes.push(volume, `${volume}-tools`);
     // Pull only when missing: runners with a warm cache skip the registry (and its rate limits).
     const present = await run("docker", ["image", "inspect", def.image], { timeoutMs: 30_000 });
     if (present.code !== 0) {

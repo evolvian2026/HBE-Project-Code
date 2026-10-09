@@ -1,0 +1,33 @@
+{
+  "detect": ["backend/manage.py", "frontend/package.json", "compose.yaml"],
+  "stages": {
+    "lint": {
+      "run": "ruff check backend",
+      "image": "python:3.12-slim",
+      "setup": "pip install --quiet --disable-pip-version-check ruff==0.13.0",
+      "report": "text"
+    },
+    "build": {
+      "run": "docker compose build"
+    },
+    "student_tests": {
+      "run": "cd backend && python manage.py test",
+      "image": "python:3.12-slim",
+      "setup": "pip install --quiet --disable-pip-version-check -r backend/requirements.txt",
+      "report": "text"
+    }
+  },
+  "services": {
+    "backend": {
+      "port": 8000,
+      "health": "/health"
+    },
+    "frontend": {
+      "port": 3000,
+      "health": "/"
+    }
+  },
+  "datastores": ["postgres:16"],
+  "env_required": ["DATABASE_URL", "SECRET_KEY"],
+  "ignore_paths": ["**/node_modules/**", "**/__pycache__/**", "**/.venv/**", "**/migrations/**", "**/package-lock.json"]
+}

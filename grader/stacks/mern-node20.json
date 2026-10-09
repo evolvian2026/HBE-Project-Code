@@ -1,0 +1,34 @@
+{
+  "detect": ["backend/package.json", "frontend/package.json", "compose.yaml"],
+  "stages": {
+    "lint": {
+      "run": "npm run lint --prefix backend && npm run lint --prefix frontend",
+      "image": "node:20-bookworm-slim",
+      "setup": "npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
+      "report": "text"
+    },
+    "build": {
+      "run": "docker compose build"
+    },
+    "student_tests": {
+      "run": "npm test --prefix backend",
+      "image": "node:20-bookworm-slim",
+      "junit": "backend/junit.xml",
+      "setup": "npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
+      "report": "junit"
+    }
+  },
+  "services": {
+    "backend": {
+      "port": 4000,
+      "health": "/health"
+    },
+    "frontend": {
+      "port": 3000,
+      "health": "/"
+    }
+  },
+  "datastores": ["mongo:7"],
+  "env_required": ["MONGODB_URI", "JWT_SECRET"],
+  "ignore_paths": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/package-lock.json"]
+}
