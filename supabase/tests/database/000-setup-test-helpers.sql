@@ -209,6 +209,29 @@ begin
   insert into public.github_link_requests (institution_id, requested_by, github_user_id) values
     (tests.id('inst_a'), tests.id('admin_a'), 7001),
     (tests.id('inst_b'), tests.id('admin_b'), 7002);
+
+  -- LMS: a connection per institution; a linked student, someone waiting for review, and an
+  -- LMS course linked to a course plus one nobody has linked yet.
+  insert into tests.ids (name, id) values
+    ('lms_a', 'aaaaaaaa-0000-4000-8000-0000000001a1'),
+    ('lms_b', 'bbbbbbbb-0000-4000-8000-0000000001a1');
+  insert into public.lms_connections (id, institution_id, type, name, issuer, client_id, deployment_ids,
+                                      auth_login_url, auth_token_url, jwks_url) values
+    (tests.id('lms_a'), tests.id('inst_a'), 'canvas', 'Alpha Canvas', 'https://canvas.test', 'client-a', '{dep-a}',
+     'https://canvas.test/auth', 'https://canvas.test/token', 'https://canvas.test/jwks'),
+    (tests.id('lms_b'), tests.id('inst_b'), 'moodle', 'Beta Moodle', 'https://moodle.test', 'client-b', '{dep-b}',
+     'https://moodle.test/auth', 'https://moodle.test/token', 'https://moodle.test/jwks');
+  insert into public.lms_user_links (institution_id, lms_connection_id, lms_user_id, profile_id, email, status, matched_by) values
+    (tests.id('inst_a'), tests.id('lms_a'), 'canvas-student-a', tests.id('student_a'), 'student.a@test.local', 'linked', 'email'),
+    (tests.id('inst_a'), tests.id('lms_a'), 'canvas-unknown', null, 'unknown@test.local', 'pending', null),
+    (tests.id('inst_b'), tests.id('lms_b'), 'moodle-student-b', tests.id('student_b'), 'student.b@test.local', 'linked', 'email');
+  insert into public.lms_course_links (institution_id, lms_connection_id, context_id, context_title, course_id) values
+    (tests.id('inst_a'), tests.id('lms_a'), 'ctx-web', 'Web Development (Canvas)', tests.id('course_a1')),
+    (tests.id('inst_a'), tests.id('lms_a'), 'ctx-new', 'Not linked yet', null),
+    (tests.id('inst_b'), tests.id('lms_b'), 'ctx-fs', 'Full-Stack Basics (Moodle)', tests.id('course_b1'));
+  insert into public.lti_registration_invites (institution_id, token_hash, type, name, expires_at) values
+    (tests.id('inst_a'), repeat('1', 64), 'canvas', 'Alpha Canvas 2', now() + interval '7 days'),
+    (tests.id('inst_b'), repeat('2', 64), 'moodle', 'Beta Moodle 2', now() + interval '7 days');
 end;
 $$;
 
@@ -253,6 +276,10 @@ language sql security invoker set search_path = '' as $$
   union all select 'run_artifacts', count(*) from public.run_artifacts where institution_id = p_institution
   union all select 'record_exports', count(*) from public.record_exports where institution_id = p_institution
   union all select 'replicated_objects', count(*) from public.replicated_objects where institution_id = p_institution
+  union all select 'lms_connections', count(*) from public.lms_connections where institution_id = p_institution
+  union all select 'lms_user_links', count(*) from public.lms_user_links where institution_id = p_institution
+  union all select 'lms_course_links', count(*) from public.lms_course_links where institution_id = p_institution
+  union all select 'lti_registration_invites', count(*) from public.lti_registration_invites where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

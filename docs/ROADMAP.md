@@ -74,7 +74,15 @@ checks, backups workflow and publishing scripts are ready) and running a pilot c
 **Exit:** a pilot course at one institution runs end to end on production, with every grade
 report archived and downloadable.
 
-## Phase 2: LMS and v1 hardening (5–6 weeks)
+## Phase 2: LMS and v1 hardening (5–6 weeks) — in progress
+
+Built so far (2A): the LTI 1.3 tool core. Institution admins connect Canvas, Moodle or another
+LTI 1.3 platform with a one-time Dynamic Registration URL or by hand; launches sign people in
+(matched by email, pending invitations, or an admin's review queue), instructors link LMS
+courses to platform courses on their first launch, and learners join the linked course and land
+on their assignment. Tested end to end against a stand-in platform; still to be tried against
+real Canvas and Moodle instances.
+
 - **LMS integration**: LTI 1.3 tool (login, launch, deep linking, JWKS, dynamic registration)
   tested against Canvas and Moodle; AGS grade passback; Google Classroom courseWork + grade
   passback; sync panel with retry; roster sync (NRPS / Classroom); nightly reconciliation

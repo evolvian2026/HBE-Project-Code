@@ -116,9 +116,11 @@ erDiagram
 ### LMS
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `lms_connections` | institution_id, type (`canvas`/`moodle`/`google_classroom`), name, issuer, client_id, deployment_ids text[], auth_login_url, auth_token_url, jwks_url, oauth_secrets_encrypted bytea, status | LTI 1.3 platform details or Google OAuth config. |
-| `lms_user_links` | institution_id, lms_connection_id, lms_user_id, profile_id, matched_by (`email`/`admin`/`launch`) | unique(lms_connection_id, lms_user_id) |
-| `lms_course_links` | institution_id, course_id, lms_connection_id, lms_course_id, context_id, nrps_url | |
+| `lms_connections` | institution_id, type (`canvas`/`moodle`/`lti`/`google_classroom`), name, status (`active`/`disabled`), issuer, client_id, deployment_ids text[] (empty: any), auth_login_url, auth_token_url, jwks_url, registration jsonb, registered_by (`manual`/`dynamic`) | LTI 1.3 platform details (Google OAuth config later). unique(issuer, client_id) across institutions: a launch identifies its connection. Staff can read their institution's. |
+| `lms_user_links` | institution_id, lms_connection_id, lms_user_id, profile_id (null while waiting), email, name, status (`linked`/`pending`/`rejected`), matched_by (`email`/`admin`/`launch`), last_launch_at | unique(lms_connection_id, lms_user_id); linked ⇔ profile set. Admins see all (the review queue); people see their own. |
+| `lms_course_links` | institution_id, lms_connection_id, context_id, context_title, course_id (null until an instructor links it), nrps_url, ags_lineitems_url, linked_by | unique(lms_connection_id, context_id). Admins see all, course staff their course's, teachers the unlinked ones. |
+| `lti_launch_states` | state, nonce, lms_connection_id, consumed_at | OIDC login state, single use within ten minutes. No user access. |
+| `lti_registration_invites` | institution_id, token_hash, type, name, expires_at, used_at, lms_connection_id | One-time Dynamic Registration URLs (only the hash is kept). No user access. |
 | `lms_assignment_links` | institution_id, assignment_id, lms_course_link_id, lineitem_url or classroom_coursework_id, score_maximum | |
 | `lms_grade_syncs` | institution_id, grade_id, grade_version, lms_assignment_link_id, status (`pending`/`synced`/`failed`/`conflict`), attempts, last_error, lms_response jsonb, synced_at | unique(grade_id, grade_version, lms_assignment_link_id), which makes syncs idempotent. |
 

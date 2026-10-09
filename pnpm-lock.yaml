@@ -62,6 +62,9 @@ importers:
       '@hbe/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@hbe/lms':
+        specifier: workspace:*
+        version: link:../../packages/lms
       '@hbe/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -190,6 +193,9 @@ importers:
 
   e2e:
     devDependencies:
+      '@hbe/lms':
+        specifier: workspace:*
+        version: link:../packages/lms
       '@playwright/test':
         specifier: 1.56.1
         version: 1.56.1
@@ -244,6 +250,25 @@ importers:
 
   packages/github:
     dependencies:
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.5)(lightningcss@1.32.0)
+
+  packages/lms:
+    dependencies:
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       zod:
         specifier: 3.25.76
         version: 3.25.76

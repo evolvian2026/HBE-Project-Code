@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth/"];
+const PUBLIC_PATHS = ["/login", "/auth/", "/lti/pending"];
 
 /** Refreshes the Supabase session cookie on every request and gates signed-in pages. */
 export async function middleware(request: NextRequest) {

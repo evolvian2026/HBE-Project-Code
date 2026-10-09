@@ -22,6 +22,7 @@
     "@hbe/core": "workspace:*",
     "@hbe/db": "workspace:*",
     "@hbe/github": "workspace:*",
+    "@hbe/lms": "workspace:*",
     "@hbe/queue": "workspace:*",
     "@hbe/settings": "workspace:*",
     "@supabase/supabase-js": "2.117.3",

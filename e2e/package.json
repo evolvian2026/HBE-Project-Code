@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@hbe/lms": "workspace:*",
     "@playwright/test": "1.56.1",
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",

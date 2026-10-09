@@ -73,8 +73,12 @@ export const envSchema = z.object({
   RESEND_API_KEY: optional,
   AWS_SES_REGION: optional,
 
+  /** The LTI tool's RS256 signing key (PKCS#8 PEM, base64) and its key id. */
   LTI_PRIVATE_KEY_BASE64: optional,
   LTI_KEY_ID: optional,
+  /** During a key rollover: the previous key, still published in the JWKS. */
+  LTI_PREVIOUS_PRIVATE_KEY_BASE64: optional,
+  LTI_PREVIOUS_KEY_ID: optional,
   GOOGLE_OAUTH_CLIENT_ID: optional,
   GOOGLE_OAUTH_CLIENT_SECRET: optional,
   TOKEN_ENCRYPTION_KEY: optional,

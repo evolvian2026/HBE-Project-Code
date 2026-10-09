@@ -132,6 +132,26 @@ message.
 Evaluation limits (runs per day, concurrency, the monthly Actions-minutes budget, push debounce,
 job timeout) are in the `evaluation` section of the plan profile.
 
+### 5.1 LMS (LTI 1.3) keys
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `LTI_PRIVATE_KEY_BASE64`, `LTI_KEY_ID` | — | The tool's RSA signing key (PKCS#8 PEM, base64-encoded) and the key ID published with it at `/.well-known/jwks.json`. Locally a temporary key is generated at startup. |
+| `LTI_PREVIOUS_PRIVATE_KEY_BASE64`, `LTI_PREVIOUS_KEY_ID` | — | Only during a key rollover: the old key stays in the JWKS (never used to sign) until the LMSs have fetched the new one. |
+
+Generate a key on your own machine and paste it into the hosting dashboard (never into a chat or
+a commit):
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out lti.pem
+base64 -w0 lti.pem    # macOS: base64 -i lti.pem
+```
+
+Use a dated key ID (`lti-2026-01`). To rotate yearly: set the current key as the previous one,
+put a new key and ID in place, and remove the previous key a week later. LMS connections
+themselves are made per institution on the **LMS** page (one-time Dynamic Registration URL, or
+the platform's details entered by hand); the tool's URLs are shown there.
+
 ## 6. Platform settings in the database
 
 A few switches must be enforced by the database itself, so they live in the

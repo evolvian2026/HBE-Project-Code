@@ -22,8 +22,9 @@ with Supabase Pro. The same Docker image and hostnames are used in both.
 
 ## Status
 
-**Phases 0 and 1 (foundations and the MVP vertical slice) are built**; next is deploying the
-demo environment and a pilot course ([docs/DEPLOYMENT.md §1.3](docs/DEPLOYMENT.md#13-demo-runbook)).
+**Phases 0 and 1 (foundations and the MVP vertical slice) are built, and Phase 2 (LMS) is under
+way**; deploying the demo environment and a pilot course follow the runbook in
+[docs/DEPLOYMENT.md §1.3](docs/DEPLOYMENT.md#13-demo-runbook).
 Working today:
 
 - Multi-institution database with row-level security on every table, composite foreign keys that
@@ -59,8 +60,13 @@ Working today:
   and 30 days before the purge two years later, and the purge leaves only a certificate.
 - One Docker image running the web, api and worker roles, validated by end-to-end browser tests.
 
-Next: the demo deployment and pilot, then LMS integration (Phase 2). See
-[docs/ROADMAP.md](docs/ROADMAP.md).
+- **LMS launches (LTI 1.3)**: admins connect Canvas, Moodle or another LTI 1.3 platform (one-time
+  Dynamic Registration URL, or by hand); opening the platform from the LMS signs people in and
+  takes them to their course or assignment. Instructors link each LMS course to a course on
+  their first launch, and people the platform can't match by email wait for an admin.
+
+Phase 2 (LMS integration and v1 hardening) is under way; grade passback to the LMS is next. The
+demo deployment and pilot wait for the project's accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout
 
@@ -72,6 +78,7 @@ packages/db       Kysely database access and table types
 packages/queue    Typed job queue and schedules on pg-boss
 packages/github   GitHub App client, webhook verification and payload parsing, in-memory fake
 packages/core     Permission rules and shared domain helpers
+packages/lms      LTI 1.3: launch verification, tool keys, Dynamic Registration, a test platform
 grader/           Grader harness, hidden test suites and the evaluate workflow (its own repo when deployed)
 templates/        Starter repositories for the stack profiles (published as GitHub template repositories)
 scripts/          Local env setup; publishing the grader and the templates to GitHub
@@ -122,11 +129,11 @@ credential goes, and how to forward webhooks are in [docs/GITHUB_APP_SETUP.md](d
 | Command | What it runs | Needs |
 |---------|--------------|-------|
 | `pnpm lint` · `pnpm format:check` · `pnpm typecheck` | ESLint, Prettier, TypeScript | — |
-| `pnpm test` | Unit tests (settings, github, core, grader) | — |
+| `pnpm test` | Unit tests (settings, github, core, lms, grader) | — |
 | `pnpm db:test` | pgTAP: tenant isolation, permissions, integrity, auth hook, invitations | `pnpm db:start` |
 | `pnpm test:integration` | db schema, queue, and the server against the real database | `pnpm db:start` |
 | `pnpm --filter @hbe/grader test:docker` | The grader harness grading fixture apps | Docker |
-| `pnpm test:e2e` | Playwright: real sign-in emails, onboarding, access control, grading | `pnpm db:start`, the app running on :3000, and Docker |
+| `pnpm test:e2e` | Playwright: real sign-in emails, onboarding, access control, grading, LMS launches | `pnpm db:start`, the app running on :3000, and Docker |
 
 For the end-to-end tests, run the app the way the demo runs it (one process, all roles). Make a
 copy of `.env.local` with `ROLES=web,api,worker`, `PORT=3000` and `API_URL=http://localhost:3000`, then:

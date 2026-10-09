@@ -25,6 +25,7 @@ export default async function InstitutionLayout({
     { href: "/courses", label: ctx.role === "student" ? "My courses" : "Courses" },
     ...(ctx.role === "student" ? [{ href: "/grades", label: "My grades" }] : []),
     ...(ctx.isStaff ? [{ href: "/members", label: "Members" }] : []),
+    ...(ctx.isAdmin ? [{ href: "/lms", label: "LMS" }] : []),
     ...(ctx.isAdmin ? [{ href: "/records", label: "Records" }] : []),
   ];
   return (

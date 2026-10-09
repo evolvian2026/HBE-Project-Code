@@ -849,16 +849,45 @@ configures its own connections in the admin panel (`lms_connections`).
 
 ### 13.2 Implementation notes
 
-- The LTI tool endpoints are on `api`: `GET/POST /lti/login` (OIDC initiation),
-  `POST /lti/launch`, `POST /lti/deep-link`, `GET /.well-known/jwks.json`, and
-  `POST /lti/register` (Dynamic Registration). The tool keypair is rotated yearly; the previous
-  key is still published in the JWKS during rollover.
-- Library: implement with `jose` in `packages/lms` (ltijs is an alternative, but it brings its
-  own storage layer). Validate `nonce` and `state`, check `iss`/`aud`/`deployment_id` against
-  `lms_connections`, and reject replayed launches.
-- Google Classroom OAuth refresh tokens are encrypted at rest (pgsodium/Vault or app-level
-  AES-GCM with a key in Render secrets) and scoped per teacher or service account per
-  institution.
-- User matching: `lms_user_links (lms_connection_id, lms_user_id, profile_id)`. On first
-  launch, match by email within the institution. Unmatched users go to an admin review queue,
-  never an automatic link to the wrong person.
+As built (Phase 2A: the LTI 1.3 core; deep linking, AGS, NRPS and Google Classroom follow):
+
+- `packages/lms` implements LTI 1.3 with `jose`: launch verification (platform signature from
+  its JWKS, `iss`, `aud` and `azp`, expiry, `nonce`, LTI version, deployment, message type),
+  the claims the platform sends (roles mapped to course roles, context, resource link, custom
+  parameters, NRPS and AGS endpoints), the tool's keys and JWKS, and Dynamic Registration. It
+  also ships a stand-in platform (`@hbe/lms/testing`) that the integration and browser tests
+  launch from.
+- The tool endpoints are on `api`: `GET /.well-known/jwks.json`, `GET/POST /lti/login` (OIDC
+  initiation), `POST /lti/launch`, and `GET /lti/register` (Dynamic Registration). They are
+  browser navigations, so failures are short pages, not JSON.
+- **Login and launch.** The login finds the connection by issuer and `client_id` (Canvas Cloud
+  shares one issuer, so the client ID identifies the school), stores a single-use `state` and
+  `nonce` (`lti_launch_states`, ten minutes) and redirects to the platform. The launch consumes
+  the state, checks the issuer, and verifies the id_token. A connection that lists no
+  deployment IDs accepts any deployment of its client ID (Canvas only tells the tool its
+  deployment at launch); listing them restricts launches to those.
+- **Who is it?** `lms_user_links (lms_connection_id, lms_user_id)`: an earlier match, else the
+  email among the institution's active members, else a pending invitation for that email (the
+  account is created and the invitation accepted at once), else the person waits for an admin
+  (`/lti/pending`). Admins link waiting people to a member or refuse them on the LMS page; the
+  platform never links to someone by guesswork.
+- **Signing in.** The api makes a one-time Supabase sign-in token (admin `generateLink`) and
+  sends the browser to `/auth/lti`, where the web app exchanges it for a session (`verifyOtp`)
+  and continues to the course or assignment. Inside the LMS's iframe the session cookie would be
+  third-party, so a launch from an iframe (`Sec-Fetch-Dest: iframe`) opens the platform in its
+  own tab instead.
+- **Which course?** Each LMS course (LTI context) gets an `lms_course_links` row with its NRPS and
+  AGS endpoints. The first instructor (or LMS administrator) to launch from an unlinked one
+  chooses which of their courses it is; learners launching from a linked course join it as
+  students (`course_memberships.source = 'lms'`) and land on the assignment named by the
+  `assignment_id` custom parameter, or on the course.
+- **Registering.** Admins either create a one-time Dynamic Registration URL (seven days; only its
+  hash is stored) and paste it into Canvas or Moodle, or enter the platform's details by hand.
+  Dynamic registration checks that the platform's configuration is served by its issuer, except
+  for Canvas, whose schools serve it from their own domains under `https://canvas.instructure.com`.
+- **Keys.** `LTI_PRIVATE_KEY_BASE64` / `LTI_KEY_ID` sign the tool's messages (deep linking
+  responses and service tokens, Phase 2B). During a yearly rollover the previous key stays
+  published in the JWKS (`LTI_PREVIOUS_PRIVATE_KEY_BASE64`, `LTI_PREVIOUS_KEY_ID`). Locally a
+  temporary key is generated at startup.
+- Google Classroom OAuth refresh tokens will be encrypted at rest (app-level AES-GCM with
+  `TOKEN_ENCRYPTION_KEY`) and scoped per teacher or service account per institution.

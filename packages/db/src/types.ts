@@ -405,6 +405,76 @@ export interface ReviewCommentsTable {
   updated_at: DefaultTimestamp;
 }
 
+export type LmsType = "canvas" | "moodle" | "lti" | "google_classroom";
+
+export interface LmsConnectionsTable {
+  id: Generated<string>;
+  institution_id: string;
+  type: LmsType;
+  name: string;
+  status: Generated<"active" | "disabled">;
+  issuer: string | null;
+  client_id: string | null;
+  deployment_ids: Generated<string[]>;
+  auth_login_url: string | null;
+  auth_token_url: string | null;
+  jwks_url: string | null;
+  registration: Json | null;
+  registered_by: Generated<"manual" | "dynamic">;
+  created_by: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface LmsUserLinksTable {
+  id: Generated<string>;
+  institution_id: string;
+  lms_connection_id: string;
+  lms_user_id: string;
+  profile_id: string | null;
+  email: string | null;
+  name: string | null;
+  matched_by: "email" | "admin" | "launch" | null;
+  status: Generated<"linked" | "pending" | "rejected">;
+  last_launch_at: Timestamp | null;
+  created_at: DefaultTimestamp;
+}
+
+export interface LmsCourseLinksTable {
+  id: Generated<string>;
+  institution_id: string;
+  lms_connection_id: string;
+  context_id: string;
+  context_title: string | null;
+  course_id: string | null;
+  nrps_url: string | null;
+  ags_lineitems_url: string | null;
+  linked_by: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
+export interface LtiLaunchStatesTable {
+  state: string;
+  nonce: string;
+  lms_connection_id: string;
+  created_at: DefaultTimestamp;
+  consumed_at: Timestamp | null;
+}
+
+export interface LtiRegistrationInvitesTable {
+  id: Generated<string>;
+  institution_id: string;
+  token_hash: string;
+  type: "canvas" | "moodle" | "lti";
+  name: string;
+  created_by: string | null;
+  expires_at: Timestamp;
+  used_at: Timestamp | null;
+  lms_connection_id: string | null;
+  created_at: DefaultTimestamp;
+}
+
 export interface ReplicatedObjectsTable {
   bucket: string;
   path: string;
@@ -634,6 +704,11 @@ export interface Database {
   run_artifacts: RunArtifactsTable;
   replicated_objects: ReplicatedObjectsTable;
   record_exports: RecordExportsTable;
+  lms_connections: LmsConnectionsTable;
+  lms_user_links: LmsUserLinksTable;
+  lms_course_links: LmsCourseLinksTable;
+  lti_launch_states: LtiLaunchStatesTable;
+  lti_registration_invites: LtiRegistrationInvitesTable;
 }
 
 export type Institution = Selectable<InstitutionsTable>;

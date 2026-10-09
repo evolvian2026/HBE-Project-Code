@@ -3,6 +3,7 @@ import { describeSettings, loadSettings, type Settings } from "@hbe/settings";
 import { createClient } from "@supabase/supabase-js";
 import { s3ArchiveStore } from "./archive.ts";
 import { createGitHubClient } from "./github.ts";
+import { toolKeys } from "./lti/keys.ts";
 
 export interface Check {
   name: string;
@@ -38,7 +39,16 @@ export async function preflight({ connect }: { connect: boolean }): Promise<{ ok
     };
   }
   const checks: Check[] = [{ name: "settings", ok: true, detail: JSON.stringify(describeSettings(settings)) }];
-  if (!connect) return { ok: true, checks };
+  if (settings.roles.has("api")) {
+    checks.push(
+      await check("lti keys", async () => {
+        const keys = await toolKeys(settings);
+        if (!keys) return "not set: LMS connections can't use grade passback until LTI_PRIVATE_KEY_BASE64 is set";
+        return `signing with ${keys.current.kid}${keys.previous ? `, still publishing ${keys.previous.kid}` : ""}`;
+      }),
+    );
+  }
+  if (!connect) return { ok: checks.every((c) => c.ok), checks };
   const { env, roles } = settings;
 
   if (roles.has("api") || roles.has("worker")) {

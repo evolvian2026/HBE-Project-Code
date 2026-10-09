@@ -131,6 +131,21 @@ export default async function CoursePage({ params }: Props) {
       .filter((c) => c.risks.length > 0),
   );
 
+  const { data: lmsLinks } = isCourseStaff
+    ? await supabase
+        .from("lms_course_links")
+        .select("id, context_title, context_id, connection:lms_connections(name)")
+        .eq("course_id", course.id)
+    : { data: [] };
+  const lmsCourses = (
+    (lmsLinks ?? []) as unknown as {
+      id: string;
+      context_title: string | null;
+      context_id: string;
+      connection: { name: string } | null;
+    }[]
+  ).map((l) => `${l.context_title ?? l.context_id} (${l.connection?.name ?? "LMS"})`);
+
   const candidates = canManage
     ? (await loadMembers(supabase, ctx.institution.id))
         .filter((m) => m.status === "active" && !members.some((cm) => cm.user_id === m.user_id))
@@ -151,6 +166,7 @@ export default async function CoursePage({ params }: Props) {
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
             {course.term}
             {course.github && <span>· GitHub: {course.github.account_login}</span>}
+            {lmsCourses.length > 0 && <span data-testid="lms-linked">· LMS: {lmsCourses.join(", ")}</span>}
             {course.archived_at && <Badge>archived</Badge>}
             {myRole && <Badge tone="accent">{myRole === "ta" ? "teaching assistant" : myRole}</Badge>}
           </p>

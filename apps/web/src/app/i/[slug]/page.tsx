@@ -109,6 +109,12 @@ export default async function InstitutionOverview({ params, searchParams }: Prop
   return (
     <div className="space-y-6">
       {query.error && <Alert tone="error">{ERRORS[query.error] ?? query.error}</Alert>}
+      {query.lti === "course-not-linked" && (
+        <Alert tone="info">
+          The LMS course you came from isn&apos;t linked to a course here yet. Your instructor links it the first time
+          they open the activity; try again after that.
+        </Alert>
+      )}
 
       {isStaff && (
         <div className="grid gap-4 sm:grid-cols-3">

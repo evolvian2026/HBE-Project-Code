@@ -11,6 +11,7 @@ import { HttpError } from "./errors.ts";
 import { createGraderAuth, type GraderAuth } from "./grader-auth.ts";
 import { createGitHubClient, lazyGitHubClient } from "./github.ts";
 import { s3ArchiveStore, type ArchiveStore } from "./archive.ts";
+import { supabaseSignIn, type SignInService } from "./lti/sign-in.ts";
 import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
 import { recordsRoutes } from "./routes/records.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
@@ -20,6 +21,8 @@ import { regradeRoutes } from "./routes/regrades.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { institutionRoutes } from "./routes/institutions.ts";
+import { lmsRoutes } from "./routes/lms.ts";
+import { ltiRoutes } from "./routes/lti.ts";
 import { meRoutes } from "./routes/me.ts";
 import { platformRoutes } from "./routes/platform.ts";
 import { webhookRoutes } from "./routes/webhooks.ts";
@@ -39,6 +42,8 @@ export interface AppDeps {
   archive?: ArchiveStore | null;
   /** Defaults to the configured GitHub App (or the local fake). */
   github?: GitHubClient;
+  /** Defaults to Supabase Auth's admin API (signing people in after an LMS launch). */
+  signIn?: SignInService;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -103,6 +108,8 @@ export async function buildApp(
       ...apiDeps,
       github: deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings)),
     });
+    await app.register(ltiRoutes, { ...apiDeps, signIn: deps.signIn ?? supabaseSignIn(deps.settings) });
+    await app.register(lmsRoutes, apiDeps);
   }
 
   return app;
