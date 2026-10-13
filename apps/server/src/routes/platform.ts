@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ApiDeps } from "../app.ts";
 import { authenticate } from "../auth.ts";
 import { conflict, notFound } from "../errors.ts";
+import { platformHealth } from "../usage.ts";
 
 const createInstitutionBody = z.object({
   name: z.string().trim().min(2).max(200),
@@ -58,6 +59,13 @@ export async function platformRoutes(app: FastifyInstance, { db, verifier, setti
     );
     if (!updated) throw notFound("Institution not found");
     return { limits };
+  });
+
+  /** Queues, failed jobs, webhook backlog, runs and each institution's usage (super admins). */
+  app.get("/v1/platform/health", async (req) => {
+    const actor = await authenticate(req, db, verifier);
+    authorize(actor, "listAllInstitutions");
+    return platformHealth(db, settings);
   });
 
   app.get("/v1/platform/institutions", async (req) => {

@@ -69,6 +69,10 @@ export default async function PlatformPage({
         subtitle={
           <>
             Institutions and GitHub installations across the platform.{" "}
+            <Link href="/platform/health" className="text-accent hover:underline">
+              System health
+            </Link>
+            {" · "}
             <Link href="/platform/audit" className="text-accent hover:underline">
               Audit log
             </Link>

@@ -1,4 +1,4 @@
-import { authorize, institutionSettings } from "@hbe/core";
+import { authorize, ForbiddenError, institutionSettings, roleIn } from "@hbe/core";
 import { withActor } from "@hbe/db";
 import { installAppUrl } from "@hbe/github";
 import type { FastifyInstance } from "fastify";
@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ApiDeps } from "../app.ts";
 import { authenticate } from "../auth.ts";
 import { conflict, notFound } from "../errors.ts";
+import { institutionUsage } from "../usage.ts";
 
 const LINK_REQUEST_TTL_MINUTES = 60;
 
@@ -27,6 +28,15 @@ const assignmentDefaults = z
 
 /** Institution admin endpoints. */
 export async function institutionRoutes(app: FastifyInstance, { db, verifier, settings }: ApiDeps): Promise<void> {
+  /** What the institution used this month, against its limits (its admins). */
+  app.get<{ Params: { institutionId: string } }>("/v1/institutions/:institutionId/usage", async (req) => {
+    const actor = await authenticate(req, db, verifier);
+    const institutionId = z.string().uuid().parse(req.params.institutionId);
+    // Read-only institutions' admins may look too.
+    if (!actor.isSuperAdmin && roleIn(actor, institutionId) !== "admin") throw new ForbiddenError();
+    return institutionUsage(db, settings, institutionId);
+  });
+
   /** The institution's admins rename it and choose what new assignments start with. */
   app.put<{ Params: { institutionId: string } }>("/v1/institutions/:institutionId/settings", async (req) => {
     const actor = await authenticate(req, db, verifier);

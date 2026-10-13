@@ -47,6 +47,7 @@ test("the operator sets limits, a notice and test suites; the admin chooses assi
   await expect(admin.getByTestId("maintenance-banner")).toHaveText(`Maintenance tonight ${suffix}`);
   await admin.getByRole("navigation", { name: "Institution" }).getByRole("link", { name: "Settings" }).click();
   await expect(admin.getByTestId("limits")).toContainText("0 active of 1");
+  await expect(admin.getByTestId("limits")).toContainText("Runner minutes0 of");
   await admin.getByLabel("Test runs per student per day").fill("3");
   await admin.getByLabel("Automated tests (%)").fill("50");
   await admin.getByLabel("Rubric (%)").fill("30");
@@ -121,6 +122,11 @@ test("the operator sets limits, a notice and test suites; the admin chooses assi
   await operator.goto("/platform/audit?entity=platform_settings");
   await expect(operator.getByTestId("audit-rows").getByText("Platform setting changed").first()).toBeVisible();
   await expect(operator.getByTestId("audit-rows")).toContainText(email("operator"));
+
+  // System health, across institutions.
+  await operator.goto("/platform/health");
+  await expect(operator.getByRole("heading", { name: "System health" })).toBeVisible();
+  await expect(operator.getByTestId("institution-usage").getByRole("row", { name: new RegExp(name) })).toBeVisible();
 
   // The operator removes the notice.
   await operator.goto("/platform");

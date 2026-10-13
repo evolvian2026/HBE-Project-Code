@@ -689,6 +689,14 @@ own log (rows with no institution: platform roles, settings, global profiles and
 see an institution's entries only through it, as RLS allows. Changes made by jobs show as "the
 platform".
 
+**Usage** (as built, 2F): the Settings page shows this month's usage against the limits (runner
+minutes, test runs by kind, active and invited students, storage of graded source, run files and
+exports, grade reports, emails), from `GET /v1/institutions/:id/usage`. **System health** on the
+platform console (`GET /v1/platform/health`, refreshed every 15 seconds): pg-boss queues
+(waiting, running, retrying, failed in 24 hours) and the latest failures, webhooks waiting and
+the oldest one's age, runs against the global concurrency, the runner-minute budget, storage,
+and each institution's students, runs and minutes this month.
+
 ### Super admin console (platform operator)
 Institutions (create, suspend, plan/limits) · global stack profiles · cross-tenant system
 health (queue depth, failed jobs, webhook lag, runner pool, storage growth) · feature flags ·

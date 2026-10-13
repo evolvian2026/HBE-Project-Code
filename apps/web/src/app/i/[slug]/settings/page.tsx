@@ -1,36 +1,45 @@
-import { institutionLimits, institutionSettings } from "@hbe/core";
+import { institutionSettings } from "@hbe/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Card } from "@/components/ui";
+import { apiFetch } from "@/lib/api";
+import { formatBytes } from "@/lib/format";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InstitutionSettingsForm } from "./forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
+interface Usage {
+  month: string;
+  runnerMinutes: { used: number; allowance: number };
+  runs: Record<string, number>;
+  concurrency: number;
+  students: { active: number; invited: number; limit: number | null };
+  storageBytes: { artifacts: number; snapshots: number; exports: number };
+  gradeReports: number;
+  emails: { sent: number; failed: number };
+}
+
+const TRIGGER: Record<string, string> = {
+  push: "on push",
+  pull_request: "on pull requests",
+  manual: "asked for",
+  deadline: "at deadlines",
+  regrade: "re-grades",
+};
+
 export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const ctx = await requireMembership(slug);
   if (!ctx.isAdmin) notFound();
   const supabase = await createSupabaseServerClient();
-  const [{ data: inst }, { count: students }, { count: invited }] = await Promise.all([
-    supabase.from("institutions").select("name, settings, limits").eq("id", ctx.institution.id).single(),
-    supabase
-      .from("institution_memberships")
-      .select("id", { count: "exact", head: true })
-      .eq("institution_id", ctx.institution.id)
-      .eq("role", "student")
-      .eq("status", "active"),
-    supabase
-      .from("invitations")
-      .select("id", { count: "exact", head: true })
-      .eq("institution_id", ctx.institution.id)
-      .eq("role", "student")
-      .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString()),
+  const [{ data: inst }, usageResult] = await Promise.all([
+    supabase.from("institutions").select("name, settings").eq("id", ctx.institution.id).single(),
+    apiFetch<Usage>(`/v1/institutions/${ctx.institution.id}/usage`),
   ]);
   const settings = institutionSettings(inst?.settings);
-  const limits = institutionLimits(inst?.limits);
+  const usage = usageResult.ok ? usageResult.data : null;
 
   return (
     <div className="space-y-6">
@@ -47,24 +56,68 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           disabled={!ctx.writable}
         />
       </Card>
-      <Card title="Limits" description="Set by the platform operator. Ask them to change these.">
-        <dl className="grid gap-3 text-sm sm:grid-cols-3" data-testid="limits">
-          <div>
-            <dt className="text-muted">Students</dt>
-            <dd className="tabular-nums">
-              {students ?? 0} active{invited ? ` + ${invited} invited` : ""}
-              {limits.max_active_students ? ` of ${limits.max_active_students}` : " (no limit)"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted">Test runs at once</dt>
-            <dd className="tabular-nums">{limits.institution_concurrency ?? "the plan's limit"}</dd>
-          </div>
-          <div>
-            <dt className="text-muted">Runner minutes per month</dt>
-            <dd className="tabular-nums">{limits.monthly_runner_minutes ?? "the plan's budget"}</dd>
-          </div>
-        </dl>
+      <Card
+        title={`Usage this month (${usage?.month ?? ""})`}
+        description="Limits are set by the platform operator; ask them to change these."
+      >
+        {!usage ? (
+          <Alert tone="error">Usage couldn't be loaded.</Alert>
+        ) : (
+          <dl className="grid gap-4 text-sm sm:grid-cols-3" data-testid="limits">
+            <div>
+              <dt className="text-muted">Students</dt>
+              <dd className="tabular-nums">
+                {usage.students.active} active{usage.students.invited ? ` + ${usage.students.invited} invited` : ""}
+                {usage.students.limit ? ` of ${usage.students.limit}` : " (no limit)"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Runner minutes</dt>
+              <dd className="tabular-nums">
+                {usage.runnerMinutes.used} of {usage.runnerMinutes.allowance}
+                {usage.runnerMinutes.used >= usage.runnerMinutes.allowance && (
+                  <span className="block text-xs text-warning">Automatic test runs are paused until next month.</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Test runs at once</dt>
+              <dd className="tabular-nums">up to {usage.concurrency}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Test runs</dt>
+              <dd className="tabular-nums">
+                {Object.values(usage.runs).reduce((a, b) => a + b, 0)}
+                {Object.keys(usage.runs).length > 0 && (
+                  <span className="block text-xs text-muted">
+                    {Object.entries(usage.runs)
+                      .map(([trigger, n]) => `${n} ${TRIGGER[trigger] ?? trigger}`)
+                      .join(" · ")}
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Stored</dt>
+              <dd className="tabular-nums">
+                {formatBytes(usage.storageBytes.artifacts + usage.storageBytes.snapshots + usage.storageBytes.exports)}
+                <span className="block text-xs text-muted">
+                  {formatBytes(usage.storageBytes.snapshots)} graded source ·{" "}
+                  {formatBytes(usage.storageBytes.artifacts)} run files · {usage.gradeReports} grade reports
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Emails sent</dt>
+              <dd className="tabular-nums">
+                {usage.emails.sent}
+                {usage.emails.failed > 0 && (
+                  <span className="text-xs text-danger"> · {usage.emails.failed} failed</span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        )}
       </Card>
     </div>
   );
