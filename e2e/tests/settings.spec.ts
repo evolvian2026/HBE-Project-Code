@@ -128,6 +128,31 @@ test("the operator sets limits, a notice and test suites; the admin chooses assi
   await expect(operator.getByRole("heading", { name: "System health" })).toBeVisible();
   await expect(operator.getByTestId("institution-usage").getByRole("row", { name: new RegExp(name) })).toBeVisible();
 
+  // A second admin loses their phone: the first resets their two-factor authentication, and
+  // they set it up again.
+  await sql("insert into public.invitations (institution_id, email, role) values ($1, $2, 'admin')", [
+    institutionId,
+    email("admin2"),
+  ]);
+  const admin2 = await (await browser.newContext()).newPage();
+  await signIn(admin2, email("admin2"));
+  await setUpMfa(admin2);
+  await admin.goto(`/i/${slug}/members`);
+  await admin
+    .getByRole("listitem")
+    .filter({ hasText: email("admin2") })
+    .getByRole("button", { name: "Reset two-factor" })
+    .click();
+  await expect(admin.getByText("Two-factor authentication reset.")).toBeVisible();
+  const [factors] = await sql<{ n: number }>(
+    "select count(*)::int as n from auth.mfa_factors f join auth.users u on u.id = f.user_id where u.email = $1",
+    [email("admin2")],
+  );
+  expect(factors!.n).toBe(0);
+  const fresh = await (await browser.newContext()).newPage();
+  await signIn(fresh, email("admin2"));
+  await setUpMfa(fresh);
+
   // The operator removes the notice.
   await operator.goto("/platform");
   await operator.getByLabel("Notice").fill("");

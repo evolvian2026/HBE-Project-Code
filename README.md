@@ -79,8 +79,12 @@ Working today:
   feedback posted to a GitHub issue (optional, never the scores), and recovery of webhooks
   GitHub failed to deliver.
 
-Phase 2 (LMS integration and v1 hardening) is under way; institution admin settings, audit log,
-usage and SSO are next. The demo deployment and pilot wait for the project's
+- **Administration**: institution settings and the operator's limits, stack profiles and the
+  test-suite registry, an audit log with CSV export, usage and system health, SAML single
+  sign-on, and two-factor resets.
+
+Phase 2 (LMS integration and v1 hardening) is under way; hardening (observability, load test,
+accessibility, security review) is next. The demo deployment and pilot wait for the project's
 accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout

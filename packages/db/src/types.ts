@@ -419,6 +419,7 @@ export type NotificationType =
   | "regrade_requested"
   | "regrade_answered"
   | "records_notice"
+  | "account_security"
   | "commit_claim";
 
 export interface NotificationsTable {

@@ -4,6 +4,7 @@ import { parseInviteCsv, planInvitations, type InviteRow } from "@hbe/core";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { friendlyError, type ActionState } from "@/lib/actions";
+import { apiFetch } from "@/lib/api";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadPlanContext } from "./data";
@@ -119,5 +120,26 @@ export async function updateMember(_prev: ActionState, formData: FormData): Prom
   return {
     ok: true,
     message: status ? `Member ${status === "active" ? "reactivated" : "deactivated"}.` : "Role updated.",
+  };
+}
+
+/** Admins reset a member's two-factor authentication (a lost phone); the person is told by email. */
+export async function resetMemberMfa(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { slug, userId } = z
+    .object({ slug: z.string(), userId: z.string().uuid() })
+    .parse(Object.fromEntries(formData));
+  const ctx = await requireMembership(slug);
+  const result = await apiFetch<{ removed: number }>(
+    `/v1/institutions/${ctx.institution.id}/members/${userId}/reset-mfa`,
+    {
+      method: "POST",
+    },
+  );
+  if (!result.ok) return { ok: false, message: result.message };
+  return {
+    ok: true,
+    message: result.data.removed
+      ? "Two-factor authentication reset. They'll set it up again, and we emailed them."
+      : "They had no two-factor authentication set up.",
   };
 }

@@ -706,6 +706,12 @@ platform console (`GET /v1/platform/health`, refreshed every 15 seconds): pg-bos
 the oldest one's age, runs against the global concurrency, the runner-minute budget, storage,
 and each institution's students, runs and minutes this month.
 
+**Two-factor reset** (as built, 2F): an institution's admins reset a member's two-factor
+authentication from the members list (a lost phone): the api removes their factors through
+Supabase Auth's admin API, writes an audit entry, and tells the person, by email whatever their
+preferences (`account_security` notices always go). Admins can't reset their own, nor anyone who
+also belongs to another institution or has a platform role: those go to the platform operator.
+
 ### Super admin console (platform operator)
 Institutions (create, suspend, plan/limits) · global stack profiles · cross-tenant system
 health (queue depth, failed jobs, webhook lag, runner pool, storage growth) · feature flags ·

@@ -108,14 +108,15 @@ Built so far:
   redelivered, and pushes whose webhooks were lost are recovered from GitHub's event feed (also
   just before each cutoff, with GitHub's push time).
 
-- **2F, administration (in progress).** Institution settings (assignment defaults) and the
+- **2F, administration.** Institution settings (assignment defaults) and the
   operator's per-institution limits (active students, concurrent runs, monthly runner minutes),
   enforced; a site-wide notice. Stack profiles (institution-owned versions, which global ones are
   offered) and the test-suite registry (the operator registers versions). Audit log viewer with
   filters and CSV export, for each institution and for the platform. Usage this month for each
   institution; system health (queues, failures, webhook backlog, runs, usage) for the operator.
   SAML single sign-on through Supabase Auth: admins ask, the operator turns it on after checking
-  domain ownership; tested end to end against a stand-in IdP.
+  domain ownership; tested end to end against a stand-in IdP. Admins reset a member's
+  two-factor authentication (audited, the person is emailed).
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's

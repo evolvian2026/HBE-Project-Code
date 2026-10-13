@@ -125,7 +125,14 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
                   </p>
                 </div>
                 {canManage ? (
-                  <MemberControls slug={slug} id={m.id} role={m.role} status={m.status} />
+                  <MemberControls
+                    slug={slug}
+                    id={m.id}
+                    userId={m.user_id}
+                    role={m.role}
+                    status={m.status}
+                    self={m.user_id === session.userId}
+                  />
                 ) : (
                   <Badge tone={roleTone(m.role)}>{m.role}</Badge>
                 )}

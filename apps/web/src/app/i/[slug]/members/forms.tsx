@@ -4,7 +4,7 @@ import { INVITE_CSV_TEMPLATE } from "@hbe/core";
 import { useActionState } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
-import { importInvitations, inviteMember, updateMember } from "./actions";
+import { importInvitations, inviteMember, resetMemberMfa, updateMember } from "./actions";
 
 const selectClass = "mt-1 block w-full rounded-md border border-border bg-surface px-3 py-2 text-sm";
 
@@ -96,8 +96,23 @@ export function CsvImportForm({ slug }: { slug: string }) {
   );
 }
 
-export function MemberControls({ slug, id, role, status }: { slug: string; id: string; role: string; status: string }) {
+export function MemberControls({
+  slug,
+  id,
+  userId,
+  role,
+  status,
+  self,
+}: {
+  slug: string;
+  id: string;
+  userId: string;
+  role: string;
+  status: string;
+  self: boolean;
+}) {
   const [state, action, pending] = useActionState(updateMember, null);
+  const [mfaState, mfaAction, mfaPending] = useActionState(resetMemberMfa, null);
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
@@ -131,8 +146,18 @@ export function MemberControls({ slug, id, role, status }: { slug: string; id: s
             {status === "active" ? "Deactivate" : "Reactivate"}
           </Button>
         </form>
+        {!self && (
+          <form action={mfaAction}>
+            <input type="hidden" name="slug" value={slug} />
+            <input type="hidden" name="userId" value={userId} />
+            <Button type="submit" variant="secondary" disabled={mfaPending} className="px-2.5 py-1">
+              Reset two-factor
+            </Button>
+          </form>
+        )}
       </div>
       {state && <p className={`text-xs ${state.ok ? "text-success" : "text-danger"}`}>{state.message}</p>}
+      {mfaState && <p className={`text-xs ${mfaState.ok ? "text-success" : "text-danger"}`}>{mfaState.message}</p>}
     </div>
   );
 }
