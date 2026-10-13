@@ -245,6 +245,8 @@ const declared: Record<string, string[]> = {
     "feedback_hash",
     "feedback_posted_at",
     "feedback_error",
+    "events_etag",
+    "events_checked_at",
   ],
   submissions: [
     "id",

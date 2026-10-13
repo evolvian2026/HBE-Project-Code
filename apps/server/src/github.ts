@@ -19,5 +19,7 @@ export function lazyGitHubClient(make: () => GitHubClient): GitHubClient {
   return {
     forInstallation: (installationId) => get().forInstallation(installationId),
     installationIdForRepo: (owner, repo) => get().installationIdForRepo(owner, repo),
+    listDeliveries: (since) => get().listDeliveries(since),
+    redeliver: (deliveryId) => get().redeliver(deliveryId),
   };
 }

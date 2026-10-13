@@ -295,6 +295,16 @@ worker  ──────▶  5. Load raw payload, normalise by event type:
 - **Missed deliveries**: a cron job runs every 15 minutes. It lists failed deliveries via the App
   API and redelivers them, and every few hours it reconciles recent commits/PRs per active
   repo with conditional (`ETag`) requests.
+  As built (Phase 2E): every 15 minutes the worker lists the App webhook's deliveries of the last
+  6 hours and asks GitHub to redeliver each one that never succeeded and that the platform never
+  stored (stored ones are retried from the stored copy), at most 3 attempts per delivery. Every
+  3 hours, and for each repository just before its cutoff, the worker reads the repository's
+  event feed (by `ETag`: an unchanged feed is a free 304) for pushes to the default branch the
+  platform has no record of, and records them as if delivered, with GitHub's time of the push
+  and the commits from a compare. That time is what decides the graded commit, so a lost push
+  webhook can't cost a student their on-time work. If GitHub can't be reached at the cutoff, the
+  pushes on record are used. Pull requests, reviews and issues rely on redelivery (they only feed
+  the process score).
 - **Rate limits**: installation tokens are cached until about 5 minutes before they expire. Every
   response's `x-ratelimit-remaining` is tracked per installation, and the worker backs off when
   it falls below 10%. Use GraphQL to bulk-fetch PR/review data for dashboards.
@@ -698,7 +708,8 @@ OpenAPI is generated from Zod schemas (`fastify-type-provider-zod`).
 Schedules (pg-boss cron, run by the worker role; times in Asia/Singapore): `*/15` redeliver failed webhooks · `*/5` reap stale runs (queued for more than 30
 minutes or running for more than 45) · `0 * * * *` deadline cut-off and final graded runs · `0 2 * * *` activity rollups ·
 `0 3 * * 0` retention cleanup · `30 2 * * *` archive replication to the external bucket ·
-`11 1 * * *` LMS roster sync · `29 3 * * *` LMS grade reconciliation.
+`11 1 * * *` LMS roster sync · `29 3 * * *` LMS grade reconciliation. As built (2E): `*/15` webhook
+redelivery · `37 */3 * * *` push reconciliation · `*/10` feedback issues on GitHub.
 
 ---
 

@@ -75,8 +75,12 @@ Working today:
 - **Commit claims**: students claim commits whose git email isn't on their GitHub account;
   staff confirm (optionally remembering the email) and process scores are recomputed.
 
-Phase 2 (LMS integration and v1 hardening) is under way; PR review mirroring, bulk re-runs
-and realtime run status are next. The demo deployment and pilot wait for the project's
+- **Runs and GitHub**: bulk re-runs (with any version of the suite), live run status, released
+  feedback posted to a GitHub issue (optional, never the scores), and recovery of webhooks
+  GitHub failed to deliver.
+
+Phase 2 (LMS integration and v1 hardening) is under way; institution admin settings, audit log,
+usage and SSO are next. The demo deployment and pilot wait for the project's
 accounts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Repository layout

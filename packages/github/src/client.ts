@@ -56,6 +56,39 @@ export interface Comparison {
   truncated: boolean;
 }
 
+/** An event from a repository's event feed (GET /repos/{owner}/{repo}/events). */
+export interface RepoEvent {
+  id: string;
+  type: string;
+  /** When GitHub recorded it (for a push: when it was received). */
+  createdAt: string;
+  actor: { id: number; login: string } | null;
+  payload: Record<string, unknown>;
+}
+
+/** A commit as a push lists it. */
+export interface PushedCommit {
+  sha: string;
+  message: string;
+  /** The author date git records. */
+  timestamp: string;
+  authorName: string | null;
+  authorEmail: string | null;
+  authorLogin: string | null;
+}
+
+/** One delivery attempt of the App's webhook (GET /app/hook/deliveries). */
+export interface HookDelivery {
+  id: number;
+  /** The X-GitHub-Delivery id; redeliveries keep it. */
+  guid: string;
+  deliveredAt: string;
+  /** The receiver's HTTP status (0: no response). */
+  statusCode: number;
+  redelivery: boolean;
+  event: string;
+}
+
 export interface RepoInfo {
   id: number;
   owner: string;
@@ -111,6 +144,14 @@ export interface InstallationClient {
   compare(owner: string, repo: string, base: string, head: string): Promise<Comparison>;
   /** The first commit reachable from `ref`: for a repository made from a template, where the student started. */
   rootCommit(owner: string, repo: string, ref: string): Promise<string>;
+  /** The latest repository events; `notModified` when nothing changed since `etag`. */
+  listRepoEvents(
+    owner: string,
+    repo: string,
+    etag: string | null,
+  ): Promise<{ notModified: true } | { notModified: false; etag: string | null; events: RepoEvent[] }>;
+  /** Commits a push added, oldest first: after `base` up to `head` (or `head`'s history when `base` is null). */
+  listPushedCommits(owner: string, repo: string, base: string | null, head: string): Promise<PushedCommit[]>;
 }
 
 export interface CheckRunInput {
@@ -126,6 +167,10 @@ export interface GitHubClient {
   forInstallation(installationId: number): InstallationClient;
   /** The App's installation id for a repository (e.g. the grader repository). */
   installationIdForRepo(owner: string, repo: string): Promise<number>;
+  /** The App webhook's delivery attempts since `since`, newest first (GitHub keeps 3 days). */
+  listDeliveries(since: Date): Promise<HookDelivery[]>;
+  /** Asks GitHub to deliver a delivery again. */
+  redeliver(deliveryId: number): Promise<void>;
 }
 
 export interface GitHubAppCredentials {
@@ -182,6 +227,45 @@ export class GitHubAppClient implements GitHubClient {
     const { id } = (await res.json()) as { id: number };
     this.repoInstallations.set(key, id);
     return id;
+  }
+
+  async listDeliveries(since: Date): Promise<HookDelivery[]> {
+    const out: HookDelivery[] = [];
+    let path: string | null = "/app/hook/deliveries?per_page=100";
+    for (let page = 0; path && page < 20; page++) {
+      const res = await this.send("GET", path, appJwt(this.creds.appId, this.key, this.now()));
+      const list = (await res.json()) as {
+        id: number;
+        guid: string;
+        delivered_at: string;
+        status_code: number;
+        redelivery: boolean;
+        event: string;
+      }[];
+      for (const d of list) {
+        if (Date.parse(d.delivered_at) < since.getTime()) return out;
+        out.push({
+          id: d.id,
+          guid: d.guid,
+          deliveredAt: d.delivered_at,
+          statusCode: d.status_code,
+          redelivery: d.redelivery,
+          event: d.event,
+        });
+      }
+      // Cursor pagination: the Link header's "next" page.
+      const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get("link") ?? "")?.[1];
+      path = next ? next.replace(this.apiUrl, "") : null;
+    }
+    return out;
+  }
+
+  async redeliver(deliveryId: number): Promise<void> {
+    await this.send(
+      "POST",
+      `/app/hook/deliveries/${deliveryId}/attempts`,
+      appJwt(this.creds.appId, this.key, this.now()),
+    );
   }
 
   forInstallation(installationId: number): InstallationClient {
@@ -294,6 +378,59 @@ export class GitHubAppClient implements GitHubClient {
           })),
         };
       },
+      listRepoEvents: async (owner, repo, etag) => {
+        const res = await this.send(
+          "GET",
+          `/repos/${enc(owner)}/${enc(repo)}/events?per_page=100`,
+          await this.installationToken(installationId),
+          undefined,
+          etag ? { "if-none-match": etag } : {},
+        );
+        if (res.status === 304) return { notModified: true };
+        const list = (await res.json()) as {
+          id: string;
+          type: string;
+          created_at: string;
+          actor?: { id: number; login: string } | null;
+          payload?: Record<string, unknown>;
+        }[];
+        return {
+          notModified: false,
+          etag: res.headers.get("etag"),
+          events: list.map((e) => ({
+            id: e.id,
+            type: e.type,
+            createdAt: e.created_at,
+            actor: e.actor ? { id: e.actor.id, login: e.actor.login } : null,
+            payload: e.payload ?? {},
+          })),
+        };
+      },
+      listPushedCommits: async (owner, repo, base, head) => {
+        type C = {
+          sha: string;
+          commit: { message: string; author: { name?: string; email?: string; date: string } | null };
+          author: { login: string } | null;
+        };
+        const commits = base
+          ? (
+              await call<{ commits: C[] }>(
+                "GET",
+                `/repos/${enc(owner)}/${enc(repo)}/compare/${enc(base)}...${enc(head)}?per_page=100`,
+              )
+            ).commits
+          : (
+              await call<C[]>("GET", `/repos/${enc(owner)}/${enc(repo)}/commits?sha=${enc(head)}&per_page=100`)
+            ).reverse();
+        return commits.map((c) => ({
+          sha: c.sha,
+          message: c.commit.message,
+          timestamp: c.commit.author?.date ?? new Date(0).toISOString(),
+          authorName: c.commit.author?.name ?? null,
+          authorEmail: c.commit.author?.email ?? null,
+          authorLogin: c.author?.login ?? null,
+        }));
+      },
       rootCommit: async (owner, repo, ref) => {
         // One commit per page: the Link header's last page is the oldest commit.
         const path = `/repos/${enc(owner)}/${enc(repo)}/commits?sha=${enc(ref)}&per_page=1`;
@@ -358,7 +495,13 @@ export class GitHubAppClient implements GitHubClient {
     return (await res.json()) as T;
   }
 
-  private async send(method: string, path: string, bearer: string, body?: unknown): Promise<Response> {
+  private async send(
+    method: string,
+    path: string,
+    bearer: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.apiUrl}${path}`, {
@@ -369,6 +512,7 @@ export class GitHubAppClient implements GitHubClient {
           "user-agent": "hbe-platform",
           "x-github-api-version": "2022-11-28",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(20_000),
@@ -376,7 +520,7 @@ export class GitHubAppClient implements GitHubClient {
     } catch (err) {
       throw new GitHubError(0, `GitHub unreachable: ${err instanceof Error ? err.message : String(err)}`, true);
     }
-    if (res.ok) return res;
+    if (res.ok || res.status === 304) return res;
 
     const text = await res.text();
     let message = text.slice(0, 500);

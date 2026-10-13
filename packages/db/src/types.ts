@@ -276,6 +276,9 @@ export interface RepositoriesTable {
   feedback_hash: string | null;
   feedback_posted_at: Timestamp | null;
   feedback_error: string | null;
+  /** ETag of the repository's event feed when last read, and when that was (reconciliation). */
+  events_etag: string | null;
+  events_checked_at: Timestamp | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }

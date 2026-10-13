@@ -10,6 +10,7 @@ interface Recorded {
   method: string;
   url: string;
   auth: string | null;
+  ifNoneMatch: string | null;
   body: unknown;
 }
 
@@ -22,7 +23,8 @@ function mockFetch(
     const url = String(input).replace("https://api.github.test", "");
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ method, url, auth: new Headers(init?.headers).get("authorization"), body });
+    const headers = new Headers(init?.headers);
+    calls.push({ method, url, auth: headers.get("authorization"), ifNoneMatch: headers.get("if-none-match"), body });
     const handler = routes[`${method} ${url}`];
     const out = handler ? handler(body) : { status: 404, json: { message: "Not Found" } };
     return new Response(out.json === undefined ? null : JSON.stringify(out.json), {
@@ -165,6 +167,125 @@ describe("GitHubAppClient", () => {
       ["POST /repos/alpha-cs/todo-api-ada/issues", { title: "Feedback: Todo API", body: "Well done" }],
       ["PATCH /repos/alpha-cs/todo-api-ada/issues/4", { body: "Well done!" }],
     ]);
+  });
+
+  it("reads repository events with an ETag, and the commits a push added", async () => {
+    let seen = 0;
+    const commit = (sha: string, login: string | null) => ({
+      sha,
+      commit: {
+        message: `Work ${sha}`,
+        author: { name: "Ada", email: "ada@laptop.test", date: "2026-10-08T01:00:00Z" },
+      },
+      author: login ? { login } : null,
+    });
+    const { impl, calls } = mockFetch({
+      ...tokenRoute,
+      "GET /repos/alpha-cs/todo-api-ada/events?per_page=100": () =>
+        seen++ === 0
+          ? {
+              status: 200,
+              json: [
+                {
+                  id: "901",
+                  type: "PushEvent",
+                  created_at: "2026-10-08T01:02:03Z",
+                  actor: { id: 5, login: "ada" },
+                  payload: { ref: "refs/heads/main", head: "b".repeat(40), before: "a".repeat(40) },
+                },
+              ],
+              headers: { etag: 'W/"abc"' },
+            }
+          : { status: 304 },
+      [`GET /repos/alpha-cs/todo-api-ada/compare/${"a".repeat(40)}...${"b".repeat(40)}?per_page=100`]: () => ({
+        status: 200,
+        json: { commits: [commit("1".repeat(40), "ada"), commit("b".repeat(40), null)] },
+      }),
+      [`GET /repos/alpha-cs/todo-api-ada/commits?sha=${"b".repeat(40)}&per_page=100`]: () => ({
+        status: 200,
+        json: [commit("b".repeat(40), "ada"), commit("1".repeat(40), "ada")], // newest first
+      }),
+    });
+    const client = new GitHubAppClient({
+      appId: "1",
+      privateKey: pkcs1,
+      apiUrl: "https://api.github.test",
+      fetch: impl,
+    });
+    const gh = client.forInstallation(7);
+    expect(await gh.listRepoEvents("alpha-cs", "todo-api-ada", null)).toEqual({
+      notModified: false,
+      etag: 'W/"abc"',
+      events: [
+        {
+          id: "901",
+          type: "PushEvent",
+          createdAt: "2026-10-08T01:02:03Z",
+          actor: { id: 5, login: "ada" },
+          payload: { ref: "refs/heads/main", head: "b".repeat(40), before: "a".repeat(40) },
+        },
+      ],
+    });
+    expect(await gh.listRepoEvents("alpha-cs", "todo-api-ada", 'W/"abc"')).toEqual({ notModified: true });
+    expect(calls.filter((c) => c.url.includes("/events")).map((c) => c.ifNoneMatch)).toEqual([null, 'W/"abc"']);
+
+    const pushed = await gh.listPushedCommits("alpha-cs", "todo-api-ada", "a".repeat(40), "b".repeat(40));
+    expect(pushed.map((c) => c.sha)).toEqual(["1".repeat(40), "b".repeat(40)]);
+    expect(pushed[0]).toEqual({
+      sha: "1".repeat(40),
+      message: `Work ${"1".repeat(40)}`,
+      timestamp: "2026-10-08T01:00:00Z",
+      authorName: "Ada",
+      authorEmail: "ada@laptop.test",
+      authorLogin: "ada",
+    });
+    // A new branch: the head's history, oldest first.
+    expect((await gh.listPushedCommits("alpha-cs", "todo-api-ada", null, "b".repeat(40))).map((c) => c.sha)).toEqual([
+      "1".repeat(40),
+      "b".repeat(40),
+    ]);
+  });
+
+  it("lists the App webhook's recent deliveries across pages, and redelivers one", async () => {
+    const delivery = (id: number, at: string, status: number) => ({
+      id,
+      guid: `guid-${id}`,
+      delivered_at: at,
+      status_code: status,
+      redelivery: false,
+      event: "push",
+    });
+    const { impl, calls } = mockFetch({
+      "GET /app/hook/deliveries?per_page=100": () => ({
+        status: 200,
+        json: [delivery(3, "2026-10-08T03:00:00Z", 202), delivery(2, "2026-10-08T02:00:00Z", 502)],
+        headers: { link: '<https://api.github.test/app/hook/deliveries?per_page=100&cursor=v1_2>; rel="next"' },
+      }),
+      "GET /app/hook/deliveries?per_page=100&cursor=v1_2": () => ({
+        status: 200,
+        json: [delivery(1, "2026-10-07T23:00:00Z", 0)],
+        headers: { link: '<https://api.github.test/app/hook/deliveries?per_page=100&cursor=v1_1>; rel="next"' },
+      }),
+      "POST /app/hook/deliveries/2/attempts": () => ({ status: 202, json: {} }),
+    });
+    const client = new GitHubAppClient({
+      appId: "1",
+      privateKey: pkcs1,
+      apiUrl: "https://api.github.test",
+      fetch: impl,
+    });
+    const list = await client.listDeliveries(new Date("2026-10-08T00:00:00Z"));
+    expect(list.map((d) => [d.id, d.guid, d.statusCode])).toEqual([
+      [3, "guid-3", 202],
+      [2, "guid-2", 502],
+    ]); // stops at the first delivery older than `since`
+    await client.redeliver(2);
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      "GET /app/hook/deliveries?per_page=100",
+      "GET /app/hook/deliveries?per_page=100&cursor=v1_2",
+      "POST /app/hook/deliveries/2/attempts",
+    ]);
+    expect(calls[0]!.auth).toMatch(/^Bearer ey/); // the App JWT, not an installation token
   });
 
   it("returns null for a missing repo and 'added' when access already existed", async () => {

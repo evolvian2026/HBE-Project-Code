@@ -3,7 +3,10 @@ import {
   type CheckRunInput,
   type CommitDetails,
   type GitHubClient,
+  type HookDelivery,
   type InstallationClient,
+  type PushedCommit,
+  type RepoEvent,
   type RepoInfo,
 } from "./client.ts";
 import { LocalGitRepos } from "./local-git.ts";
@@ -33,8 +36,31 @@ export class FakeGitHub implements GitHubClient {
   /** Issues the platform opened, by "owner/repo" (lower case). */
   readonly issues = new Map<string, { number: number; title: string; body: string }[]>();
 
+  /** The App webhook's delivery attempts, newest first. */
+  readonly deliveries: HookDelivery[] = [];
+  /** Delivery ids GitHub was asked to deliver again. */
+  readonly redelivered: number[] = [];
+  /** Each repository's event feed (newest first) and its ETag, by "owner/repo" (lower case). */
+  readonly repoEvents = new Map<string, { etag: string; events: RepoEvent[] }>();
+  /** Commits a push added, by "owner/repo:base..head" (lower case owner/repo; base empty for none). */
+  readonly pushedCommits = new Map<string, PushedCommit[]>();
+
   async installationIdForRepo(_owner: string, _repo: string): Promise<number> {
     return 1;
+  }
+
+  async listDeliveries(since: Date): Promise<HookDelivery[]> {
+    this.calls.push("listDeliveries");
+    const err = this.failures.shift();
+    if (err) throw err;
+    return this.deliveries.filter((d) => Date.parse(d.deliveredAt) >= since.getTime());
+  }
+
+  async redeliver(deliveryId: number): Promise<void> {
+    this.calls.push(`redeliver ${deliveryId}`);
+    const err = this.failures.shift();
+    if (err) throw err;
+    this.redelivered.push(deliveryId);
   }
   /** Repository ids are unique across instances, as on GitHub. */
   private static nextId = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
@@ -134,6 +160,20 @@ export class FakeGitHub implements GitHubClient {
         this.calls.push(`compare ${owner}/${repo} ${base.slice(0, 7)}...${head.slice(0, 7)}`);
         fail();
         return this.localGit().compare(owner, repo, base, head);
+      },
+      listRepoEvents: async (owner, repo, etag) => {
+        this.calls.push(`listRepoEvents ${owner}/${repo}`);
+        fail();
+        const feed = this.repoEvents.get(`${owner}/${repo}`.toLowerCase()) ?? { etag: '"empty"', events: [] };
+        if (etag && etag === feed.etag) return { notModified: true };
+        return { notModified: false, etag: feed.etag, events: feed.events };
+      },
+      listPushedCommits: async (owner, repo, base, head) => {
+        this.calls.push(`listPushedCommits ${owner}/${repo} ${base?.slice(0, 7) ?? "-"}..${head.slice(0, 7)}`);
+        fail();
+        const list = this.pushedCommits.get(`${owner}/${repo}:${base ?? ""}..${head}`.toLowerCase());
+        if (!list) throw new GitHubError(404, "Not Found", false);
+        return list;
       },
       rootCommit: async (owner, repo, ref) => {
         this.calls.push(`rootCommit ${owner}/${repo}`);

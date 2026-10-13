@@ -54,6 +54,12 @@ export interface QueuePayloads {
   "post-feedback": { repositoryId: string };
   /** Queue post-feedback for repositories whose released feedback changed. */
   "feedback-sweep": Record<string, never>;
+  /** Ask GitHub again for webhook deliveries that failed (and that the platform never stored). */
+  "github-redeliver": Record<string, never>;
+  /** Queue reconcile-repo for every active repository. */
+  "github-reconcile": Record<string, never>;
+  /** Record pushes from a repository's event feed that the platform never heard of. */
+  "reconcile-repo": { repositoryId: string };
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -101,6 +107,10 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   // Always sent with singletonKey `feedback-<repositoryId>`.
   "post-feedback": { retryLimit: 5, retryDelay: 60, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
   "feedback-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
+  "github-redeliver": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
+  "github-reconcile": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
+  // Always sent with singletonKey `reconcile-<repositoryId>`.
+  "reconcile-repo": { retryLimit: 3, retryDelay: 60, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

@@ -17,6 +17,7 @@ import { queueRosterSyncs, reconcileGrades, syncGrade, syncRoster } from "../lti
 import { syncTeamAccess } from "../teams.ts";
 import { sweepExpiredArtifacts } from "./artifacts.ts";
 import { postFeedback, sweepFeedback } from "./feedback.ts";
+import { queueReconciliation, reconcileRepository, redeliverFailed } from "./reconcile.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
@@ -147,5 +148,20 @@ export async function startWorker(
     if (n) log.info({ repositories: n }, "feedback to post to GitHub");
   });
   await queue.schedule("feedback-sweep", "*/10 * * * *", {});
+
+  // Missed webhooks: failed deliveries are asked for again; active repositories' pushes are
+  // checked against GitHub's event feed (and each one just before its cutoff).
+  await queue.work("github-redeliver", async () => {
+    await redeliverFailed(deps);
+  });
+  await queue.schedule("github-redeliver", "*/15 * * * *", {});
+  await queue.work("github-reconcile", async () => {
+    const n = await queueReconciliation(deps);
+    log.info({ repositories: n }, "reconciling repositories with GitHub");
+  });
+  await queue.schedule("github-reconcile", "37 */3 * * *", {});
+  await queue.work("reconcile-repo", async (job) => {
+    await reconcileRepository(deps, job.data.repositoryId);
+  });
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

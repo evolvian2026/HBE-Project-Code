@@ -2,16 +2,20 @@ import { lateDays, submissionCutoff, type LatePolicy } from "@hbe/core";
 import { sql, type Db } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
 import type { Settings } from "@hbe/settings";
+import type { GitHubClient } from "@hbe/github";
 import type { FastifyBaseLogger } from "fastify";
 import { queueRun } from "../evaluation.ts";
 import { leadSubmissionId } from "../teams.ts";
 import { computeSubmissionProcess } from "./activity.ts";
+import { reconcileRepository } from "./reconcile.ts";
 
 export interface DeadlineDeps {
   db: Db;
   queue: JobQueue;
   settings: Settings;
   log: FastifyBaseLogger;
+  /** When given, each repository's pushes are reconciled with GitHub before its graded commit is fixed. */
+  github?: GitHubClient;
 }
 
 /**
@@ -43,9 +47,22 @@ export async function finalizeDueSubmissions(deps: DeadlineDeps, now = new Date(
     limit 200`.execute(db);
 
   let finalized = 0;
+  const reconciled = new Set<string>();
   for (const s of due) {
     const deadline = new Date(s.deadline);
     const cutoff = submissionCutoff(deadline, s.late_policy);
+    // A push whose webhook was lost would otherwise not count (once per repository: a team shares one).
+    if (deps.github && s.repository_id && !reconciled.has(s.repository_id)) {
+      reconciled.add(s.repository_id);
+      try {
+        await reconcileRepository({ ...deps, github: deps.github }, s.repository_id);
+      } catch (err) {
+        log.warn(
+          { submissionId: s.id, err: err instanceof Error ? err.message : String(err) },
+          "could not check GitHub for missed pushes before the cutoff; using the pushes on record",
+        );
+      }
+    }
     const push = s.repository_id
       ? await db
           .selectFrom("branch_pushes")
