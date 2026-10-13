@@ -23,7 +23,13 @@ export const profileSchema = z.object({
     nonfinal_artifact_days: z.number().int().positive(),
     queue_archive_days: z.number().int().positive(),
     playwright_traces: z.enum(["on_failure", "always", "never"]),
-    export_notice_days: z.array(z.number().int().positive()),
+    export_notice_days: z.array(z.number().int().positive()).min(1),
+    /** Sent or failed emails (they hold addresses and names). */
+    email_outbox_days: z.number().int().positive(),
+    /** Notifications the person has read. */
+    read_notification_days: z.number().int().positive(),
+    /** Full-export ZIPs, after which an admin makes a new one. */
+    record_export_days: z.number().int().positive(),
   }),
   evaluation: z.object({
     runner: z.enum(["github_hosted", "self_hosted"]),

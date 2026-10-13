@@ -22,6 +22,9 @@ retention:
   queue_archive_days: 7
   playwright_traces: always
   export_notice_days: [90, 30]
+  email_outbox_days: 30
+  read_notification_days: 365
+  record_export_days: 30
 
 evaluation:
   runner: self_hosted # ephemeral EC2 spot runners (DEPLOYMENT.md §2.4)

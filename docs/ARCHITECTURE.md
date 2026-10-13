@@ -862,7 +862,14 @@ for **2 years after the contract ends**. Then they are purged (§12.5).
 | **Grade report**: canonical JSON and rendered PDF, versioned | Storage `grade-reports` + `grade_reports` table | Contract + 2 years; every version is kept |
 | Artifacts of the final graded run (logs, screenshots, traces, evidence) | Storage `run-artifacts` | Contract + 2 years |
 | Artifacts of non-final runs | Storage `run-artifacts` | 180 days (14 in demo); metadata and results follow the retention rule |
-| Raw webhook payloads | Postgres `github_events` | 90 days |
+| Raw webhook payloads | Postgres `github_events` | 90 days (7 in demo) once processed |
+| Sent and failed emails (addresses, names) | Postgres `email_outbox` | 30 days (14 in demo) |
+| Notifications the person has read | Postgres `notifications` | 365 days (180 in demo) |
+| Full-export ZIPs | Archive bucket, or Storage `record-exports` | 30 days (14 in demo) |
+
+The last four are deleted by the daily `retention-sweep` job (`apps/server/src/worker/retention.ts`),
+with the periods in the plan profile's `retention` section (`HBE__RETENTION__…` overrides them).
+Purge notices go out `retention.export_notice_days` before the purge.
 
 Snapshots are created **inside the grader job**, which already has the checkout. The job
 creates the bundle and tarball, hashes them, and uploads them through a signed URL. This costs

@@ -40,23 +40,26 @@ export async function reopenContract(db: Db, institutionId: string, actorId: str
 }
 
 /**
- * Tells institution admins, 90 and 30 days before the purge, that their records will be deleted
- * and that they can export them (in-app, and always by email). Once per institution and notice.
+ * Tells institution admins, `retention.export_notice_days` before the purge (90 and 30), that
+ * their records will be deleted and that they can export them (in-app, and always by email).
+ * Once per institution and notice.
  */
 export async function sendPurgeNotices(deps: RecordsDeps, now = new Date()): Promise<number> {
   const { db } = deps;
+  const notices = [...deps.settings.profile.retention.export_notice_days].sort((a, b) => b - a);
   const due = await db
     .selectFrom("institutions")
     .select(["id", "name", "slug", "purge_after"])
     .where("status", "=", "read_only")
     .where("purge_after", "is not", null)
     .where("purge_after", ">", now)
-    .where("purge_after", "<=", new Date(now.getTime() + 90 * DAY_MS))
+    .where("purge_after", "<=", new Date(now.getTime() + notices[0]! * DAY_MS))
     .execute();
   let sent = 0;
   for (const inst of due) {
     const days = Math.ceil((new Date(inst.purge_after!).getTime() - now.getTime()) / DAY_MS);
-    const notice = days <= 30 ? 30 : 90;
+    // The nearest notice not yet past: with 90 and 30, days 31–90 are the 90-day notice.
+    const notice = notices.filter((n) => days <= n).at(-1)!;
     const admins = await db
       .selectFrom("institution_memberships")
       .select("user_id")
