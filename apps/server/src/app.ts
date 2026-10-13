@@ -19,6 +19,7 @@ import { codeRoutes } from "./routes/code.ts";
 import { gradingRoutes } from "./routes/grading.ts";
 import { regradeRoutes } from "./routes/regrades.ts";
 import { runRoutes } from "./routes/runs.ts";
+import { rerunRoutes } from "./routes/reruns.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
@@ -116,6 +117,7 @@ export async function buildApp(
     await app.register(googleRoutes, apiDeps);
     await app.register(teamRoutes, apiDeps);
     await app.register(claimRoutes, apiDeps);
+    await app.register(rerunRoutes, apiDeps);
   }
 
   return app;

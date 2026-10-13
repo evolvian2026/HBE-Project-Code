@@ -452,6 +452,15 @@ As built:
 - Extensions: an extension whose cutoff is still ahead reopens a finalized submission.
 - teacher re-run (any SHA, any suite version)
 
+**Bulk re-runs** (as built, Phase 2E): instructors re-run an assignment's tests from its page,
+for every submission or only those without a finished run of their commit with the chosen
+version, and with the assignment's suite or another active version of it (optionally made the
+assignment's suite from then on). Each repository is tested once (a team's run belongs to its
+lead submission): at the graded commit once the cutoff has passed, as a re-grade that updates
+the grade, otherwise at the latest push. A commit already being tested with that version is
+skipped. Runs started by staff never use the students' daily quota. The batch (`run_batches`)
+and its progress show on the assignment page; its runs queue within the concurrency caps.
+
 Concurrency guard: at most one active run per (submission, trigger type); per-course and
 global concurrency caps keep Actions minutes in check.
 

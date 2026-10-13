@@ -14,6 +14,7 @@ import { CriterionForm, PublishForm, ReleaseGradesForm, RunTestsForm } from "./f
 import { ClaimCommitsCard } from "./claims";
 import { LmsGradesCard } from "./lms-grades";
 import { RegradeRequestForm } from "./regrade-forms";
+import { RerunCard } from "./reruns";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "./regrades";
 
 type Props = {
@@ -147,8 +148,14 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
   const myTeamIds = new Set(myTeam.map((x) => x.id));
   const myRuns = mine ? allRuns.filter((r) => myTeamIds.has(r.submission_id)) : [];
   const today = utcToZonedLocal(new Date(), course.timezone).slice(0, 10);
+  // Runs staff started don't use the quota.
+  const myTeamUsers = new Set(myTeam.map((x) => x.user_id));
   const manualToday = myRuns.filter(
-    (r) => r.trigger === "manual" && utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
+    (r) =>
+      r.trigger === "manual" &&
+      r.requested_by !== null &&
+      myTeamUsers.has(r.requested_by) &&
+      utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
   ).length;
   const runsLeft = Math.max(0, a.run_quota_per_day - manualToday);
   const pastDeadline = Date.now() > new Date(effectiveDue).getTime() + a.late_policy.grace_minutes * 60_000;
@@ -556,6 +563,16 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
         >
           <ReleaseGradesForm {...ids} disabled={gradeStats.complete === gradeStats.released} />
         </Card>
+      )}
+
+      {canManage && a.status !== "draft" && a.suite && (
+        <RerunCard
+          supabase={supabase}
+          ids={ids}
+          institutionId={ctx.institution.id}
+          suite={a.suite}
+          timezone={course.timezone}
+        />
       )}
 
       {isCourseStaff && a.status !== "draft" && (

@@ -329,6 +329,30 @@ export async function releaseAssignmentGrades(_prev: ActionState, formData: Form
   };
 }
 
+/** Re-runs the tests of the assignment's submissions (instructors), perhaps with another suite version. */
+export async function rerunAssignment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = idsSchema
+    .extend({
+      suiteId: z.string().uuid(),
+      scope: z.enum(["all", "unfinished"]),
+      useForAssignment: z.literal("on").optional(),
+    })
+    .parse(Object.fromEntries(formData));
+  const result = await apiFetch<{ batchId: string; runs: number; skipped: number }>(
+    `/v1/assignments/${v.assignmentId}/reruns`,
+    { method: "POST", body: { suiteId: v.suiteId, scope: v.scope, useForAssignment: Boolean(v.useForAssignment) } },
+  );
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}`, "layout");
+  const { runs, skipped } = result.data;
+  return {
+    ok: true,
+    message: runs
+      ? `Queued ${runs} run${runs === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped: nothing to test, or already tested)` : ""}.`
+      : `Nothing to re-run${skipped ? `: ${skipped} skipped (nothing to test, or already tested)` : ""}.`,
+  };
+}
+
 const commentSchema = submissionIdsSchema.extend({
   sha: z.string().regex(/^[0-9a-f]{40}$/),
   path: z.string().min(1).max(1000),

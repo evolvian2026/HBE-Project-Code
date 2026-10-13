@@ -269,7 +269,15 @@ begin
     from public.commits c join public.submissions s on s.repository_id = c.repository_id
     where c.sha = repeat('0', 39) || '1';
   insert into public.commit_author_aliases (institution_id, email, profile_id)
-    select s.institution_id, 'old@home.test', s.user_id from public.submissions s where s.repository_id is not null;
+    select distinct s.institution_id, 'old@home.test', s.user_id from public.submissions s
+    where s.repository_id is not null and s.institution_id in (tests.id('inst_a'), tests.id('inst_b'));
+  -- A bulk re-run of each institution's assignment.
+  insert into public.run_batches (institution_id, assignment_id, grader_suite_id, scope, runs)
+    select a.institution_id, a.id, (select id from public.grader_suites where key = 'todo-api' and institution_id is null), 'all', 1
+    from public.assignments a where a.id in (tests.id('assign_a1'), tests.id('assign_b1'));
+  update public.evaluation_runs e set batch_id = b.id
+    from public.submissions s join public.run_batches b on b.assignment_id = s.assignment_id
+    where s.id = e.submission_id and s.institution_id in (tests.id('inst_a'), tests.id('inst_b'));
 end;
 $$;
 
@@ -326,6 +334,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'google_oauth_states', count(*) from public.google_oauth_states where institution_id = p_institution
   union all select 'commit_claims', count(*) from public.commit_claims where institution_id = p_institution
   union all select 'commit_author_aliases', count(*) from public.commit_author_aliases where institution_id = p_institution
+  union all select 'run_batches', count(*) from public.run_batches where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

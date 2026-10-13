@@ -776,6 +776,21 @@ export interface EvaluationRunsTable {
   dispatched_at: Timestamp | null;
   started_at: Timestamp | null;
   finished_at: Timestamp | null;
+  /** The bulk re-run this run is part of. */
+  batch_id: string | null;
+}
+
+/** A bulk re-run of an assignment's submissions. */
+export interface RunBatchesTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  requested_by: string | null;
+  grader_suite_id: string;
+  scope: "all" | "unfinished";
+  runs: Generated<number>;
+  skipped: Generated<number>;
+  created_at: DefaultTimestamp;
 }
 
 export interface TestResultsTable {
@@ -829,6 +844,7 @@ export interface Database {
   process_snapshots: ProcessSnapshotsTable;
   grader_suites: GraderSuitesTable;
   evaluation_runs: EvaluationRunsTable;
+  run_batches: RunBatchesTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;
   rubric_scores: RubricScoresTable;

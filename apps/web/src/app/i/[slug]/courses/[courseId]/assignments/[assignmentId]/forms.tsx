@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
-import { addCriterion, publishAssignment, releaseAssignmentGrades, startRun } from "../actions";
+import { addCriterion, publishAssignment, releaseAssignmentGrades, rerunAssignment, startRun } from "../actions";
 
 type Ids = { slug: string; courseId: string; assignmentId: string };
 
@@ -92,6 +92,54 @@ export function ReleaseGradesForm({ disabled, ...ids }: Ids & { disabled: boolea
       <FormStatus state={state} />
       <Button type="submit" disabled={pending || disabled}>
         {pending ? "Releasing…" : "Release grades"}
+      </Button>
+    </form>
+  );
+}
+
+/** Instructors: re-run every submission's tests (or the untested ones), with a chosen suite version. */
+export function RerunForm({
+  suites,
+  currentSuiteId,
+  ...ids
+}: Ids & { suites: { id: string; label: string }[]; currentSuiteId: string }) {
+  const [state, action, pending] = useActionState(rerunAssignment, null);
+  return (
+    <form action={action} className="space-y-3 text-sm">
+      <Hidden {...ids} />
+      <label className="block">
+        <span className="mb-1 block font-medium">Test suite version</span>
+        <select
+          name="suiteId"
+          defaultValue={currentSuiteId}
+          className="w-full rounded-md border border-border bg-surface px-2 py-1.5"
+        >
+          {suites.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+              {s.id === currentSuiteId ? " (current)" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" name="useForAssignment" />
+        Use this version for the assignment&apos;s future runs too
+      </label>
+      <fieldset className="space-y-1">
+        <legend className="mb-1 font-medium">Which submissions</legend>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="scope" value="all" defaultChecked />
+          Every submission
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="scope" value="unfinished" />
+          Only those without a finished run of their commit with this version
+        </label>
+      </fieldset>
+      <FormStatus state={state} />
+      <Button type="submit" variant="secondary" disabled={pending}>
+        {pending ? "Queueing…" : "Re-run tests"}
       </Button>
     </form>
   );

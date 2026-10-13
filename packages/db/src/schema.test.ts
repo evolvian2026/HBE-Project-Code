@@ -45,6 +45,18 @@ const declared: Record<string, string[]> = {
     "dispatched_at",
     "started_at",
     "finished_at",
+    "batch_id",
+  ],
+  run_batches: [
+    "id",
+    "institution_id",
+    "assignment_id",
+    "requested_by",
+    "grader_suite_id",
+    "scope",
+    "runs",
+    "skipped",
+    "created_at",
   ],
   test_results: [
     "id",

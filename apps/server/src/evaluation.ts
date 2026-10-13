@@ -14,7 +14,16 @@ export const hashToken = (token: string) => createHash("sha256").update(token).d
  */
 export async function queueRun(
   deps: { db: Db; queue: JobQueue; settings: Settings },
-  input: { submissionId: string; sha: string; trigger: RunTrigger; requestedBy: string | null },
+  input: {
+    submissionId: string;
+    sha: string;
+    trigger: RunTrigger;
+    requestedBy: string | null;
+    /** Another version of the suite than the assignment's (staff re-runs). */
+    suiteId?: string;
+    /** The bulk re-run this run belongs to. */
+    batchId?: string;
+  },
 ): Promise<{ runId: string; deduplicated: boolean }> {
   const { db, queue, settings } = deps;
   const submission = await db
@@ -44,10 +53,11 @@ export async function queueRun(
       submission_id: submission.id,
       sha: input.sha,
       trigger: input.trigger,
-      grader_suite_id: submission.grader_suite_id,
+      grader_suite_id: input.suiteId ?? submission.grader_suite_id,
       stack_profile_id: submission.stack_profile_id,
       requested_by: input.requestedBy,
       callback_token_hash: null,
+      batch_id: input.batchId ?? null,
     })
     .returning("id")
     .executeTakeFirstOrThrow();
@@ -61,12 +71,16 @@ export async function queueRun(
   return { runId: run.id, deduplicated: false };
 }
 
-/** Manual runs started today (in the course's time zone) on these submissions (a team shares its quota). */
+/**
+ * Manual runs the students started today (in the course's time zone) on these submissions (a
+ * team shares its quota). Runs staff started don't count.
+ */
 export async function manualRunsToday(db: Db, submissionIds: string[], timeZone: string): Promise<number> {
   if (!submissionIds.length) return 0;
   const { rows } = await sql<{ n: number }>`
     select count(*)::int as n from evaluation_runs
     where submission_id in (${sql.join(submissionIds)}) and trigger = 'manual'
+      and requested_by in (select user_id from submissions where id in (${sql.join(submissionIds)}))
       and (queued_at at time zone ${timeZone})::date = (now() at time zone ${timeZone})::date`.execute(db);
   return rows[0]?.n ?? 0;
 }
