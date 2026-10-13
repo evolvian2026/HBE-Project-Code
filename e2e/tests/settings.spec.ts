@@ -100,7 +100,30 @@ test("the operator sets limits, a notice and test suites; the admin chooses assi
     admin.getByText("This institution has reached its limit of 1 students.", { exact: false }),
   ).toBeVisible();
 
+  // Each change is in the audit log: the institution's for its admin, filtered and exported.
+  await admin.goto(`/i/${slug}/audit`);
+  const log = admin.getByTestId("audit-rows");
+  await expect(log.getByText("Institution changed").first()).toBeVisible();
+  await admin.getByLabel("What").selectOption("stack_profiles");
+  await admin.getByRole("button", { name: "Filter" }).click();
+  await expect(admin).toHaveURL(/entity=stack_profiles/);
+  await expect(log.getByText("Stack profile added")).toHaveCount(1);
+  await expect(log.getByText("Institution changed")).toHaveCount(0);
+  await log.getByText("Stack profile added").click();
+  await expect(log).toContainText(`spring-${suffix}`);
+  const csv = await admin.request.get(`/i/${slug}/audit/export?entity=stack_profiles`);
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  const text = await csv.text();
+  expect(text).toContain("stack_profiles");
+  expect(text).toContain(`spring-${suffix}`);
+  expect(text).toContain(email("admin"));
+  // The platform's own changes are the operator's.
+  await operator.goto("/platform/audit?entity=platform_settings");
+  await expect(operator.getByTestId("audit-rows").getByText("Platform setting changed").first()).toBeVisible();
+  await expect(operator.getByTestId("audit-rows")).toContainText(email("operator"));
+
   // The operator removes the notice.
+  await operator.goto("/platform");
   await operator.getByLabel("Notice").fill("");
   await operator.getByRole("button", { name: "Save notice" }).click();
   await expect(operator.getByText("Notice removed.")).toBeVisible();

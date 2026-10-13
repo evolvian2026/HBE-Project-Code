@@ -681,6 +681,14 @@ suites** list every version with what uses it; the platform operator registers v
 (global, or for one institution; the code lives in the grader repository) and institution
 admins retire their own. Both tables are written by the api only and audited.
 
+**Audit log** (as built, 2F): institution admins read their institution's `audit_logs` under
+RLS, filtered by what changed (table), the kind of change, who (part of an email) and dates (in
+Asia/Singapore), newest first, 50 at a time; each entry shows the fields that changed, before
+and after. The same filters export as CSV (up to 20,000 rows). Super admins have the platform's
+own log (rows with no institution: platform roles, settings, global profiles and suites); they
+see an institution's entries only through it, as RLS allows. Changes made by jobs show as "the
+platform".
+
 ### Super admin console (platform operator)
 Institutions (create, suspend, plan/limits) · global stack profiles · cross-tenant system
 health (queue depth, failed jobs, webhook lag, runner pool, storage growth) · feature flags ·

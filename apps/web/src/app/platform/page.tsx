@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell, PageTitle } from "@/components/app-shell";
 import { Alert, Badge, Button, Card, EmptyState, Field } from "@/components/ui";
@@ -63,7 +64,17 @@ export default async function PlatformPage({
 
   return (
     <AppShell session={session}>
-      <PageTitle title="Platform console" subtitle="Institutions and GitHub installations across the platform." />
+      <PageTitle
+        title="Platform console"
+        subtitle={
+          <>
+            Institutions and GitHub installations across the platform.{" "}
+            <Link href="/platform/audit" className="text-accent hover:underline">
+              Audit log
+            </Link>
+          </>
+        }
+      />
       <div className="space-y-6">
         {query.error && <Alert tone="error">{query.error}</Alert>}
         {query.created && <Alert tone="success">Institution “{query.created}” created.</Alert>}

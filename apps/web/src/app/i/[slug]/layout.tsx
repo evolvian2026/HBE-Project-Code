@@ -28,6 +28,7 @@ export default async function InstitutionLayout({
     ...(ctx.isAdmin ? [{ href: "/lms", label: "LMS" }] : []),
     ...(ctx.isAdmin ? [{ href: "/records", label: "Records" }] : []),
     ...(ctx.isAdmin ? [{ href: "/stacks", label: "Stacks" }] : []),
+    ...(ctx.isAdmin ? [{ href: "/audit", label: "Audit log" }] : []),
     ...(ctx.isAdmin ? [{ href: "/settings", label: "Settings" }] : []),
   ];
   return (
