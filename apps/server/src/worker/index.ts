@@ -20,13 +20,17 @@ import { postFeedback, sweepFeedback } from "./feedback.ts";
 import { queueReconciliation, reconcileRepository, redeliverFailed } from "./reconcile.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
+import { noErrorReports, type ErrorReporter } from "../error-reports.ts";
+import { observedQueue } from "./observe.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
 export async function startWorker(
-  deps: WorkerDeps & { github: GitHubClient; store: ObjectStore },
+  deps: WorkerDeps & { github: GitHubClient; store: ObjectStore; errors?: ErrorReporter },
   settings: Settings,
 ): Promise<void> {
-  const { queue, log } = deps;
+  const { log } = deps;
+  // Handlers send follow-up jobs with deps.queue; this one only registers them.
+  const queue = observedQueue(deps.queue, log, deps.errors ?? noErrorReports);
   await queue.work("github-event", (job) => processGithubEvent(deps, job.data.eventId), {
     concurrency: settings.profile.runtime.queue_concurrency,
   });

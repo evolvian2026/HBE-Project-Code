@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { webConfig } from "./config";
 import { createSupabaseServerClient } from "./supabase/server";
 
@@ -14,10 +15,12 @@ export async function apiFetch<T>(path: string, init: { method?: string; body?: 
     return { ok: false, status: 401, error: "unauthorized", message: "Your session has expired. Sign in again." };
 
   const { API_URL, INTERNAL_API_URL } = webConfig();
+  const requestId = (await headers()).get("x-request-id");
   const res = await fetch(new URL(path, INTERNAL_API_URL ?? API_URL), {
     method: init.method ?? "GET",
     headers: {
       authorization: `Bearer ${session.access_token}`,
+      ...(requestId ? { "x-request-id": requestId } : {}),
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),

@@ -2,6 +2,7 @@ import { createDb } from "@hbe/db";
 import { PgBossQueue } from "@hbe/queue";
 import { describeSettings, loadSettings } from "@hbe/settings";
 import { buildApp, loggerOptions } from "./app.ts";
+import { createErrorReporter } from "./error-reports.ts";
 import { supabaseTokenVerifier } from "./auth.ts";
 import { createGitHubClient } from "./github.ts";
 import { supabaseObjectStore } from "./storage.ts";
@@ -35,11 +36,16 @@ async function start(): Promise<void> {
       })
     : null;
 
+  const errors = await createErrorReporter(settings);
   const app = await buildApp(
-    { settings, db, queue, verifier: supabaseTokenVerifier(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY) },
+    { settings, db, queue, errors, verifier: supabaseTokenVerifier(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY) },
     loggerOptions(env.LOG_LEVEL),
   );
   app.log.info(describeSettings(settings), "configuration loaded");
+  process.on("unhandledRejection", (reason) => {
+    app.log.error({ err: reason }, "unhandled promise rejection");
+    errors.capture(reason, { kind: "unhandledRejection" });
+  });
 
   await queue?.start();
   if (roles.has("worker") && db && queue) {
@@ -51,6 +57,7 @@ async function start(): Promise<void> {
         github: createGitHubClient(settings),
         store: supabaseObjectStore(settings),
         log: app.log.child({ role: "worker" }),
+        errors,
       },
       settings,
     );
@@ -73,6 +80,7 @@ async function start(): Promise<void> {
       await app.close();
       await queue?.stop();
       await db?.destroy();
+      await errors.flush(2000);
     } finally {
       process.exit(0);
     }

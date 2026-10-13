@@ -55,11 +55,20 @@ export function LiveRuns({
     };
     const channel = client
       .channel(`runs:${filter}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "evaluation_runs", filter }, refresh);
+      .on("postgres_changes", { event: "*", schema: "public", table: "evaluation_runs", filter }, refresh)
+      // Joining the channel isn't enough: changes are sent once Realtime has subscribed to the
+      // database, which it confirms separately. Then refresh once, for any change made since
+      // the page was rendered.
+      .on("system", {}, (payload: { extension?: string; status?: string }) => {
+        if (payload.extension === "postgres_changes" && payload.status === "ok") {
+          setLive(true);
+          refresh();
+        }
+      });
     // Join as the person (not with the public key), so RLS decides what they're sent.
     let closed = false;
     void client.realtime.setAuth(token).then(() => {
-      if (!closed) channel.subscribe((status) => setLive(status === "SUBSCRIBED"));
+      if (!closed) channel.subscribe((status) => status !== "SUBSCRIBED" && setLive(false));
     });
     // Before the token expires, re-render: the server hands out a fresh one.
     const exp = expiresAt(token);

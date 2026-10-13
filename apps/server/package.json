@@ -25,6 +25,7 @@
     "@hbe/lms": "workspace:*",
     "@hbe/queue": "workspace:*",
     "@hbe/settings": "workspace:*",
+    "@sentry/node": "10.75.3",
     "@supabase/supabase-js": "2.117.3",
     "fastify": "5.12.5",
     "jose": "6.2.12",
@@ -36,7 +37,7 @@
     "pg-boss": "10.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "yaml": "2.6.1",
+    "yaml": "2.8.4",
     "yazl": "3.3.1",
     "zod": "3.25.76"
   },
@@ -48,6 +49,6 @@
     "esbuild": "0.25.12",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

@@ -4,6 +4,7 @@ export * from "./errors.ts";
 export * from "./google.ts";
 export * from "./keys.ts";
 export * from "./launch.ts";
+export * from "./outbound.ts";
 export * from "./platform.ts";
 export * from "./registration.ts";
 export * from "./services.ts";

@@ -18,6 +18,8 @@ export const envSchema = z.object({
   WEB_DIR: optional,
   TZ: z.string().default("Asia/Singapore"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error"]).default("info"),
+  /** Bearer token for GET /metrics (Prometheus); without it the endpoint doesn't exist. */
+  METRICS_TOKEN: optional.refine((v) => !v || v.length >= 24, "must be at least 24 characters"),
 
   APP_URL: url,
   API_URL: url,

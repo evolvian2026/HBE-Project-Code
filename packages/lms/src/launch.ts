@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
+import { createRemoteJWKSet, customFetch, decodeJwt, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
 import { CLAIM, courseRoleFromLti, isLmsAdministrator, type CourseRole } from "./claims.ts";
 import { LtiError } from "./errors.ts";
 import type { Platform } from "./platform.ts";
@@ -29,10 +29,14 @@ export interface Launch {
 }
 
 const jwksCache = new Map<string, JWTVerifyGetKey>();
-const remoteJwks = (url: string) => {
+const remoteJwks = (url: string, fetchImpl?: typeof fetch) => {
   let jwks = jwksCache.get(url);
   if (!jwks) {
-    jwks = createRemoteJWKSet(new URL(url), { timeoutDuration: 10_000, cooldownDuration: 30_000 });
+    jwks = createRemoteJWKSet(new URL(url), {
+      timeoutDuration: 10_000,
+      cooldownDuration: 30_000,
+      ...(fetchImpl ? { [customFetch]: fetchImpl } : {}),
+    });
     jwksCache.set(url, jwks);
   }
   return jwks;
@@ -62,11 +66,16 @@ export function peekIssuer(idToken: string): { issuer: string | null; audience: 
 export async function verifyLaunch(
   idToken: string,
   platform: Platform,
-  { nonce, jwks, now }: { nonce: string; jwks?: JWTVerifyGetKey; now?: Date },
+  {
+    nonce,
+    jwks,
+    now,
+    fetch: fetchImpl,
+  }: { nonce: string; jwks?: JWTVerifyGetKey; now?: Date; /** Fetches the platform's JWKS. */ fetch?: typeof fetch },
 ): Promise<Launch> {
   let claims: JWTPayload;
   try {
-    ({ payload: claims } = await jwtVerify(idToken, jwks ?? remoteJwks(platform.jwksUrl), {
+    ({ payload: claims } = await jwtVerify(idToken, jwks ?? remoteJwks(platform.jwksUrl, fetchImpl), {
       issuer: platform.issuer,
       audience: platform.clientId,
       algorithms: ["RS256", "RS384", "RS512", "ES256"],

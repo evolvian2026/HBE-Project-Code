@@ -7,6 +7,7 @@ import { createInstitutionWithAdmin, setUpMfa, signIn, sql } from "./support.ts"
  * WCAG 2.1 AA (NFR-10), checked with axe on the pages each role uses, with real data on them:
  * a published assignment, a student's repository with commits, a finished test run, a released
  * grade with feedback and a code comment. Every violation on every page is reported at once.
+ * The same pages must load without breaking the Content-Security-Policy.
  */
 const suffix = Date.now().toString(36);
 const email = (who: string) => `${who}-${suffix}@e2e.test`;
@@ -20,8 +21,18 @@ test.afterAll(async () => {
 
 const problems: string[] = [];
 
-/** Audits the page in the light and the dark colour scheme. */
+const watched = new WeakSet<Page>();
+
+/** Audits the page in the light and the dark colour scheme (and notes any CSP violation). */
 async function audit(page: Page, path: string) {
+  if (!watched.has(page)) {
+    watched.add(page);
+    page.on("console", (m) => {
+      if (m.type() === "error" && /Content Security Policy/i.test(m.text())) {
+        problems.push(`${page.url()} — CSP violation: ${m.text()}`);
+      }
+    });
+  }
   await page.goto(path);
   await page.waitForLoadState("networkidle");
   for (const colorScheme of ["light", "dark"] as const) {

@@ -1,4 +1,4 @@
-import { LtiError, LtiServices } from "@hbe/lms";
+import { LtiError, LtiServices, outboundFetch } from "@hbe/lms";
 import type { Settings } from "@hbe/settings";
 import { platformOf } from "./platform.ts";
 import { toolKeys } from "./keys.ts";
@@ -13,6 +13,10 @@ export interface ConnectionRow {
   jwks_url: string | null;
 }
 
+/** fetch for the URLs a platform gives us: public addresses only, except in local development. */
+export const lmsFetch = (settings: Settings): typeof fetch =>
+  outboundFetch({ allowPrivate: settings.env.HBE_ENV === "local" });
+
 const clients = new Map<string, { key: string; client: LtiServices }>();
 
 /** The LTI Advantage client of a connection (kept, with its access tokens, per process). */
@@ -22,7 +26,7 @@ export async function servicesFor(settings: Settings, conn: ConnectionRow): Prom
   const key = [conn.issuer, conn.client_id, conn.auth_token_url, keys.current.kid].join("|");
   const cached = clients.get(conn.id);
   if (cached?.key === key) return cached.client;
-  const client = new LtiServices(platformOf(conn), keys.current);
+  const client = new LtiServices(platformOf(conn), keys.current, lmsFetch(settings));
   clients.set(conn.id, { key, client });
   return client;
 }

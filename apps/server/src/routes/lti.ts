@@ -3,6 +3,7 @@ import {
   authRedirectUrl,
   loginRequestSchema,
   LtiError,
+  OutboundRefused,
   peekIssuer,
   registerWithPlatform,
   toolEndpoints,
@@ -16,6 +17,7 @@ import { registerDeepLinking, startDeepLink } from "../lti/deep-link.ts";
 import { hashToken, platformOf } from "../lti/platform.ts";
 import { handleLaunch } from "../lti/launch.ts";
 import { escapeHtml, page } from "../lti/pages.ts";
+import { lmsFetch } from "../lti/services.ts";
 import { toolKeys } from "../lti/keys.ts";
 import type { SignInService } from "../lti/sign-in.ts";
 
@@ -128,7 +130,10 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
       return page(reply, 400, "Couldn't open the platform", "The launch came from another LMS.");
 
     try {
-      const launch = await verifyLaunch(body.data.id_token, platformOf(conn), { nonce: consumed.nonce });
+      const launch = await verifyLaunch(body.data.id_token, platformOf(conn), {
+        nonce: consumed.nonce,
+        fetch: lmsFetch(settings),
+      });
       if (launch.messageType === "LtiDeepLinkingRequest") {
         const started = await startDeepLink(db, signIn, conn, launch);
         if ("refused" in started) return page(reply, 403, "Couldn't add assignments", started.refused);
@@ -198,11 +203,16 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
       );
     }
     try {
-      const reg = await registerWithPlatform(q.data.openid_configuration, q.data.registration_token ?? null, {
-        name: "HBE Projects",
-        description: "Full-stack project evaluation: repositories, automated tests and grades.",
-        apiUrl: API_URL,
-      });
+      const reg = await registerWithPlatform(
+        q.data.openid_configuration,
+        q.data.registration_token ?? null,
+        {
+          name: "HBE Projects",
+          description: "Full-stack project evaluation: repositories, automated tests and grades.",
+          apiUrl: API_URL,
+        },
+        lmsFetch(settings),
+      );
       const conn = await db
         .insertInto("lms_connections")
         .values({
@@ -234,7 +244,8 @@ export async function ltiRoutes(app: FastifyInstance, deps: ApiDeps & { signIn: 
         `<script>(window.opener || window.parent).postMessage({ subject: "org.imsglobal.lti.close" }, "*");</script>`,
       );
     } catch (err) {
-      const message = err instanceof LtiError ? err.message : "The LMS could not be reached.";
+      const message =
+        err instanceof LtiError || err instanceof OutboundRefused ? err.message : "The LMS could not be reached.";
       if ((err as { code?: string }).code === "23505") {
         return page(reply, 409, "Already registered", "This LMS registration is already connected.");
       }

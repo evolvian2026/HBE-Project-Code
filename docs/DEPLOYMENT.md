@@ -137,8 +137,9 @@ authenticator app for admin two-factor sign-in.
       student gets the in-app notification and the email, downloads the grade report, and can
       ask for a regrade.
     - Admin: **Records → Export all records**, and download the ZIP.
-12. **Monitoring**: Sentry (`SENTRY_DSN`) and an external uptime check on
-    `https://api.example.com/healthz`.
+12. **Monitoring** (OPERATIONS.md): Sentry (`SENTRY_DSN`), an external uptime check on
+    `https://api.example.com/healthz`, and optionally a Prometheus scraper (Grafana Cloud) on
+    `/metrics` with `METRICS_TOKEN`, with the suggested alerts.
 13. **Pilot course**: create the real institution, then follow step 11 with the teacher's course.
     Brief students on the README in their template (how grading works, checks to run locally).
 

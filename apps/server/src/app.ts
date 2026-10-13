@@ -4,7 +4,8 @@ import type { Db } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
 import type { GitHubClient } from "@hbe/github";
 import type { Settings } from "@hbe/settings";
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
+import { randomUUID } from "node:crypto";
+import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import type { TokenVerifier } from "./auth.ts";
 import { HttpError } from "./errors.ts";
@@ -14,6 +15,9 @@ import { s3ArchiveStore, type ArchiveStore } from "./archive.ts";
 import { supabaseSignIn, type SignInService } from "./lti/sign-in.ts";
 import { supabaseObjectStore, type ObjectStore } from "./storage.ts";
 import { recordsRoutes } from "./routes/records.ts";
+import { metricsRoutes } from "./metrics.ts";
+import type { ErrorReporter } from "./error-reports.ts";
+import { defaultRateLimits, rateLimit, redactUrl, securityHeaders, type RateLimit } from "./security.ts";
 import { assignmentRoutes } from "./routes/assignments.ts";
 import { codeRoutes } from "./routes/code.ts";
 import { gradingRoutes } from "./routes/grading.ts";
@@ -58,6 +62,10 @@ export interface AppDeps {
   ssoAdmin?: SsoAdmin;
   /** Defaults to Supabase Auth's admin API (members' two-factor factors). */
   mfaAdmin?: MfaAdmin;
+  /** Where unexpected errors are reported besides the logs (none by default). */
+  errors?: ErrorReporter;
+  /** Defaults to defaultRateLimits(); null turns rate limiting off. */
+  rateLimits?: Record<string, RateLimit> | null;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -65,6 +73,8 @@ export interface ApiDeps extends AppDeps {
   db: Db;
   queue: JobQueue;
 }
+
+const REQUEST_ID = /^[\w.-]{8,128}$/;
 
 export async function buildApp(
   deps: AppDeps,
@@ -74,6 +84,16 @@ export async function buildApp(
     logger,
     trustProxy: true,
     bodyLimit: 1024 * 1024,
+    // A request id from the proxy or the web app (so one page's API calls can be found
+    // together), or a new one; logged as request_id and sent back as X-Request-Id.
+    logController: new LogController({ requestIdLogLabel: "request_id" }),
+    genReqId: (req) => {
+      const given = req.headers["x-request-id"];
+      return typeof given === "string" && REQUEST_ID.test(given) ? given : randomUUID();
+    },
+  });
+  app.addHook("onRequest", async (req, reply) => {
+    reply.header("x-request-id", req.id);
   });
 
   app.setErrorHandler((error, req, reply) => {
@@ -92,8 +112,14 @@ export async function buildApp(
       return reply.code(status).send({ error: "bad_request", message: (error as Error).message });
     }
     req.log.error({ err: error }, "unhandled error");
+    deps.errors?.capture(error, { request_id: req.id, route: req.routeOptions.url });
     return reply.code(500).send({ error: "internal_error", message: "Something went wrong" });
   });
+
+  securityHeaders(app, deps.settings);
+  metricsRoutes(app, deps.settings, deps.db);
+  const limits = deps.rateLimits === undefined ? defaultRateLimits() : deps.rateLimits;
+  if (limits) rateLimit(app, limits);
 
   await app.register(healthRoutes, deps);
 
@@ -141,6 +167,15 @@ export function loggerOptions(level: string): FastifyServerOptions["logger"] {
     redact: {
       paths: ["req.headers.authorization", "req.headers.cookie", 'req.headers["x-hub-signature-256"]'],
       censor: "[redacted]",
+    },
+    serializers: {
+      // Fastify's own, without secrets in query strings (one-time codes, invites, tokens).
+      req: (req: { method: string; url: string; host?: string; ip?: string }) => ({
+        method: req.method,
+        url: redactUrl(req.url),
+        host: req.host,
+        remoteAddress: req.ip,
+      }),
     },
   };
 }

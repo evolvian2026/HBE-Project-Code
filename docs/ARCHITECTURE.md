@@ -803,6 +803,11 @@ Rules that keep the migration cheap (enforced from day one):
   Sentry for web/api/worker; OpenTelemetry traces exported to Grafana Cloud or Honeycomb;
   queue view in the super admin console (pg-boss tables); alerts on webhook lag, queue depth, failed-run
   rate, Actions minutes burn, and Supabase connection saturation.
+  As built (Phase 2G, OPERATIONS.md): JSON logs with a `request_id` shared by a page and its
+  API calls; `/metrics` (Prometheus text, behind `METRICS_TOKEN`) with request latency by
+  route, background jobs, queues, runs, webhook backlog and runner minutes; Sentry for API
+  errors, failed jobs and unhandled rejections, with request data and personal details
+  stripped. No tracing yet.
 - **Database connections**: services use Supavisor (transaction mode, port 6543) with small
   pools; the worker uses session mode only where it needs `LISTEN` or advisory locks.
 - **Realtime**: subscribe with `postgres_changes` on narrow tables (`evaluation_runs`,
@@ -813,10 +818,15 @@ Rules that keep the migration cheap (enforced from day one):
   browser joins the channel with it (so Realtime applies the runs' RLS policy and column
   grants, and the callback token hash is never sent), filtered to the runs on the page, and
   re-renders on each change. Without a connection the page polls while a run is in progress.
+  The page counts as live once Realtime confirms its database subscription (joining the
+  channel comes first), and re-renders once then, for changes made since it was rendered.
 - **Storage**: private buckets `run-artifacts`, `submission-archive` and `grade-reports`
   (signed URLs only), plus public `avatars`. Paths are
   `inst/{institution_id}/course/{course_id}/...`, and storage RLS checks institution and course
   membership. Retention rules are in §12.
+- **Web and API security**: see [SECURITY.md](SECURITY.md): per-response nonce CSP, security
+  headers, rate limits, outbound requests to LMS-supplied URLs restricted to public addresses,
+  secrets kept out of logs, and dependency audits in CI.
 - **Audit log**: append-only `audit_logs` for role changes, grade overrides, releases,
   impersonation, settings changes, and deletions.
 - **Privacy**: the platform is hosted in **Singapore**, so the baseline is Singapore's **PDPA**

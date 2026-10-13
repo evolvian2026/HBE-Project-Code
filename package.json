@@ -33,7 +33,8 @@
     "turbo": "2.11.7",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.1",
-    "vitest": "3.2.7"
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -41,6 +42,9 @@
       "supabase",
       "sharp",
       "@tailwindcss/oxide"
-    ]
+    ],
+    "overrides": {
+      "next>postcss": "8.5.28"
+    }
   }
 }

@@ -33,6 +33,11 @@ test("test runs show up and change live, without reloading, for those allowed to
   );
   const ada = await (await browser.newContext()).newPage();
   const grace = await (await browser.newContext()).newPage();
+  // Realtime is a WebSocket to Supabase, which the CSP must allow (polling would hide it).
+  const blocked: string[] = [];
+  for (const p of [ada, grace]) {
+    p.on("console", (m) => /Content Security Policy/i.test(m.text()) && blocked.push(m.text()));
+  }
   await signIn(ada, email("ada"));
   await signIn(grace, email("grace"));
   const users = await sql<{ id: string; email: string }>("select id, email from auth.users where email = any($1)", [
@@ -86,4 +91,5 @@ test("test runs show up and change live, without reloading, for those allowed to
   await grace.waitForTimeout(1500);
   await expect(grace.getByText("No test runs yet")).toBeVisible();
   await expect(grace.getByText(sha.slice(0, 7))).toHaveCount(0);
+  expect(blocked).toEqual([]);
 });

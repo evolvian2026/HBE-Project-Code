@@ -121,6 +121,12 @@ Built so far:
 - **2G, hardening (in progress).** Accessibility: every main page of each role, with real
   data on it, is checked against WCAG 2.1 AA (axe) in light and dark mode in E2E; text links
   are always underlined, focus is always visible and a skip link leads to the page content.
+  Security review (SECURITY.md): nonce-based Content-Security-Policy and security headers,
+  API rate limits, LMS-supplied URLs fetched only at public addresses, secrets out of request
+  logs, secure session cookies, no known vulnerable dependencies (checked in CI, Dependabot).
+  Observability (OPERATIONS.md): request ids from page to API, `/metrics` for Prometheus,
+  error reports to Sentry without personal data, failed jobs logged and counted, and
+  suggested alert rules.
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's
