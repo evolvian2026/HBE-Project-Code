@@ -2,7 +2,7 @@
 # One image for every role (ROLES=web,api,worker), used by Render (demo) and EC2 (production).
 # See docs/DEPLOYMENT.md and docs/CONFIGURATION.md.
 
-FROM node:22-bookworm-slim AS base
+FROM node:25-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -22,7 +22,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm --filter @hbe/server deploy --prod --legacy /out
 
 # ---- runtime ----------------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HBE_CONFIG_DIR=/app/config \
