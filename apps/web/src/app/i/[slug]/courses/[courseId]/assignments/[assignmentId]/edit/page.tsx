@@ -15,7 +15,10 @@ export default async function EditAssignmentPage({
   const { slug, courseId, assignmentId } = await params;
   const { course, canManage, ctx, assignment: a } = await loadAssignment(slug, courseId, assignmentId);
   if (!canManage || a.status === "closed") notFound();
-  const [profiles, suites] = await Promise.all([loadProfiles(ctx.institution.id), loadSuites(ctx.institution.id)]);
+  const [profiles, suites] = await Promise.all([
+    loadProfiles(ctx.institution.id, a.profile?.id),
+    loadSuites(ctx.institution.id),
+  ]);
 
   return (
     <Card title={`Edit · ${a.title}`}>

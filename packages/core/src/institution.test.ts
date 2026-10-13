@@ -3,7 +3,12 @@ import { DEFAULT_ASSIGNMENT_DEFAULTS, effectiveLimits, institutionLimits, instit
 
 describe("institution settings", () => {
   it("fill in defaults and drop what isn't valid", () => {
-    expect(institutionSettings(null)).toEqual({ assignment_defaults: DEFAULT_ASSIGNMENT_DEFAULTS });
+    expect(institutionSettings(null)).toEqual({
+      assignment_defaults: DEFAULT_ASSIGNMENT_DEFAULTS,
+      hidden_stack_profiles: [],
+    });
+    const id = "aaaaaaaa-0000-4000-8000-000000000001";
+    expect(institutionSettings({ hidden_stack_profiles: [id, id, "nope", 3] }).hidden_stack_profiles).toEqual([id]);
     const s = institutionSettings({
       assignment_defaults: {
         run_quota_per_day: 3,

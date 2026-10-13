@@ -93,7 +93,10 @@ describe("institution settings", () => {
       .select(["name", "settings"])
       .where("id", "=", inst.id)
       .executeTakeFirstOrThrow();
-    expect(row).toEqual({ name: "Alpha Polytechnic", settings: { assignment_defaults: defaults } });
+    expect(row).toEqual({
+      name: "Alpha Polytechnic",
+      settings: { assignment_defaults: defaults, hidden_stack_profiles: [] },
+    });
     const audit = await db
       .selectFrom("audit_logs")
       .select(["actor_id", "entity"])

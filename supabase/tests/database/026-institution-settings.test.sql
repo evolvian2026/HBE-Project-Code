@@ -1,8 +1,8 @@
--- Institution limits: inviting students stops at the operator's student limit (pending
+-- Institution limits and administration: inviting students stops at the operator's student limit (pending
 -- invitations count; people already in the institution don't). Only super admins change
 -- limits and the notice shown on every page.
 begin;
-select plan(9);
+select plan(10);
 
 select tests.seed_two_institutions();
 
@@ -30,6 +30,10 @@ select throws_ok($$ insert into public.invitations (institution_id, email, role)
   'P0001', null, 'a bulk import past the limit is refused');
 select is((select count(*)::int from public.invitations where institution_id = tests.id('inst_a') and email in ('five@test.local', 'six@test.local')),
           0, 'all of it');
+-- Stack profiles are added through the api, which checks what the grader will run.
+select throws_ok($$ insert into public.stack_profiles (institution_id, key, version, display_name, definition)
+                   values (tests.id('inst_a'), 'mine', 1, 'Mine', '{}') $$,
+  '42501', null, 'admins add stack profiles through the api only');
 -- Admins can't change their own limits (only the platform operator can; via the api).
 update public.institutions set limits = '{}' where id = tests.id('inst_a');
 reset role;

@@ -670,6 +670,17 @@ shows the limits the platform operator set (see CONFIGURATION.md §1). The platf
 those limits per institution, and a **notice** shown at the top of every page (e.g. planned
 maintenance).
 
+**Stacks** (as built, 2F): institution admins add their own stack profiles (a definition in the
+shape of `grader/stacks/*.json`, validated by the api: relative paths, image names, one to six
+services, at most 16 KB since it travels to the grader as a workflow input), publish new versions
+of them (versions never change), retire or restore them, and untick global profiles their
+teachers shouldn't pick for new assignments (`settings.hidden_stack_profiles`). An assignment
+keeps its profile whatever happens to it. The definition's commands run in the same isolated
+runner as the student's code, so they need no more trust than the code being graded. **Test
+suites** list every version with what uses it; the platform operator registers versions
+(global, or for one institution; the code lives in the grader repository) and institution
+admins retire their own. Both tables are written by the api only and audited.
+
 ### Super admin console (platform operator)
 Institutions (create, suspend, plan/limits) · global stack profiles · cross-tenant system
 health (queue depth, failed jobs, webhook lag, runner pool, storage growth) · feature flags ·

@@ -99,3 +99,31 @@ export async function saveBanner(formData: FormData) {
   revalidatePath("/", "layout");
   redirect(`/platform?banner=${message ? "on" : "off"}`);
 }
+
+/** Registers a test suite version (its code is in the grader repository). */
+export async function registerSuite(formData: FormData) {
+  const v = z
+    .object({
+      institutionId: z.string(),
+      key: z.string(),
+      title: z.string(),
+      path: z.string(),
+      gitRef: z.string(),
+      stackProfileId: z.string(),
+    })
+    .parse(Object.fromEntries(formData));
+  const result = await apiFetch<{ key: string; version: number }>("/v1/platform/grader-suites", {
+    method: "POST",
+    body: {
+      institutionId: v.institutionId || null,
+      key: v.key,
+      title: v.title,
+      path: v.path,
+      gitRef: v.gitRef || "main",
+      stackProfileId: v.stackProfileId || null,
+    },
+  });
+  if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
+  revalidatePath("/platform");
+  redirect(`/platform?suite=${encodeURIComponent(`${result.data.key} v${result.data.version}`)}`);
+}

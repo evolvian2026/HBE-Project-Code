@@ -12,7 +12,7 @@ test.afterAll(async () => {
   await sql("delete from auth.users where email like $1", [`%-${suffix}@e2e.test`]);
 });
 
-test("the operator sets an institution's limits and a notice; its admin chooses assignment defaults", async ({
+test("the operator sets limits, a notice and test suites; the admin chooses assignment defaults and stacks", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -55,9 +55,37 @@ test("the operator sets an institution's limits and a notice; its admin chooses 
   await admin.getByRole("button", { name: "Save settings" }).click();
   await expect(admin.getByText("Settings saved.")).toBeVisible();
 
+  // Stacks: the admin adds their own stack profile and stops offering Django; the operator
+  // registers a test suite for the institution.
+  await admin.getByRole("navigation", { name: "Institution" }).getByRole("link", { name: "Stacks" }).click();
+  await admin.getByLabel("Offer Django REST + React (Python 3.12, PostgreSQL) v1").uncheck();
+  await admin.getByRole("button", { name: "Save choice" }).click();
+  await expect(admin.getByText("Saved.")).toBeVisible();
+  await admin.getByLabel("Key").fill(`spring-${suffix}`);
+  await admin.getByLabel("Name", { exact: true }).fill(`Spring Boot ${suffix}`);
+  await admin.getByRole("button", { name: "Add stack profile" }).click();
+  await expect(admin.getByText(`Added spring-${suffix} v1.`)).toBeVisible();
+  await operator.reload();
+  const suiteForm = operator.locator("form", { hasText: "Folder in the grader repository" });
+  await suiteForm.getByLabel("For").selectOption({ label: name });
+  await suiteForm.getByLabel("Suite key").fill(`shop-${suffix}`);
+  await suiteForm.getByLabel("Title").fill(`Shop API ${suffix}`);
+  await suiteForm.getByLabel("Folder in the grader repository").fill("suites/acme/shop");
+  await suiteForm.getByRole("button", { name: "Register suite" }).click();
+  await expect(operator.getByText(`Test suite shop-${suffix} v1 registered.`)).toBeVisible();
+  await admin.reload();
+  await expect(admin.getByTestId("suites")).toContainText(`Shop API ${suffix}`);
+
   await admin.goto(`/i/${slug}/courses/${course!.id}/assignments/new`);
   await expect(admin.getByLabel("Test runs per student per day")).toHaveValue("3");
   await expect(admin.getByLabel("Also post the feedback and code comments to GitHub")).toBeChecked();
+  const stack = admin.getByLabel("Stack profile");
+  await expect(stack.locator("option", { hasText: `Spring Boot ${suffix}` })).toHaveCount(1);
+  await expect(stack.locator("option", { hasText: "Django REST" })).toHaveCount(0);
+  await expect(stack.locator("option", { hasText: "MERN" })).toHaveCount(1);
+  await expect(admin.getByLabel("Hidden test suite").locator("option", { hasText: `Shop API ${suffix}` })).toHaveCount(
+    1,
+  );
 
   // Inviting past the limit is refused, with the reason.
   await admin.goto(`/i/${slug}/members`);

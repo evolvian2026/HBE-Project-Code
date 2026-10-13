@@ -1,3 +1,4 @@
+import { institutionSettings } from "@hbe/core";
 import { notFound } from "next/navigation";
 import { requireCourse } from "@/lib/course";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -43,15 +44,24 @@ export async function loadAssignment(slug: string, courseId: string, assignmentI
   return { ...course, supabase, assignment: data as unknown as AssignmentRow };
 }
 
-export async function loadProfiles(institutionId: string) {
+/**
+ * Stack profiles teachers can pick: active ones, global or the institution's, except global
+ * ones the institution's admins hid (Stacks). `keep`: an assignment's current profile, listed
+ * whatever its state.
+ */
+export async function loadProfiles(institutionId: string, keep?: string) {
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("stack_profiles")
-    .select("id, display_name, description, version, institution_id")
-    .eq("status", "active")
-    .or(`institution_id.is.null,institution_id.eq.${institutionId}`)
-    .order("display_name");
-  return (data ?? []).map((p) => ({
+  const [{ data }, { data: inst }] = await Promise.all([
+    supabase
+      .from("stack_profiles")
+      .select("id, display_name, description, version, institution_id, status")
+      .or(`institution_id.is.null,institution_id.eq.${institutionId}`)
+      .order("display_name"),
+    supabase.from("institutions").select("settings").eq("id", institutionId).single(),
+  ]);
+  const hidden = new Set(institutionSettings(inst?.settings).hidden_stack_profiles);
+  const offered = (data ?? []).filter((p) => p.id === keep || (p.status === "active" && !hidden.has(p.id)));
+  return offered.map((p) => ({
     id: p.id,
     label: `${p.display_name} · v${p.version}${p.institution_id ? "" : " (global)"}`,
     description: p.description,

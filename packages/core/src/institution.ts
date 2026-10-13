@@ -16,6 +16,8 @@ export interface AssignmentDefaults {
 
 export interface InstitutionSettings {
   assignment_defaults: AssignmentDefaults;
+  /** Global stack profiles the institution's teachers can't pick for new assignments. */
+  hidden_stack_profiles: string[];
 }
 
 export const DEFAULT_ASSIGNMENT_DEFAULTS: AssignmentDefaults = {
@@ -33,7 +35,10 @@ const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fa
 const intIn = (v: unknown, min: number, max: number, fallback: number) =>
   typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : fallback;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export function institutionSettings(raw: unknown): InstitutionSettings {
+  const hidden = obj(raw).hidden_stack_profiles;
   const a = obj(obj(raw).assignment_defaults);
   const d = DEFAULT_ASSIGNMENT_DEFAULTS;
   const w = obj(a.weights);
@@ -61,6 +66,9 @@ export function institutionSettings(raw: unknown): InstitutionSettings {
       },
       post_feedback_to_github: bool(a.post_feedback_to_github, d.post_feedback_to_github),
     },
+    hidden_stack_profiles: Array.isArray(hidden)
+      ? [...new Set(hidden.filter((id): id is string => typeof id === "string" && UUID.test(id)))].slice(0, 500)
+      : [],
   };
 }
 

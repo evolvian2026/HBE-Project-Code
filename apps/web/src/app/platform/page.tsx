@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { enforceAdminMfa } from "@/lib/mfa";
 import { requireSession } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createInstitution, mapInstallation, reopenContract, saveBanner, saveLimits } from "./actions";
+import { createInstitution, mapInstallation, registerSuite, reopenContract, saveBanner, saveLimits } from "./actions";
 
 export const metadata: Metadata = { title: "Platform console" };
 
@@ -41,13 +41,19 @@ export default async function PlatformPage({
   await enforceAdminMfa("/platform");
 
   const supabase = await createSupabaseServerClient();
-  const [institutions, installations, { data: banner }] = await Promise.all([
+  const [institutions, installations, { data: banner }, { data: globalProfiles }] = await Promise.all([
     apiFetch<{
       institutions: InstitutionRow[];
       plan: { institutionConcurrency: number; monthlyRunnerMinutes: number };
     }>("/v1/platform/institutions"),
     apiFetch<{ installations: InstallationRow[] }>("/v1/platform/github-installations"),
     supabase.from("platform_settings").select("value").eq("key", "maintenance_banner").maybeSingle(),
+    supabase
+      .from("stack_profiles")
+      .select("id, display_name, version")
+      .is("institution_id", null)
+      .eq("status", "active")
+      .order("display_name"),
   ]);
   const plan = institutions.ok ? institutions.data.plan : null;
   const institutionList = institutions.ok ? institutions.data.institutions : [];
@@ -63,6 +69,7 @@ export default async function PlatformPage({
         {query.created && <Alert tone="success">Institution “{query.created}” created.</Alert>}
         {query.mapped && <Alert tone="success">Installation assigned.</Alert>}
         {query.limits && <Alert tone="success">Limits saved.</Alert>}
+        {query.suite && <Alert tone="success">Test suite {query.suite} registered.</Alert>}
         {query.banner && <Alert tone="success">Notice {query.banner === "on" ? "shown" : "removed"}.</Alert>}
         {!institutions.ok && <Alert tone="error">Could not load institutions: {institutions.message}</Alert>}
 
@@ -169,6 +176,57 @@ export default async function PlatformPage({
             </form>
           </Card>
         </div>
+
+        <Card
+          title="Register a test suite version"
+          description="Its code must already be in the grader repository. Registering the same key again adds its next version."
+        >
+          <form action={registerSuite} className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm">
+              <span className="font-medium">For</span>
+              <select
+                name="institutionId"
+                className="mt-1 block w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+              >
+                <option value="">Every institution (global)</option>
+                {institutionList.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Field
+              label="Suite key"
+              name="key"
+              required
+              pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
+              placeholder="shop-api"
+            />
+            <Field label="Title" name="title" required minLength={2} maxLength={200} placeholder="Shop API" />
+            <Field label="Folder in the grader repository" name="path" required placeholder="suites/acme/shop-api" />
+            <Field label="Git ref" name="gitRef" defaultValue="main" />
+            <label className="text-sm">
+              <span className="font-medium">Stack profile (optional)</span>
+              <select
+                name="stackProfileId"
+                className="mt-1 block w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+              >
+                <option value="">Any</option>
+                {(globalProfiles ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.display_name} v{p.version}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="sm:col-span-3">
+              <Button type="submit" variant="secondary">
+                Register suite
+              </Button>
+            </div>
+          </form>
+        </Card>
 
         <Card title="Notice for everyone" description="Shown at the top of every page, e.g. planned maintenance.">
           <form action={saveBanner} className="flex flex-wrap items-end gap-3">

@@ -110,7 +110,8 @@ Built so far:
 
 - **2F, administration (in progress).** Institution settings (assignment defaults) and the
   operator's per-institution limits (active students, concurrent runs, monthly runner minutes),
-  enforced; a site-wide notice.
+  enforced; a site-wide notice. Stack profiles (institution-owned versions, which global ones are
+  offered) and the test-suite registry (the operator registers versions).
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's
