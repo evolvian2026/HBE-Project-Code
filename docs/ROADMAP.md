@@ -118,7 +118,7 @@ Built so far:
   domain ownership; tested end to end against a stand-in IdP. Admins reset a member's
   two-factor authentication (audited, the person is emailed).
 
-- **2G, hardening (in progress).** Accessibility: every main page of each role, with real
+- **2G, hardening.** Accessibility: every main page of each role, with real
   data on it, is checked against WCAG 2.1 AA (axe) in light and dark mode in E2E; text links
   are always underlined, focus is always visible and a skip link leads to the page content.
   Security review (SECURITY.md): nonce-based Content-Security-Policy and security headers,
@@ -126,7 +126,9 @@ Built so far:
   logs, secure session cookies, no known vulnerable dependencies (checked in CI, Dependabot).
   Observability (OPERATIONS.md): request ids from page to API, `/metrics` for Prometheus,
   error reports to Sentry without personal data, failed jobs logged and counted, and
-  suggested alert rules.
+  suggested alert rules. Load test (LOAD_TEST.md) at 100 students: within the NFR-2 targets
+  at a realistic pace after two fixes it found (the worker paused between queued jobs;
+  submission RLS ran per-row queries). An external penetration test is still to be done.
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's

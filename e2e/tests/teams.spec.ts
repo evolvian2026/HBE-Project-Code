@@ -62,7 +62,8 @@ test("a teacher forms teams and publishes a team assignment; each team shares a 
   const add = async (team: string, who: string) => {
     await teams.getByLabel(`Add a student to ${team}`).selectOption({ label: email(who) });
     await teams.locator("li", { hasText: team }).getByRole("button", { name: "Add" }).click();
-    await expect(teacher.getByText("Added to the team.")).toBeVisible();
+    // Wait for them in the team, not the message: it's still showing from the previous add.
+    await expect(teams.getByRole("button", { name: `Remove ${email(who)} from ${team}` })).toBeVisible();
   };
   await add("Red", "ada");
   await add("Red", "grace");

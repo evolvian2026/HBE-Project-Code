@@ -203,9 +203,18 @@ export class PgBossQueue implements JobQueue {
   ): Promise<void> {
     const pollingIntervalSeconds = this.options.pollingIntervalSeconds ?? 2;
     for (let i = 0; i < concurrency; i++) {
-      await this.boss.work<QueuePayloads[N]>(name, { batchSize: 1, pollingIntervalSeconds }, async (jobs) => {
-        for (const job of jobs) await handler({ id: job.id, name, data: job.data });
-      });
+      const worker: { id?: string } = {};
+      worker.id = await this.boss.work<QueuePayloads[N]>(
+        name,
+        { batchSize: 1, pollingIntervalSeconds },
+        async (jobs) => {
+          for (const job of jobs) await handler({ id: job.id, name, data: job.data });
+          // pg-boss waits out the polling interval even after finding a job; with one job per
+          // fetch that caps a worker at one job per interval. A job was there, so more may be
+          // waiting: fetch again at once (an empty queue still waits the interval).
+          if (jobs.length > 0 && worker.id) this.boss.notifyWorker(worker.id);
+        },
+      );
     }
   }
 

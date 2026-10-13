@@ -181,6 +181,11 @@ Rules of thumb:
 - Suspended institutions are invisible to their members; read-only ones accept no writes.
 - Server code connects as the table owner and bypasses RLS, so it authorises through
   `packages/core` and always filters by `institution_id`.
+- Keep per-row work out of hot policies. A helper called with a column (`f(submission_id)`)
+  runs once per row; for a list of 100 that is 100 sets of queries. Compute the caller's set
+  once instead (`assignment_id in (select private.staff_assignment_ids())`, a hashed subplan),
+  and let child rows follow their parent's policy (`exists (select 1 from public.submissions s
+  where s.id = submission_id)`), as `20261108000001_rls_performance.sql` does. See LOAD_TEST.md.
 
 Tenant isolation is tested with pgTAP (`supabase/tests/database`). Two institutions are seeded,
 and for every role the tests assert that nothing from the other institution is visible.

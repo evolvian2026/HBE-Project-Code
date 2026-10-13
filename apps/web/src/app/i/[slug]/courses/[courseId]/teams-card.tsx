@@ -129,6 +129,7 @@ export async function TeamsCard({
                       <input type="hidden" name="teamId" value={t.id} />
                       <select
                         name="userId"
+                        required
                         defaultValue=""
                         className={selectClass}
                         aria-label={`Add a student to ${t.name}`}

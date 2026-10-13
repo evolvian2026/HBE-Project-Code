@@ -31,8 +31,11 @@ export async function deleteTeam(formData: FormData) {
 /** Puts a student in a team (or takes them out: an empty team). */
 export async function setTeam(formData: FormData) {
   const { slug, courseId, userId, teamId } = base
-    .extend({ userId: z.string().uuid(), teamId: z.string() })
+    .extend({ userId: z.string().optional(), teamId: z.string() })
     .parse(Object.fromEntries(formData));
+  if (!userId || !z.string().uuid().safeParse(userId).success) {
+    redirect(back(slug, courseId, { team_error: "Choose a student to add." }));
+  }
   await call(
     slug,
     courseId,

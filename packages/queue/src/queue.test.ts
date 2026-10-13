@@ -37,6 +37,20 @@ describe("PgBossQueue", () => {
     expect(job.data).toEqual({ eventId: 42 });
   });
 
+  it("works through a backlog without waiting the polling interval between jobs", async () => {
+    // 20 jobs, one worker, a 0.5 s interval: pausing after each job would take 10 s.
+    for (let i = 0; i < 20; i++) await queue.send("commit-details", { repositoryId: String(i) });
+    let done = 0;
+    const started = Date.now();
+    const all = new Promise<void>((resolve) => {
+      void queue.work("commit-details", async () => {
+        if (++done === 20) resolve();
+      });
+    });
+    await all;
+    expect(Date.now() - started).toBeLessThan(4000);
+  });
+
   it("de-duplicates jobs with the same singleton key", async () => {
     const first = await queue.send("github-events-sweep", {}, { singletonKey: "sweep", startAfterSeconds: 60 });
     const second = await queue.send("github-events-sweep", {}, { singletonKey: "sweep", startAfterSeconds: 60 });
