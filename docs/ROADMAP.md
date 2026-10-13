@@ -74,9 +74,9 @@ checks, backups workflow and publishing scripts are ready) and running a pilot c
 **Exit:** a pilot course at one institution runs end to end on production, with every grade
 report archived and downloadable.
 
-## Phase 2: LMS and v1 hardening (5–6 weeks) — in progress
+## Phase 2: LMS and v1 hardening (5–6 weeks) — built
 
-Built so far:
+Built (2A–2G):
 
 - **2A, LTI 1.3 core.** Institution admins connect Canvas, Moodle or another LTI 1.3 platform
   with a one-time Dynamic Registration URL or by hand; launches sign people in (matched by
@@ -160,7 +160,11 @@ their LMSs.
 **Exit:** production on EC2 with no code changes from the demo; runners in Singapore, paid by
 the platform.
 
-## Phase 3: Scale & extend (ongoing)
+## Phase 3: Scale & extend (ongoing) — in progress
+
+Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
+profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
+
 - Stage B high availability (ALB + multi-AZ Auto Scaling group) when uptime needs require it
 - More stack profiles (Spring Boot, .NET, Laravel, …) contributed by institutions
 - Analytics: per-test failure heat-maps, cohort comparisons across terms, at-risk prediction
