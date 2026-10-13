@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "Name is too short").max(200),
@@ -54,4 +55,47 @@ export async function reopenContract(formData: FormData) {
   if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
   revalidatePath("/platform");
   redirect("/platform");
+}
+
+const limit = z
+  .string()
+  .trim()
+  .transform((v) => (v === "" ? null : Number(v)))
+  .pipe(z.number().int().positive().nullable());
+
+/** The operator's limits for an institution (blank: the plan's). */
+export async function saveLimits(formData: FormData) {
+  const parsed = z
+    .object({
+      institutionId: z.string().uuid(),
+      maxActiveStudents: limit,
+      institutionConcurrency: limit,
+      monthlyRunnerMinutes: limit,
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect(`/platform?error=${encodeURIComponent("Limits are whole numbers above 0, or blank")}`);
+  const { institutionId, ...body } = parsed.data;
+  const result = await apiFetch(`/v1/platform/institutions/${institutionId}/limits`, { method: "PUT", body });
+  if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
+  revalidatePath("/platform");
+  redirect("/platform?limits=saved");
+}
+
+/** The notice at the top of every page (empty: none). Super admins only (RLS). */
+export async function saveBanner(formData: FormData) {
+  const message = z
+    .string()
+    .trim()
+    .max(300)
+    .parse(formData.get("message") ?? "");
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("platform_settings")
+    .update({ value: message })
+    .eq("key", "maintenance_banner")
+    .select("key")
+    .single();
+  if (error) redirect(`/platform?error=${encodeURIComponent("Could not save the notice.")}`);
+  revalidatePath("/", "layout");
+  redirect(`/platform?banner=${message ? "on" : "off"}`);
 }

@@ -27,6 +27,7 @@ export default async function InstitutionLayout({
     ...(ctx.isStaff ? [{ href: "/members", label: "Members" }] : []),
     ...(ctx.isAdmin ? [{ href: "/lms", label: "LMS" }] : []),
     ...(ctx.isAdmin ? [{ href: "/records", label: "Records" }] : []),
+    ...(ctx.isAdmin ? [{ href: "/settings", label: "Settings" }] : []),
   ];
   return (
     <AppShell

@@ -1,8 +1,9 @@
-import { DEFAULT_STAGE_SETTINGS, utcToZonedLocal } from "@hbe/core";
+import { DEFAULT_STAGE_SETTINGS, institutionSettings, utcToZonedLocal } from "@hbe/core";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
 import { requireCourse } from "@/lib/course";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadProfiles, loadSuites } from "../data";
 import { AssignmentForm } from "../form";
 
@@ -12,7 +13,14 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
   const { slug, courseId } = await params;
   const { course, canManage, ctx } = await requireCourse(slug, courseId);
   if (!canManage) notFound();
-  const [profiles, suites] = await Promise.all([loadProfiles(ctx.institution.id), loadSuites(ctx.institution.id)]);
+  const supabase = await createSupabaseServerClient();
+  const [profiles, suites, { data: inst }] = await Promise.all([
+    loadProfiles(ctx.institution.id),
+    loadSuites(ctx.institution.id),
+    supabase.from("institutions").select("settings").eq("id", ctx.institution.id).single(),
+  ]);
+  // What the institution's admins chose new assignments start with (Settings).
+  const d = institutionSettings(inst?.settings).assignment_defaults;
   const twoWeeks = new Date(Date.now() + 14 * 86_400_000);
   twoWeeks.setUTCHours(15, 59, 0, 0); // 23:59 in UTC+8; adjusted to the course zone below
 
@@ -33,15 +41,15 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
           stackProfileId: profiles[0]?.id ?? "",
           mode: "individual",
           graderSuiteId: "",
-          triggers: { on_push: true, on_pull_request: true, manual: true },
+          triggers: d.triggers,
           templateRepo: "",
           dueAt: utcToZonedLocal(twoWeeks, course.timezone),
           releaseAt: "",
-          runQuota: 5,
-          weights: { automated: 60, rubric: 25, process: 15 },
-          late: { per_day_percent: 10, max_days: 5, grace_minutes: 15 },
-          regradeWindowDays: 7,
-          postFeedbackToGithub: false,
+          runQuota: d.run_quota_per_day,
+          weights: d.weights,
+          late: d.late_policy,
+          regradeWindowDays: d.regrade_window_days,
+          postFeedbackToGithub: d.post_feedback_to_github,
           stages: DEFAULT_STAGE_SETTINGS,
           spec: "",
           published: false,

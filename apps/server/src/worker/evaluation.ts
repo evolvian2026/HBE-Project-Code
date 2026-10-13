@@ -1,4 +1,13 @@
-import { checkRunSummary, harnessOptions, scoreRun, stageSettings, type RunResults, type StageResult } from "@hbe/core";
+import {
+  checkRunSummary,
+  effectiveLimits,
+  harnessOptions,
+  institutionLimits,
+  scoreRun,
+  stageSettings,
+  type RunResults,
+  type StageResult,
+} from "@hbe/core";
 import { sql, type Db, type Json } from "@hbe/db";
 import { GitHubError, type GitHubClient } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
@@ -34,9 +43,11 @@ export async function dispatchRun(
     .innerJoin("assignments as a", "a.id", "s.assignment_id")
     .leftJoin("grader_suites as g", "g.id", "e.grader_suite_id")
     .leftJoin("stack_profiles as p", "p.id", "e.stack_profile_id")
+    .innerJoin("institutions as i", "i.id", "e.institution_id")
     .select([
       "e.id",
       "e.institution_id",
+      "i.limits",
       "e.status",
       "a.stage_settings",
       "e.trigger",
@@ -57,10 +68,16 @@ export async function dispatchRun(
     return "failed";
   }
 
-  // The platform pays for runner minutes: once the monthly budget is spent, automatic runs
-  // stop; runs someone asked for (and deadline runs) still go.
+  // The platform pays for runner minutes: once the monthly budget (the platform's, or the
+  // institution's own) is spent, automatic runs stop; runs someone asked for (and deadline
+  // runs) still go.
+  const allowance = effectiveLimits(limits, institutionLimits(run.limits));
   if (run.trigger === "push" || run.trigger === "pull_request") {
-    if ((await runnerMinutesThisMonth(db)) >= limits.monthly_runner_minutes_budget) {
+    if (
+      (await runnerMinutesThisMonth(db)) >= limits.monthly_runner_minutes_budget ||
+      (allowance.monthlyRunnerMinutes < limits.monthly_runner_minutes_budget &&
+        (await runnerMinutesThisMonth(db, run.institution_id)) >= allowance.monthlyRunnerMinutes)
+    ) {
       await finishWithError(
         db,
         runId,
@@ -93,7 +110,7 @@ export async function dispatchRun(
       select count(*)::int as global, (count(*) filter (where institution_id = ${run.institution_id}))::int as institution
       from evaluation_runs where status in ('dispatched', 'running')`.execute(tx);
     const load = rows[0] ?? { global: 0, institution: 0 };
-    if (load.global >= limits.global_concurrency || load.institution >= limits.institution_concurrency) return "busy";
+    if (load.global >= limits.global_concurrency || load.institution >= allowance.concurrency) return "busy";
     const claimed = await tx
       .updateTable("evaluation_runs")
       .set({ status: "dispatched", dispatched_at: new Date(), callback_token_hash: token ? hashToken(token) : null })
@@ -159,12 +176,16 @@ async function finishWithError(db: Db, runId: string, status: "infra_error" | "c
     .execute();
 }
 
-/** Approximate Actions minutes used this calendar month (UTC): run time rounded up, plus setup. */
-export async function runnerMinutesThisMonth(db: Db): Promise<number> {
+/**
+ * Approximate Actions minutes used this calendar month (UTC): run time rounded up, plus setup.
+ * The whole platform's, or one institution's.
+ */
+export async function runnerMinutesThisMonth(db: Db, institutionId?: string): Promise<number> {
   const { rows } = await sql<{ minutes: number }>`
     select coalesce(sum(ceil(extract(epoch from coalesce(finished_at, now()) - started_at) / 60) + 1), 0)::int as minutes
     from evaluation_runs
-    where started_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc'`.execute(db);
+    where started_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc'
+      ${institutionId ? sql`and institution_id = ${institutionId}` : sql``}`.execute(db);
   return rows[0]?.minutes ?? 0;
 }
 

@@ -5,7 +5,8 @@ import { Alert, Badge, Button, Card, EmptyState, Field } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 import { enforceAdminMfa } from "@/lib/mfa";
 import { requireSession } from "@/lib/session";
-import { createInstitution, mapInstallation, reopenContract } from "./actions";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createInstitution, mapInstallation, reopenContract, saveBanner, saveLimits } from "./actions";
 
 export const metadata: Metadata = { title: "Platform console" };
 
@@ -18,6 +19,8 @@ interface InstitutionRow {
   purge_after: string | null;
   member_count: number;
   admin_count: number;
+  student_count: number;
+  limits: { max_active_students?: number; institution_concurrency?: number; monthly_runner_minutes?: number };
 }
 interface InstallationRow {
   installation_id: number;
@@ -37,10 +40,16 @@ export default async function PlatformPage({
   if (!session.isSuperAdmin) notFound();
   await enforceAdminMfa("/platform");
 
-  const [institutions, installations] = await Promise.all([
-    apiFetch<{ institutions: InstitutionRow[] }>("/v1/platform/institutions"),
+  const supabase = await createSupabaseServerClient();
+  const [institutions, installations, { data: banner }] = await Promise.all([
+    apiFetch<{
+      institutions: InstitutionRow[];
+      plan: { institutionConcurrency: number; monthlyRunnerMinutes: number };
+    }>("/v1/platform/institutions"),
     apiFetch<{ installations: InstallationRow[] }>("/v1/platform/github-installations"),
+    supabase.from("platform_settings").select("value").eq("key", "maintenance_banner").maybeSingle(),
   ]);
+  const plan = institutions.ok ? institutions.data.plan : null;
   const institutionList = institutions.ok ? institutions.data.institutions : [];
   const unlinked = installations.ok
     ? installations.data.installations.filter((i) => !i.institution_id && !i.deleted_at)
@@ -53,6 +62,8 @@ export default async function PlatformPage({
         {query.error && <Alert tone="error">{query.error}</Alert>}
         {query.created && <Alert tone="success">Institution “{query.created}” created.</Alert>}
         {query.mapped && <Alert tone="success">Installation assigned.</Alert>}
+        {query.limits && <Alert tone="success">Limits saved.</Alert>}
+        {query.banner && <Alert tone="success">Notice {query.banner === "on" ? "shown" : "removed"}.</Alert>}
         {!institutions.ok && <Alert tone="error">Could not load institutions: {institutions.message}</Alert>}
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -87,7 +98,49 @@ export default async function PlatformPage({
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 text-muted">{i.slug}</td>
+                        <td className="py-2.5 text-muted">
+                          {i.slug}
+                          <details className="mt-1 text-xs">
+                            <summary className="cursor-pointer text-accent">
+                              Limits
+                              {i.limits.max_active_students
+                                ? ` · ${i.student_count}/${i.limits.max_active_students} students`
+                                : ""}
+                            </summary>
+                            <form action={saveLimits} className="mt-2 space-y-2" aria-label={`Limits for ${i.name}`}>
+                              <input type="hidden" name="institutionId" value={i.id} />
+                              <Field
+                                label="Active students"
+                                name="maxActiveStudents"
+                                type="number"
+                                min={1}
+                                defaultValue={i.limits.max_active_students ?? ""}
+                                hint="Blank: no limit"
+                              />
+                              <Field
+                                label="Test runs at once"
+                                name="institutionConcurrency"
+                                type="number"
+                                min={1}
+                                max={plan?.institutionConcurrency}
+                                defaultValue={i.limits.institution_concurrency ?? ""}
+                                hint={`Blank: the plan's ${plan?.institutionConcurrency ?? ""}`}
+                              />
+                              <Field
+                                label="Runner minutes per month"
+                                name="monthlyRunnerMinutes"
+                                type="number"
+                                min={1}
+                                max={plan?.monthlyRunnerMinutes}
+                                defaultValue={i.limits.monthly_runner_minutes ?? ""}
+                                hint={`Blank: the plan's ${plan?.monthlyRunnerMinutes ?? ""}`}
+                              />
+                              <Button type="submit" variant="secondary">
+                                Save limits
+                              </Button>
+                            </form>
+                          </details>
+                        </td>
                         <td className="py-2.5 text-right tabular-nums">{i.member_count}</td>
                         <td className="py-2.5 text-right tabular-nums">
                           {i.admin_count === 0 ? <Badge tone="warning">invite pending</Badge> : i.admin_count}
@@ -116,6 +169,24 @@ export default async function PlatformPage({
             </form>
           </Card>
         </div>
+
+        <Card title="Notice for everyone" description="Shown at the top of every page, e.g. planned maintenance.">
+          <form action={saveBanner} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-72 flex-1">
+              <Field
+                label="Notice"
+                name="message"
+                maxLength={300}
+                defaultValue={typeof banner?.value === "string" ? banner.value : ""}
+                placeholder="Maintenance on Saturday 10:00–11:00 SGT: test runs may be delayed."
+                hint="Leave empty to show nothing."
+              />
+            </div>
+            <Button type="submit" variant="secondary">
+              Save notice
+            </Button>
+          </form>
+        </Card>
 
         <Card title="Unassigned GitHub installations" description="Installations that were not linked automatically.">
           {unlinked.length === 0 ? (

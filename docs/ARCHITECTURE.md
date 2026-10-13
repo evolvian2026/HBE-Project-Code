@@ -663,6 +663,13 @@ defaults, email templates, branding) · audit log · usage (Actions minutes, sto
 **Records search**: any student's full submission and grade history, including archived
 courses.
 
+As built (Phase 2F): **Settings** for the institution's admins: its name, and what new
+assignments start with (daily test runs, grade weights, late policy, regrade window, test
+triggers, posting feedback to GitHub); teachers still change each assignment. The page also
+shows the limits the platform operator set (see CONFIGURATION.md §1). The platform console sets
+those limits per institution, and a **notice** shown at the top of every page (e.g. planned
+maintenance).
+
 ### Super admin console (platform operator)
 Institutions (create, suspend, plan/limits) · global stack profiles · cross-tenant system
 health (queue depth, failed jobs, webhook lag, runner pool, storage growth) · feature flags ·

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { SessionContext } from "@/lib/session";
 import { InstitutionSwitcher } from "./institution-switcher";
+import { MaintenanceBanner } from "./maintenance-banner";
 
 export function AppShell({
   session,
@@ -17,6 +18,7 @@ export function AppShell({
 }) {
   return (
     <div className="min-h-dvh">
+      <MaintenanceBanner />
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
           <Link href="/" className="mr-2 font-semibold tracking-tight">

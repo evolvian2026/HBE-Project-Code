@@ -1,4 +1,4 @@
-import { authorize, SLUG_PATTERN, slugify } from "@hbe/core";
+import { authorize, institutionLimits, SLUG_PATTERN, slugify } from "@hbe/core";
 import { sql, withActor } from "@hbe/db";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -15,7 +15,51 @@ const createInstitutionBody = z.object({
 const mapInstallationBody = z.object({ institutionId: z.string().uuid().nullable() });
 
 /** Super admin console endpoints (platform level, no tenant data). */
-export async function platformRoutes(app: FastifyInstance, { db, verifier }: ApiDeps): Promise<void> {
+export async function platformRoutes(app: FastifyInstance, { db, verifier, settings }: ApiDeps): Promise<void> {
+  /**
+   * The platform operator's limits for an institution. Each only tightens the deployment's plan;
+   * null removes it (the plan's value applies).
+   */
+  app.put<{ Params: { institutionId: string } }>("/v1/platform/institutions/:institutionId/limits", async (req) => {
+    const actor = await authenticate(req, db, verifier);
+    authorize(actor, "listAllInstitutions");
+    const institutionId = z.string().uuid().parse(req.params.institutionId);
+    const plan = settings.profile.evaluation;
+    const body = z
+      .object({
+        maxActiveStudents: z.number().int().min(1).max(100_000).nullable(),
+        institutionConcurrency: z
+          .number()
+          .int()
+          .min(1)
+          .max(plan.institution_concurrency, `At most ${plan.institution_concurrency} (the plan's limit)`)
+          .nullable(),
+        monthlyRunnerMinutes: z
+          .number()
+          .int()
+          .min(1)
+          .max(plan.monthly_runner_minutes_budget, `At most ${plan.monthly_runner_minutes_budget} (the plan's budget)`)
+          .nullable(),
+      })
+      .strict()
+      .parse(req.body);
+    const limits = institutionLimits({
+      max_active_students: body.maxActiveStudents ?? undefined,
+      institution_concurrency: body.institutionConcurrency ?? undefined,
+      monthly_runner_minutes: body.monthlyRunnerMinutes ?? undefined,
+    });
+    const updated = await withActor(db, actor.userId, (tx) =>
+      tx
+        .updateTable("institutions")
+        .set({ limits: JSON.stringify(limits) })
+        .where("id", "=", institutionId)
+        .returning("id")
+        .executeTakeFirst(),
+    );
+    if (!updated) throw notFound("Institution not found");
+    return { limits };
+  });
+
   app.get("/v1/platform/institutions", async (req) => {
     const actor = await authenticate(req, db, verifier);
     authorize(actor, "listAllInstitutions");
@@ -32,13 +76,22 @@ export async function platformRoutes(app: FastifyInstance, { db, verifier }: Api
         "i.created_at",
         "i.contract_ended_at",
         "i.purge_after",
+        "i.limits",
+        sql<number>`count(m.id) filter (where m.role = 'student')::int`.as("student_count"),
         sql<number>`count(m.id)::int`.as("member_count"),
         sql<number>`count(m.id) filter (where m.role = 'admin')::int`.as("admin_count"),
       ])
       .groupBy("i.id")
       .orderBy("i.name")
       .execute();
-    return { institutions: rows };
+    const plan = settings.profile.evaluation;
+    return {
+      institutions: rows.map((r) => ({ ...r, limits: institutionLimits(r.limits) })),
+      plan: {
+        institutionConcurrency: plan.institution_concurrency,
+        monthlyRunnerMinutes: plan.monthly_runner_minutes_budget,
+      },
+    };
   });
 
   app.post("/v1/platform/institutions", async (req, reply) => {

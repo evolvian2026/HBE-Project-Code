@@ -15,6 +15,12 @@ Environment variables                  endpoints & secrets    (templates in conf
 Institution limits (database)          per-tenant quotas; can only be lower than the profile
 ```
 
+As built, a super admin sets an institution's limits on the platform console (blank means the
+plan's value): **active students** (inviting a student past it is refused; pending invitations
+count), **test runs at once** (at most `evaluation.institution_concurrency`) and **runner minutes
+per month** (at most `evaluation.monthly_runner_minutes_budget`; past it, automatic runs stop,
+as for the platform budget). The institution's admins see them on their Settings page.
+
 `packages/settings` loads all of this once at startup, validates it with Zod, and **refuses to
 start** if anything is missing or inconsistent. A misconfigured deploy therefore fails its health
 check instead of misbehaving later. Every app imports `loadSettings()`; nothing reads

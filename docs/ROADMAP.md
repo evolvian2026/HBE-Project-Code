@@ -108,6 +108,10 @@ Built so far:
   redelivered, and pushes whose webhooks were lost are recovered from GitHub's event feed (also
   just before each cutoff, with GitHub's push time).
 
+- **2F, administration (in progress).** Institution settings (assignment defaults) and the
+  operator's per-institution limits (active students, concurrent runs, monthly runner minutes),
+  enforced; a site-wide notice.
+
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's
 Classroom scopes, see CONFIGURATION.md §5.2).
