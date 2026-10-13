@@ -16,6 +16,7 @@ import { replicateRecords } from "../records/replication.ts";
 import { queueRosterSyncs, reconcileGrades, syncGrade, syncRoster } from "../lti/grades.ts";
 import { syncTeamAccess } from "../teams.ts";
 import { sweepExpiredArtifacts } from "./artifacts.ts";
+import { postFeedback, sweepFeedback } from "./feedback.ts";
 import { finalizeDueSubmissions } from "./deadlines.ts";
 import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 
@@ -136,5 +137,15 @@ export async function startWorker(
   await queue.work("team-access", async (job) => {
     await syncTeamAccess({ db: deps.db, github: deps.github, log }, job.data.teamId);
   });
+
+  // Released feedback goes to the repository's GitHub "Feedback" issue (assignments that opt in).
+  await queue.work("post-feedback", async (job) => {
+    await postFeedback({ db: deps.db, github: deps.github, settings, log }, job.data.repositoryId);
+  });
+  await queue.work("feedback-sweep", async () => {
+    const n = await sweepFeedback(deps);
+    if (n) log.info({ repositories: n }, "feedback to post to GitHub");
+  });
+  await queue.schedule("feedback-sweep", "*/10 * * * *", {});
   log.info({ concurrency: settings.profile.runtime.queue_concurrency }, "worker started");
 }

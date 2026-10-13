@@ -47,6 +47,7 @@ const assignmentSchema = z
     lateMaxDays: num(0, 60),
     lateGraceMinutes: num(0, 1440),
     regradeWindowDays: num(0, 60),
+    postFeedbackToGithub: z.literal("on").optional(),
     stageApi: z.literal("on").optional(),
     stageBrowser: z.literal("on").optional(),
     stageLint: z.literal("on").optional(),
@@ -94,6 +95,7 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
     weights: { automated: v.automated, rubric: v.rubric, process: v.process },
     late_policy: { per_day_percent: v.latePerDay, max_days: v.lateMaxDays, grace_minutes: v.lateGraceMinutes },
     regrade_window_days: v.regradeWindowDays,
+    post_feedback_to_github: Boolean(v.postFeedbackToGithub),
     stage_settings: stages,
     spec_md: v.spec,
   };

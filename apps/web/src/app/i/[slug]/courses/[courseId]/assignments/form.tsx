@@ -21,6 +21,7 @@ export interface AssignmentFormValues {
   weights: { automated: number; rubric: number; process: number };
   late: { per_day_percent: number; max_days: number; grace_minutes: number };
   regradeWindowDays: number;
+  postFeedbackToGithub: boolean;
   stages: StageSettings;
   spec: string;
   published: boolean;
@@ -313,6 +314,21 @@ export function AssignmentForm({
             defaultValue={values.regradeWindowDays}
           />
         </div>
+        <label className="mt-4 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="postFeedbackToGithub"
+            defaultChecked={values.postFeedbackToGithub}
+            className="mt-0.5"
+          />
+          <span>
+            Also post the feedback and code comments to GitHub
+            <span className="block text-xs text-muted">
+              Once a grade is released, as a &ldquo;Feedback&rdquo; issue in the student&apos;s (or team&apos;s)
+              repository, kept up to date. Scores are never posted there.
+            </span>
+          </span>
+        </label>
       </fieldset>
 
       <label className="block text-sm">

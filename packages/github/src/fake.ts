@@ -30,6 +30,8 @@ export class FakeGitHub implements GitHubClient {
     inputs: Record<string, string>;
   }[] = [];
   readonly checkRuns: (CheckRunInput & { owner: string; repo: string; id: number })[] = [];
+  /** Issues the platform opened, by "owner/repo" (lower case). */
+  readonly issues = new Map<string, { number: number; title: string; body: string }[]>();
 
   async installationIdForRepo(_owner: string, _repo: string): Promise<number> {
     return 1;
@@ -102,6 +104,21 @@ export class FakeGitHub implements GitHubClient {
         const id = FakeGitHub.nextId++;
         this.checkRuns.push({ ...check, owner, repo, id });
         return id;
+      },
+      createIssue: async (owner, repo, issue) => {
+        this.calls.push(`createIssue ${owner}/${repo}`);
+        fail();
+        const list = this.issues.get(`${owner}/${repo}`.toLowerCase()) ?? [];
+        list.push({ number: list.length + 1, ...issue });
+        this.issues.set(`${owner}/${repo}`.toLowerCase(), list);
+        return list.length;
+      },
+      updateIssue: async (owner, repo, issueNumber, issue) => {
+        this.calls.push(`updateIssue ${owner}/${repo}#${issueNumber}`);
+        fail();
+        const found = this.issues.get(`${owner}/${repo}`.toLowerCase())?.find((i) => i.number === issueNumber);
+        if (!found) throw new GitHubError(404, "Not Found", false);
+        Object.assign(found, Object.fromEntries(Object.entries(issue).filter(([, v]) => v !== undefined)));
       },
       getTree: async (owner, repo, sha) => {
         this.calls.push(`getTree ${owner}/${repo}@${sha.slice(0, 7)}`);

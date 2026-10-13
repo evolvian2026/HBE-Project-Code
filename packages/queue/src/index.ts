@@ -50,6 +50,10 @@ export interface QueuePayloads {
   "lms-reconcile": Record<string, never>;
   /** Make a team's repositories' collaborators match its members. */
   "team-access": { teamId: string };
+  /** Post a repository's released feedback to its GitHub "Feedback" issue (or update it). */
+  "post-feedback": { repositoryId: string };
+  /** Queue post-feedback for repositories whose released feedback changed. */
+  "feedback-sweep": Record<string, never>;
 }
 export type QueueName = keyof QueuePayloads;
 
@@ -94,6 +98,9 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "lms-roster-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
   "lms-reconcile": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 3600, policy: "stately" },
   "team-access": { retryLimit: 5, retryDelay: 30, retryBackoff: true, expireInSeconds: 300, policy: "stately" },
+  // Always sent with singletonKey `feedback-<repositoryId>`.
+  "post-feedback": { retryLimit: 5, retryDelay: 60, retryBackoff: true, expireInSeconds: 120, policy: "stately" },
+  "feedback-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 300, policy: "stately" },
 };
 
 export interface Job<N extends QueueName> {

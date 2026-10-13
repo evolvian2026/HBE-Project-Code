@@ -40,6 +40,7 @@ export default async function EditAssignmentPage({
           weights: a.weights,
           late: a.late_policy,
           regradeWindowDays: a.regrade_window_days,
+          postFeedbackToGithub: a.post_feedback_to_github,
           stages: stageSettings(a.stage_settings),
           spec: a.spec_md,
           published: a.status !== "draft",

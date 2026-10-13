@@ -230,6 +230,8 @@ export interface AssignmentsTable {
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
   mode: Generated<"individual" | "team">;
+  /** Also post released feedback and code comments to the repository as an issue. */
+  post_feedback_to_github: Generated<boolean>;
 }
 
 export interface AssignmentCriteriaTable {
@@ -268,6 +270,12 @@ export interface RepositoriesTable {
   head_pushed_at: Timestamp | null;
   /** The commit the student started from (the template's), cached. */
   start_sha: string | null;
+  /** The "Feedback" issue the platform keeps up to date (post_feedback_to_github). */
+  feedback_issue_number: number | null;
+  /** SHA-256 of the issue body last posted. */
+  feedback_hash: string | null;
+  feedback_posted_at: Timestamp | null;
+  feedback_error: string | null;
   created_at: DefaultTimestamp;
   updated_at: DefaultTimestamp;
 }

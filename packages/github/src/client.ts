@@ -84,6 +84,15 @@ export interface InstallationClient {
     inputs: Record<string, string>,
   ): Promise<void>;
   createCheckRun(owner: string, repo: string, check: CheckRunInput): Promise<number>;
+  /** Opens an issue; returns its number. */
+  createIssue(owner: string, repo: string, issue: { title: string; body: string }): Promise<number>;
+  /** Changes an issue's title or body. */
+  updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    issue: { title?: string; body?: string },
+  ): Promise<void>;
   /** `invited`: GitHub emailed an invitation; `added`: they already had access (org member). */
   addCollaborator(
     owner: string,
@@ -232,6 +241,13 @@ export class GitHubAppClient implements GitHubClient {
           output: { title: check.title.slice(0, 255), summary: check.summary.slice(0, 65_000) },
         });
         return res.id;
+      },
+      createIssue: async (owner, repo, issue) => {
+        const res = await call<{ number: number }>("POST", `/repos/${enc(owner)}/${enc(repo)}/issues`, issue);
+        return res.number;
+      },
+      updateIssue: async (owner, repo, issueNumber, issue) => {
+        await call("PATCH", `/repos/${enc(owner)}/${enc(repo)}/issues/${issueNumber}`, issue);
       },
       getTree: async (owner, repo, sha) => {
         const t = await call<{

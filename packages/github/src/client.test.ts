@@ -144,6 +144,29 @@ describe("GitHubAppClient", () => {
     expect(calls.filter((c) => c.url.endsWith("access_tokens"))).toHaveLength(2);
   });
 
+  it("opens and updates issues", async () => {
+    const { impl, calls } = mockFetch({
+      ...tokenRoute,
+      "POST /repos/alpha-cs/todo-api-ada/issues": () => ({ status: 201, json: { number: 4 } }),
+      "PATCH /repos/alpha-cs/todo-api-ada/issues/4": () => ({ status: 200, json: { number: 4 } }),
+    });
+    const client = new GitHubAppClient({
+      appId: "1",
+      privateKey: pkcs1,
+      apiUrl: "https://api.github.test",
+      fetch: impl,
+    });
+    const gh = client.forInstallation(7);
+    expect(await gh.createIssue("alpha-cs", "todo-api-ada", { title: "Feedback: Todo API", body: "Well done" })).toBe(
+      4,
+    );
+    await gh.updateIssue("alpha-cs", "todo-api-ada", 4, { body: "Well done!" });
+    expect(calls.filter((c) => !c.url.endsWith("access_tokens")).map((c) => [`${c.method} ${c.url}`, c.body])).toEqual([
+      ["POST /repos/alpha-cs/todo-api-ada/issues", { title: "Feedback: Todo API", body: "Well done" }],
+      ["PATCH /repos/alpha-cs/todo-api-ada/issues/4", { body: "Well done!" }],
+    ]);
+  });
+
   it("returns null for a missing repo and 'added' when access already existed", async () => {
     const { impl } = mockFetch({
       ...tokenRoute,

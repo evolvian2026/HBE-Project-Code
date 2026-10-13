@@ -204,6 +204,7 @@ const declared: Record<string, string[]> = {
     "created_at",
     "updated_at",
     "mode",
+    "post_feedback_to_github",
   ],
   assignment_criteria: [
     "id",
@@ -240,6 +241,10 @@ const declared: Record<string, string[]> = {
     "start_sha",
     "created_at",
     "updated_at",
+    "feedback_issue_number",
+    "feedback_hash",
+    "feedback_posted_at",
+    "feedback_error",
   ],
   submissions: [
     "id",

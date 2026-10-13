@@ -18,6 +18,7 @@ import { inFilter, realtimeAuth } from "@/lib/realtime";
 import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../data";
 import { ReviewClaimsCard } from "../../claims";
+import { GithubFeedbackCard } from "../../github-feedback";
 import { RunTestsForm } from "../../forms";
 import { ResolveRegradeForm } from "../../regrade-forms";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "../../regrades";
@@ -57,7 +58,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
   const { data: submission } = await supabase
     .from("submissions")
     .select(
-      "id, user_id, team_id, status, repository_id, final_sha, submitted_at, late_days, finalized_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name), team:teams(name)",
+      "id, user_id, team_id, status, repository_id, final_sha, submitted_at, late_days, finalized_at, grade_released_at, profile:profiles(full_name, email, github_login), repository:repositories(owner, name, feedback_issue_number, feedback_posted_at, feedback_error), team:teams(name)",
     )
     .eq("id", submissionId)
     .eq("assignment_id", a.id)
@@ -73,7 +74,14 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
     late_days: number | null;
     finalized_at: string | null;
     profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
-    repository: { owner: string; name: string } | null;
+    repository: {
+      owner: string;
+      name: string;
+      feedback_issue_number: number | null;
+      feedback_posted_at: string | null;
+      feedback_error: string | null;
+    } | null;
+    grade_released_at: string | null;
     team_id: string | null;
     team: { name: string } | null;
   };
@@ -318,6 +326,16 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
             </div>
           )}
         </Card>
+      )}
+
+      {isCourseStaff && a.post_feedback_to_github && s.repository && (
+        <GithubFeedbackCard
+          ids={gradingIds}
+          repo={s.repository}
+          released={Boolean(s.grade_released_at)}
+          timezone={course.timezone}
+          query={query}
+        />
       )}
 
       {isCourseStaff && s.repository_id && (

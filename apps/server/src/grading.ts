@@ -3,6 +3,7 @@ import { sql, withActor, type Db, type Json } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
 import { teamSubmissionIds } from "./teams.ts";
 import { notify, submissionLinks } from "./notifications.ts";
+import { queueFeedbackPosts } from "./worker/feedback.ts";
 
 /**
  * After a grade version is released (and committed): tell the student, and queue its report.
@@ -211,6 +212,7 @@ export async function releaseGrades(
   opts: { actorId: string; submissionIds?: string[]; queue?: JobQueue },
 ): Promise<ReleaseResult> {
   const releasedGrades: string[] = [];
+  const releasedSubmissions: string[] = [];
   const result = await withActor(db, opts.actorId, async (tx) => {
     let query = tx
       .selectFrom("submissions as s")
@@ -238,6 +240,7 @@ export async function releaseGrades(
         .execute();
       await tx.updateTable("grades").set({ released_at: now }).where("id", "=", c.grade_id).execute();
       releasedGrades.push(c.grade_id);
+      releasedSubmissions.push(c.id);
       result.released++;
     }
 
@@ -256,5 +259,6 @@ export async function releaseGrades(
     return result;
   });
   for (const id of releasedGrades) await announceRelease(db, opts.queue, id);
+  if (opts.queue) await queueFeedbackPosts(db, opts.queue, releasedSubmissions);
   return result;
 }

@@ -2,7 +2,7 @@
 -- api starts them. An institution can be deleted with the suites its runs used. Runs are
 -- published to Realtime.
 begin;
-select plan(7);
+select plan(9);
 
 select tests.seed_two_institutions();
 
@@ -16,6 +16,13 @@ reset role;
 
 select tests.authenticate_as(tests.id('student_a'));
 select is((select count(*)::int from public.run_batches), 0, 'students don''t see re-runs');
+select throws_ok($$ update public.repositories set feedback_issue_number = 9 $$,
+  '42501', null, 'the feedback issue is the worker''s to record');
+reset role;
+
+select tests.authenticate_as(tests.id('teacher_a'));
+select lives_ok($$ update public.assignments set post_feedback_to_github = true where id = tests.id('assign_a1') $$,
+  'instructors choose to post feedback to GitHub');
 reset role;
 
 -- Institution B's own suite, used by its runs and re-runs.

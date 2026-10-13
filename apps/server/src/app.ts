@@ -20,6 +20,7 @@ import { gradingRoutes } from "./routes/grading.ts";
 import { regradeRoutes } from "./routes/regrades.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { rerunRoutes } from "./routes/reruns.ts";
+import { githubFeedbackRoutes } from "./routes/github-feedback.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
@@ -108,10 +109,9 @@ export async function buildApp(
       store: deps.store ?? supabaseObjectStore(deps.settings),
       archive: deps.archive === undefined ? s3ArchiveStore(deps.settings) : deps.archive,
     });
-    await app.register(codeRoutes, {
-      ...apiDeps,
-      github: deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings)),
-    });
+    const github = deps.github ?? lazyGitHubClient(() => createGitHubClient(deps.settings));
+    await app.register(codeRoutes, { ...apiDeps, github });
+    await app.register(githubFeedbackRoutes, { ...apiDeps, github });
     await app.register(ltiRoutes, { ...apiDeps, signIn: deps.signIn ?? supabaseSignIn(deps.settings) });
     await app.register(lmsRoutes, apiDeps);
     await app.register(googleRoutes, apiDeps);

@@ -68,9 +68,10 @@ test("staff review the student's code, comment inline, and the student sees it a
   await signIn(teacher, email("teacher"));
   const [studentRow] = await sql<{ id: string }>("select id from auth.users where email = $1", [email("student")]);
   const [assignment] = await sql<{ id: string }>(
-    `insert into public.assignments (institution_id, course_id, slug, title, stack_profile_id, template_repo, due_at, status, published_at)
+    `insert into public.assignments (institution_id, course_id, slug, title, stack_profile_id, template_repo, due_at, status, published_at,
+                                     post_feedback_to_github)
      values ($1, $2, 'todo-api', 'Todo API', (select id from public.stack_profiles where key = 'node22-api'), 't/t',
-             now() + interval '3 days', 'published', now())
+             now() + interval '3 days', 'published', now(), true)
      returning id`,
     [inst!.id, course!.id],
   );
@@ -116,6 +117,20 @@ test("staff review the student's code, comment inline, and the student sees it a
     "href",
     `https://github.com/${owner}/todo-api-ada/blob/${head}/src/server.js#L2`,
   );
+
+  // The assignment posts feedback to GitHub too: the instructor posts it now (the worker would
+  // within minutes), as a "Feedback" issue in the repository.
+  await teacher.goto(submissionUrl);
+  const github = teacher.locator("#github-feedback");
+  await expect(github.getByText("Not posted yet.")).toBeVisible();
+  await github.getByRole("button", { name: "Post to GitHub now" }).click();
+  await expect(github.getByText("Posted to GitHub.")).toBeVisible();
+  await expect(github.getByTestId("feedback-issue")).toHaveAttribute(
+    "href",
+    `https://github.com/${owner}/todo-api-ada/issues/1`,
+  );
+  await github.getByRole("button", { name: "Post to GitHub now" }).click();
+  await expect(github.getByText("GitHub already shows this feedback.")).toBeVisible();
 
   await studentCtx.close();
   await teacherCtx.close();

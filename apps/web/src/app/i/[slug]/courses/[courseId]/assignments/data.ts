@@ -10,6 +10,7 @@ export interface AssignmentRow {
   spec_md: string;
   status: "draft" | "published" | "closed";
   mode: "individual" | "team";
+  post_feedback_to_github: boolean;
   template_repo: string | null;
   due_at: string;
   release_at: string | null;
@@ -33,7 +34,7 @@ export async function loadAssignment(slug: string, courseId: string, assignmentI
   const { data } = await supabase
     .from("assignments")
     .select(
-      "id, slug, title, spec_md, status, mode, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, regrade_window_days, stage_settings, published_at, triggers, profile:stack_profiles(id, display_name, key, version), suite:grader_suites(id, title, key, version)",
+      "id, slug, title, spec_md, status, mode, post_feedback_to_github, template_repo, due_at, release_at, run_quota_per_day, weights, late_policy, regrade_window_days, stage_settings, published_at, triggers, profile:stack_profiles(id, display_name, key, version), suite:grader_suites(id, title, key, version)",
     )
     .eq("id", assignmentId)
     .eq("course_id", courseId)

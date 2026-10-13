@@ -375,6 +375,25 @@ notified and confirm or decline on the submission page:
 
 GitHub's own match always wins over a claim or an alias. Students hear about the decision.
 
+### 5.5 Feedback on GitHub
+
+As built (Phase 2E). An assignment can opt in ("Also post the feedback and code comments to
+GitHub"). Once a student's grade is released, the worker opens a **Feedback issue** in the
+repository (the team's, on a team assignment) with the written feedback and every inline code
+comment. Each comment is a permalink to the line at the commit it was made on, which GitHub
+shows as a code snippet, followed by the comment. Scores are never posted, and the issue links
+to the platform for the grade. The issue is kept up to date: releasing the grade queues a post,
+and a sweep every 10 minutes re-posts repositories whose feedback or comments changed (an
+unchanged body is not sent again, and a deleted issue is opened again). Staff can also post at
+once from the submission page, which shows the issue and any refusal from GitHub (issues turned
+off, for example).
+
+Why an issue and not a pull request review: a review needs a pull request, and the platform
+would have to create branches in the student's repository for one. That needs write access to
+the students' code (`Contents: write`), which the App deliberately doesn't ask for. The App
+already writes issues. Issues the App opens don't count toward the student's process score
+(only issues students open do).
+
 ---
 
 ## 6. Automated evaluation pipeline
