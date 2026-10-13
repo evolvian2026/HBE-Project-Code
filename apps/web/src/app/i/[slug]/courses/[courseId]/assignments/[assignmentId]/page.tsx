@@ -295,7 +295,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
             <p className="text-sm">
               <a
                 href={`https://github.com/${mine.repository.owner}/${mine.repository.name}`}
-                className="font-medium text-accent hover:underline"
+                className="font-medium link"
               >
                 github.com/{mine.repository.owner}/{mine.repository.name}
               </a>
@@ -316,10 +316,10 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
           actions={
             latestReport ? (
               <span className="flex gap-3 text-sm">
-                <a href={`/i/${slug}/reports/${latestReport.id}/pdf`} className="text-accent hover:underline">
+                <a href={`/i/${slug}/reports/${latestReport.id}/pdf`} className="link">
                   Grade report (PDF)
                 </a>
-                <a href={`/i/${slug}/reports/${latestReport.id}/json`} className="text-accent hover:underline">
+                <a href={`/i/${slug}/reports/${latestReport.id}/json`} className="link">
                   JSON
                 </a>
               </span>
@@ -389,7 +389,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                 {mine.repository ? (
                   <a
                     href={`https://github.com/${mine.repository.owner}/${mine.repository.name}/commit/${mine.final_sha}`}
-                    className="font-mono text-accent hover:underline"
+                    className="font-mono link"
                   >
                     {mine.final_sha.slice(0, 7)}
                   </a>
@@ -407,7 +407,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                 <p>
                   <Link
                     href={`${base}/assignments/${a.id}/submissions/${mine.id}/runs/${gradedRun.id}`}
-                    className="text-accent hover:underline"
+                    className="link"
                   >
                     Graded test run
                   </Link>
@@ -457,7 +457,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
             <EmptyState title="No activity yet">Push your first commit to start.</EmptyState>
           )}
           <p className="mt-4 text-sm">
-            <Link href={`${base}/assignments/${a.id}/submissions/${mine.id}`} className="text-accent hover:underline">
+            <Link href={`${base}/assignments/${a.id}/submissions/${mine.id}`} className="link">
               See your commit history
             </Link>
           </p>
@@ -668,10 +668,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
                         </span>
                       )}
                       {s.repository && (
-                        <a
-                          href={`https://github.com/${s.repository.owner}/${s.repository.name}`}
-                          className="text-accent hover:underline"
-                        >
+                        <a href={`https://github.com/${s.repository.owner}/${s.repository.name}`} className="link">
                           {s.repository.name}
                         </a>
                       )}

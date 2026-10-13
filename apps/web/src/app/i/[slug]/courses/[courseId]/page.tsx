@@ -243,7 +243,7 @@ export default async function CoursePage({ params, searchParams }: Props) {
           title="Progress"
           description={`${students.length} students · ${openAssignments.length} assignments`}
           actions={
-            <a href={`/i/${slug}/courses/${course.id}/grades.csv`} className="text-sm text-accent hover:underline">
+            <a href={`/i/${slug}/courses/${course.id}/grades.csv`} className="text-sm link">
               Export grades (CSV)
             </a>
           }

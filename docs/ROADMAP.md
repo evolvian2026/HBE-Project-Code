@@ -118,6 +118,10 @@ Built so far:
   domain ownership; tested end to end against a stand-in IdP. Admins reset a member's
   two-factor authentication (audited, the person is emailed).
 
+- **2G, hardening (in progress).** Accessibility: every main page of each role, with real
+  data on it, is checked against WCAG 2.1 AA (axe) in light and dark mode in E2E; text links
+  are always underlined, focus is always visible and a skip link leads to the page content.
+
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's
 Classroom scopes, see CONFIGURATION.md §5.2).

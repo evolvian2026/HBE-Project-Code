@@ -172,7 +172,7 @@ export default async function RunPage({ params }: Props) {
         <p className="mt-1 text-sm text-muted">
           Commit{" "}
           {repoUrl ? (
-            <a href={`${repoUrl}/commit/${run.sha}`} className="font-mono text-accent hover:underline">
+            <a href={`${repoUrl}/commit/${run.sha}`} className="font-mono link">
               {run.sha.slice(0, 7)}
             </a>
           ) : (
@@ -305,7 +305,7 @@ export default async function RunPage({ params }: Props) {
                       )}
                       {t.attachments?.trace && stored.has(t.attachments.trace) && (
                         <p className="text-xs text-muted">
-                          <a href={fileUrl(t.attachments.trace)} className="text-accent hover:underline">
+                          <a href={fileUrl(t.attachments.trace)} className="link">
                             Download the Playwright trace
                           </a>{" "}
                           — step through what the browser did: open it with <code>npx playwright show-trace</code> or
@@ -332,7 +332,7 @@ export default async function RunPage({ params }: Props) {
           <ul className="divide-y divide-border text-sm" data-testid="run-files">
             {runFiles.map((f) => (
               <li key={f.name} className="flex items-center justify-between gap-3 py-2">
-                <a href={fileUrl(f.name)} className="text-accent hover:underline">
+                <a href={fileUrl(f.name)} className="link">
                   {FILE_LABEL[f.name] ?? f.name}
                 </a>
                 <span className="text-xs tabular-nums text-muted">{kib(Number(f.size))}</span>

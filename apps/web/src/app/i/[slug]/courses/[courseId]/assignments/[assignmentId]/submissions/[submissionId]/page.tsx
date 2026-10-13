@@ -248,7 +248,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
         <p className="mt-1 text-sm text-muted">
           {s.profile?.github_login && `@${s.profile.github_login} · `}
           {repoUrl ? (
-            <a href={repoUrl} className="text-accent hover:underline">
+            <a href={repoUrl} className="link">
               {s.repository!.owner}/{s.repository!.name}
             </a>
           ) : (
@@ -259,7 +259,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
             <>
               <Link
                 href={`/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${s.id}/code`}
-                className="text-accent hover:underline"
+                className="link"
               >
                 Review code
               </Link>
@@ -276,7 +276,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
               <>
                 Graded commit{" "}
                 {repoUrl ? (
-                  <a href={`${repoUrl}/commit/${s.final_sha}`} className="font-mono text-accent hover:underline">
+                  <a href={`${repoUrl}/commit/${s.final_sha}`} className="font-mono link">
                     {s.final_sha.slice(0, 7)}
                   </a>
                 ) : (
@@ -288,13 +288,13 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
                     · archived source:{" "}
                     <a
                       href={`/i/${slug}/snapshots/${archive.data.id}/tarball`}
-                      className="text-accent hover:underline"
+                      className="link"
                       title={`SHA-256 ${archive.data.tarball_sha256}`}
                     >
                       tar.gz
                     </a>{" "}
                     ·{" "}
-                    <a href={`/i/${slug}/snapshots/${archive.data.id}/bundle`} className="text-accent hover:underline">
+                    <a href={`/i/${slug}/snapshots/${archive.data.id}/bundle`} className="link">
                       git bundle
                     </a>
                   </span>
@@ -386,10 +386,10 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
                         <span>
                           v{r.version} · grade v{r.grade_version} · {formatInZone(r.generated_at, course.timezone)}
                         </span>
-                        <a href={`/i/${slug}/reports/${r.id}/pdf`} className="text-accent hover:underline">
+                        <a href={`/i/${slug}/reports/${r.id}/pdf`} className="link">
                           PDF
                         </a>
-                        <a href={`/i/${slug}/reports/${r.id}/json`} className="text-accent hover:underline">
+                        <a href={`/i/${slug}/reports/${r.id}/json`} className="link">
                           JSON
                         </a>
                         <span className="font-mono text-xs text-muted" title="SHA-256 of the JSON record">
@@ -496,7 +496,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
                           ? `/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${s.id}/code?sha=${c.sha}&path=${encodeURIComponent(c.path)}&line=${c.line}#L${c.line}`
                           : `${repoUrl}/blob/${c.sha}/${c.path}#L${c.line}`
                       }
-                      className="font-mono text-xs text-accent hover:underline"
+                      className="font-mono text-xs link"
                     >
                       {c.path}:{c.line}
                     </a>

@@ -128,7 +128,7 @@ export default async function RecordsPage({
                 </span>
                 <span className="flex items-center gap-3">
                   {e.status === "ready" && (
-                    <a href={`/i/${slug}/records/exports/${e.id}`} className="text-accent hover:underline">
+                    <a href={`/i/${slug}/records/exports/${e.id}`} className="link">
                       Download
                     </a>
                   )}

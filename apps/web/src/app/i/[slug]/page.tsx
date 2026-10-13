@@ -175,7 +175,7 @@ export default async function InstitutionOverview({ params, searchParams }: Prop
       <Card
         title={role === "student" ? "My courses" : "Active courses"}
         actions={
-          <Link href={`/i/${slug}/courses`} className="text-sm text-accent hover:underline">
+          <Link href={`/i/${slug}/courses`} className="text-sm link">
             All courses
           </Link>
         }

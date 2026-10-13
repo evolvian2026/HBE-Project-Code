@@ -79,7 +79,7 @@ export function CsvImportForm({ slug }: { slug: string }) {
       <p className="text-sm text-muted">
         Columns: <code>email</code> or <code>github_login</code>, <code>role</code>, and optionally{" "}
         <code>course_code</code>, <code>course_term</code>, <code>course_role</code>.{" "}
-        <a href={template} download="invitations-template.csv" className="text-accent hover:underline">
+        <a href={template} download="invitations-template.csv" className="link">
           Download a template
         </a>
         .

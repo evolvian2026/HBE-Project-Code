@@ -99,7 +99,7 @@ export async function ClassroomCard({
                   Connected as <span className="text-text">{account.email}</span>
                   <form action={disconnectGoogle} className="inline">
                     {ids}
-                    <button type="submit" className="text-accent hover:underline">
+                    <button type="submit" className="link">
                       Disconnect
                     </button>
                   </form>

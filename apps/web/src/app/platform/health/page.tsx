@@ -52,7 +52,7 @@ export default async function HealthPage() {
         subtitle={
           <>
             Refreshes every 15 seconds.{" "}
-            <Link href="/platform" className="text-accent hover:underline">
+            <Link href="/platform" className="link">
               Back to the console
             </Link>
           </>

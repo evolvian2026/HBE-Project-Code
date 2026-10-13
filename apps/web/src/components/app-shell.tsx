@@ -18,6 +18,12 @@ export function AppShell({
 }) {
   return (
     <div className="min-h-dvh">
+      <a
+        href="#main"
+        className="sr-only rounded-md bg-surface px-3 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50"
+      >
+        Skip to content
+      </a>
       <MaintenanceBanner />
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
@@ -57,7 +63,9 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8 focus:outline-none">
+        {children}
+      </main>
     </div>
   );
 }

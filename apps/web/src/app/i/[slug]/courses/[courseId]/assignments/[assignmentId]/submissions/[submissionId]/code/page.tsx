@@ -314,7 +314,7 @@ export default async function ReviewCodePage({ params, searchParams }: Props) {
                     <span className="text-success">+{f.additions}</span>
                     <span className="text-danger">−{f.deletions}</span>
                     {f.status !== "removed" && (
-                      <Link href={link({ sha: current, path: f.filename })} className="text-accent hover:underline">
+                      <Link href={link({ sha: current, path: f.filename })} className="link">
                         View file
                       </Link>
                     )}
@@ -347,7 +347,7 @@ export default async function ReviewCodePage({ params, searchParams }: Props) {
               <li key={c.id} className="py-2">
                 <Link
                   href={`${link({ sha: c.sha, path: c.path, line: String(c.line) })}#L${c.line}`}
-                  className="font-mono text-xs text-accent hover:underline"
+                  className="font-mono text-xs link"
                 >
                   {c.path}:{c.line} @ {c.sha.slice(0, 7)}
                 </Link>

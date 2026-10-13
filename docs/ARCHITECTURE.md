@@ -827,6 +827,10 @@ Rules that keep the migration cheap (enforced from day one):
   Supabase/Render/AWS/GitHub, export and deletion
   on request, minimal PII, retention limits, and no student data in logs or Sentry breadcrumbs.
 - **Accessibility**: WCAG 2.1 AA; keyboard-navigable diff/review UI; colour-blind-safe status colours.
+  `e2e/tests/accessibility.spec.ts` runs axe (WCAG 2.0/2.1 A and AA rules) over the main pages
+  of every role, in light and dark mode, and fails on any violation. Text links use the `link`
+  utility (always underlined, so they don't rely on colour alone); keyboard focus always shows
+  an outline; the app shell starts with a "Skip to content" link to `<main>`.
 
 ---
 

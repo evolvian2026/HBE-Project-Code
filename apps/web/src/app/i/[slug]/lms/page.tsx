@@ -296,7 +296,7 @@ export default async function LmsPage({
                   <p className="text-xs text-muted">
                     {connName.get(l.lms_connection_id)} ·{" "}
                     {l.course ? (
-                      <a href={`/i/${slug}/courses/${l.course.id}`} className="text-accent hover:underline">
+                      <a href={`/i/${slug}/courses/${l.course.id}`} className="link">
                         {l.course.code} {l.course.name}
                       </a>
                     ) : (
@@ -314,7 +314,7 @@ export default async function LmsPage({
                       </Button>
                     </form>
                   ) : (
-                    <a href={`/i/${slug}/lti/link-course/${l.id}`} className="text-accent hover:underline">
+                    <a href={`/i/${slug}/lti/link-course/${l.id}`} className="link">
                       Link to a course
                     </a>
                   ))}

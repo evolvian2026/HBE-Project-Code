@@ -73,7 +73,7 @@ export function PerformanceTable({ slug, rows, staff }: { slug: string; rows: Pe
                         <a
                           key={rep.id}
                           href={`/i/${slug}/reports/${rep.id}/pdf`}
-                          className="text-accent hover:underline"
+                          className="link"
                           title={`Generated ${formatInZone(rep.generated_at, r.course.timezone)}`}
                         >
                           v{rep.version}

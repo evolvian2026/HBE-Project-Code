@@ -83,7 +83,7 @@ export function AuditLogView({
             Filter
           </Button>
           {/* A plain link: the export is a download, not a page to prefetch. */}
-          <a href={`${basePath}/export${auditQueryString(filters)}`} className="py-2 text-accent hover:underline">
+          <a href={`${basePath}/export${auditQueryString(filters)}`} className="py-2 link">
             Export CSV
           </a>
         </div>
@@ -139,7 +139,7 @@ export function AuditLogView({
         <div className="mt-4">
           <Link
             href={`${basePath}${auditQueryString(filters, { before: String(page.at(-1)!.id) })}`}
-            className="text-sm text-accent hover:underline"
+            className="text-sm link"
           >
             Older entries →
           </Link>

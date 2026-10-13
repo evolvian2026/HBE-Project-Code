@@ -46,7 +46,7 @@ export function GithubFeedbackCard({
             <p className="text-muted">Posted once the grade is released.</p>
           ) : issueUrl ? (
             <p>
-              <a href={issueUrl} className="text-accent hover:underline" data-testid="feedback-issue">
+              <a href={issueUrl} className="link" data-testid="feedback-issue">
                 {repo.owner}/{repo.name}#{repo.feedback_issue_number}
               </a>
               {repo.feedback_posted_at && (

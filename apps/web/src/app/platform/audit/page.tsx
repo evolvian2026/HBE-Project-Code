@@ -30,7 +30,7 @@ export default async function PlatformAuditPage({
         subtitle={
           <>
             Changes outside any institution. Each institution&apos;s own log is for its admins.{" "}
-            <Link href="/platform" className="text-accent hover:underline">
+            <Link href="/platform" className="link">
               Back to the console
             </Link>
           </>

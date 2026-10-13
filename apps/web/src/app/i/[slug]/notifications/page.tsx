@@ -26,7 +26,7 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
       description={unread ? `${unread} unread` : "All caught up"}
       actions={
         <span className="flex items-center gap-3">
-          <a href="/account/notifications" className="text-sm text-accent hover:underline">
+          <a href="/account/notifications" className="text-sm link">
             Email settings
           </a>
           {unread > 0 && (

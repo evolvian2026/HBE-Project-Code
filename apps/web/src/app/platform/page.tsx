@@ -94,11 +94,11 @@ export default async function PlatformPage({
         subtitle={
           <>
             Institutions and GitHub installations across the platform.{" "}
-            <Link href="/platform/health" className="text-accent hover:underline">
+            <Link href="/platform/health" className="link">
               System health
             </Link>
             {" · "}
-            <Link href="/platform/audit" className="text-accent hover:underline">
+            <Link href="/platform/audit" className="link">
               Audit log
             </Link>
           </>
@@ -143,7 +143,7 @@ export default async function PlatformPage({
                               records deleted {new Date(i.purge_after).toISOString().slice(0, 10)}
                               <form action={reopenContract}>
                                 <input type="hidden" name="institutionId" value={i.id} />
-                                <button type="submit" className="text-accent hover:underline">
+                                <button type="submit" className="link">
                                   Reopen contract
                                 </button>
                               </form>
@@ -364,6 +364,7 @@ export default async function PlatformPage({
                     <select
                       name="institutionId"
                       required
+                      aria-label={`Institution for ${i.account_login}`}
                       className="rounded-md border border-border bg-surface px-2 py-1.5"
                     >
                       {institutionList.map((inst) => (
