@@ -2,9 +2,10 @@ import { formatInZone } from "@hbe/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveRuns } from "@/components/live-runs";
 import { isActive, RunStatusBadge, stillUpdating, type RunStatus } from "@/components/evaluation";
 import { Alert, Badge, Card, EmptyState } from "@/components/ui";
+import { realtimeAuth } from "@/lib/realtime";
 import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../../../data";
 
@@ -149,11 +150,12 @@ export default async function RunPage({ params }: Props) {
     (x, y) => ORDER[x.status] - ORDER[y.status] || x.title.localeCompare(y.title),
   );
   const repoUrl = sub?.repository ? `https://github.com/${sub.repository.owner}/${sub.repository.name}` : null;
+  const realtime = await realtimeAuth(supabase);
   const submissionHref = `/i/${slug}/courses/${course.id}/assignments/${a.id}/submissions/${submissionId}`;
 
   return (
     <div className="space-y-6">
-      <AutoRefresh active={stillUpdating({ status, summary })} />
+      <LiveRuns realtime={realtime} filter={`id=eq.${run.id}`} active={stillUpdating({ status, summary })} />
       <div>
         <p className="text-sm text-muted">
           <Link href={`/i/${slug}/courses/${course.id}/assignments/${a.id}`} className="hover:text-text">

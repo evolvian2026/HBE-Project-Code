@@ -2,7 +2,7 @@ import { formatInZone, submissionCutoff, utcToZonedLocal, type ProcessResult } f
 import type { Metadata } from "next";
 import Link from "next/link";
 import { linkGithubAccount } from "@/app/i/[slug]/actions";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveRuns } from "@/components/live-runs";
 import { RunList, runOutcome, stillUpdating, type RunSummary } from "@/components/evaluation";
 import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { MarkdownView } from "@/components/markdown";
@@ -15,6 +15,7 @@ import { ClaimCommitsCard } from "./claims";
 import { LmsGradesCard } from "./lms-grades";
 import { RegradeRequestForm } from "./regrade-forms";
 import { RerunCard } from "./reruns";
+import { inFilter, realtimeAuth } from "@/lib/realtime";
 import { REGRADE_COLUMNS, RegradeHistory, type RegradeRequest } from "./regrades";
 
 type Props = {
@@ -158,6 +159,7 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       utcToZonedLocal(new Date(r.queued_at), course.timezone).slice(0, 10) === today,
   ).length;
   const runsLeft = Math.max(0, a.run_quota_per_day - manualToday);
+  const realtime = mine ? await realtimeAuth(supabase) : null;
   const pastDeadline = Date.now() > new Date(effectiveDue).getTime() + a.late_policy.grace_minutes * 60_000;
   const cutoff = submissionCutoff(new Date(effectiveDue), a.late_policy);
   const gradedRun = mine ? myRuns.find((r) => r.trigger === "deadline" || r.trigger === "regrade") : undefined;
@@ -464,7 +466,11 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
 
       {mine && mine.status === "active" && a.suite && a.status === "published" && (
         <Card title="Automated tests" description={`${a.weights.automated}% of your grade`}>
-          <AutoRefresh active={myRuns.some(stillUpdating)} />
+          <LiveRuns
+            realtime={realtime}
+            filter={inFilter("submission_id", [...myTeamIds])}
+            active={myRuns.some(stillUpdating)}
+          />
           {myRuns.length === 0 ? (
             <EmptyState title="No test runs yet">
               {a.triggers.on_push

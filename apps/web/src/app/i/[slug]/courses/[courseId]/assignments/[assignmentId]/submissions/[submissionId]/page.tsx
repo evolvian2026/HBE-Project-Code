@@ -9,11 +9,12 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveRuns } from "@/components/live-runs";
 import { RunList, stillUpdating, type RunSummary } from "@/components/evaluation";
 import { fmt, GRADE_COLUMNS, GradeBreakdown, type GradeRow } from "@/components/grade";
 import { ProcessBreakdown } from "@/components/process-breakdown";
 import { Badge, Card, EmptyState } from "@/components/ui";
+import { inFilter, realtimeAuth } from "@/lib/realtime";
 import { teamSubmissionIds } from "@/lib/team";
 import { loadAssignment } from "../../../data";
 import { ReviewClaimsCard } from "../../claims";
@@ -164,6 +165,7 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
     body: string;
   }[];
   const runList = (runs.data ?? []) as RunSummary[];
+  const realtime = await realtimeAuth(supabase);
 
   // Grading (staff): rubric, feedback and every grade version.
   const [criteria, scores, feedback, grades, reasons, reports, regradeRows] = isCourseStaff
@@ -488,7 +490,11 @@ export default async function SubmissionPage({ params, searchParams }: Props) {
           )}
 
           <Card title="Test runs" description={a.suite ? a.suite.title : "No automated tests for this assignment"}>
-            <AutoRefresh active={runList.some(stillUpdating)} />
+            <LiveRuns
+              realtime={realtime}
+              filter={inFilter("submission_id", teamIds)}
+              active={runList.some(stillUpdating)}
+            />
             {runList.length === 0 ? (
               <EmptyState title="No test runs yet">
                 {a.triggers.on_push ? "Tests run automatically when you push to the default branch." : undefined}

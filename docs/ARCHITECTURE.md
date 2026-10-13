@@ -728,6 +728,12 @@ Rules that keep the migration cheap (enforced from day one):
   pools; the worker uses session mode only where it needs `LISTEN` or advisory locks.
 - **Realtime**: subscribe with `postgres_changes` on narrow tables (`evaluation_runs`,
   `notifications`) with RLS; use broadcast channels for high-frequency progress events.
+  As built (Phase 2E): `evaluation_runs` is in the `supabase_realtime` publication. Pages that
+  show runs (the student's assignment page, the submission and run pages, a bulk re-run's
+  progress) subscribe as the signed-in person: the server passes their access token, the
+  browser joins the channel with it (so Realtime applies the runs' RLS policy and column
+  grants, and the callback token hash is never sent), filtered to the runs on the page, and
+  re-renders on each change. Without a connection the page polls while a run is in progress.
 - **Storage**: private buckets `run-artifacts`, `submission-archive` and `grade-reports`
   (signed URLs only), plus public `avatars`. Paths are
   `inst/{institution_id}/course/{course_id}/...`, and storage RLS checks institution and course

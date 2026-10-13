@@ -1,5 +1,6 @@
 import { formatInZone } from "@hbe/core";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveRuns } from "@/components/live-runs";
+import { inFilter, realtimeAuth } from "@/lib/realtime";
 import { Badge, Card } from "@/components/ui";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 import { RerunForm } from "./forms";
@@ -68,13 +69,23 @@ export async function RerunCard({
     progress.set(r.batch_id, p);
   }
   const anyActive = [...progress.values()].some((p) => p.active > 0);
+  const realtime = anyActive ? await realtimeAuth(supabase) : null;
 
   return (
     <Card
       title="Re-run tests"
       description="Test every submission again: at the graded commit once the cutoff has passed (this updates the grade), otherwise at the latest push. A team is tested once. Doesn't use students' daily runs."
     >
-      <AutoRefresh active={anyActive} />
+      {anyActive && (
+        <LiveRuns
+          realtime={realtime}
+          filter={inFilter(
+            "batch_id",
+            batches.map((b) => b.id),
+          )}
+          active
+        />
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <RerunForm
           {...ids}

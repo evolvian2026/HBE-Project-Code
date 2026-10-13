@@ -102,7 +102,7 @@ Built so far:
 
 - **2E, runs and GitHub (in progress).** Bulk re-runs of an assignment (every submission or the
   untested ones, with any version of its suite) with progress on the assignment page; staff runs
-  no longer use students' daily quota.
+  no longer use students' daily quota. Live run status over Supabase Realtime (under RLS).
 
 Tested end to end against stand-ins for an LTI platform and for Google; still to be tried
 against real Canvas, Moodle and Google Classroom (Google must also verify the app's

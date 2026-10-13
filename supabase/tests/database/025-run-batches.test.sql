@@ -1,7 +1,8 @@
 -- Bulk re-runs: the course's staff see an assignment's re-runs; students don't, and only the
--- api starts them. An institution can be deleted with the suites its runs used.
+-- api starts them. An institution can be deleted with the suites its runs used. Runs are
+-- published to Realtime.
 begin;
-select plan(6);
+select plan(7);
 
 select tests.seed_two_institutions();
 
@@ -25,6 +26,10 @@ update public.run_batches set grader_suite_id = (select id from public.grader_su
 select lives_ok($$ delete from public.institutions where id = tests.id('inst_b') $$,
   'an institution is deleted with the suites its runs used');
 select is((select count(*)::int from public.grader_suites where key = 'beta-suite'), 0, 'and they''re gone');
+
+-- Live run status: runs are published to Realtime (which applies the same RLS and grants).
+select ok(exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'evaluation_runs'),
+          'run changes are sent live to those who may read them');
 
 select * from finish();
 rollback;
