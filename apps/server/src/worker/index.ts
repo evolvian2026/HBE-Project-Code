@@ -23,6 +23,7 @@ import { dispatchRun, reapRuns, scoreAndReport } from "./evaluation.ts";
 import { noErrorReports, type ErrorReporter } from "../error-reports.ts";
 import { observedQueue } from "./observe.ts";
 import { sweepRetention } from "./retention.ts";
+import { erasePerson } from "../erasure.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
 export async function startWorker(
@@ -124,6 +125,9 @@ export async function startWorker(
     if (Object.values(deleted).some(Boolean)) log.info({ deleted }, "retention sweep");
   });
   await queue.schedule("retention-sweep", "37 3 * * *", {});
+  await queue.work("erase-person", async (job) => {
+    await erasePerson({ ...records, queue: deps.queue }, job.data.requestId);
+  });
 
   // LMS gradebooks and rosters (LTI Advantage).
   const lms = { db: deps.db, settings, queue };

@@ -8,14 +8,20 @@ export interface MemberRow {
   user_id: string;
   role: "admin" | "teacher" | "student";
   status: "active" | "deactivated";
-  profile: { full_name: string | null; email: string | null; github_login: string | null } | null;
+  profile: {
+    full_name: string | null;
+    email: string | null;
+    github_login: string | null;
+    /** Set on the placeholder that holds an erased person's records. */
+    anonymised_at: string | null;
+  } | null;
 }
 
 export async function loadMembers(supabase: Supabase, institutionId: string): Promise<MemberRow[]> {
   const { data } = await supabase
     .from("institution_memberships")
     .select(
-      "id, user_id, role, status, profile:profiles!institution_memberships_user_id_fkey(full_name, email, github_login)",
+      "id, user_id, role, status, profile:profiles!institution_memberships_user_id_fkey(full_name, email, github_login, anonymised_at)",
     )
     .eq("institution_id", institutionId);
   return ((data ?? []) as unknown as MemberRow[]).sort(

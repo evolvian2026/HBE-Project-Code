@@ -33,6 +33,7 @@ export interface QueuePayloads {
   /** Delete run artifacts past their expiry. */
   "artifact-sweep": Record<string, never>;
   "retention-sweep": Record<string, never>;
+  "erase-person": { requestId: string };
   /** Copy new record files to the external archive bucket. */
   "records-replication": Record<string, never>;
   /** Build an institution's full export (record_exports.id). */
@@ -90,6 +91,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "deadline-reminder": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 600, policy: "stately" },
   "artifact-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 900, policy: "stately" },
   "retention-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 900, policy: "stately" },
+  "erase-person": { retryLimit: 5, retryDelay: 60, retryBackoff: true, expireInSeconds: 900 },
   "records-replication": {
     retryLimit: 0,
     retryDelay: 0,

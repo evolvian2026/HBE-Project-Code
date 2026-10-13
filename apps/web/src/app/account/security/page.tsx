@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AccountNav } from "@/components/account-nav";
 import { AppShell, PageTitle } from "@/components/app-shell";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { safeNext } from "@/lib/config";
@@ -24,6 +25,7 @@ export default async function SecurityPage({
   return (
     <AppShell session={session}>
       <PageTitle title="Account security" subtitle={session.email ?? undefined} />
+      <AccountNav current="/account/security" />
       <div className="max-w-2xl space-y-6">
         {query.setup === "required" && (
           <Alert tone="info">Admins must use two-factor authentication. Set up an authenticator app to continue.</Alert>

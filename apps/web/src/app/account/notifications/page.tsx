@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AccountNav } from "@/components/account-nav";
 import { AppShell, PageTitle } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { requireSession } from "@/lib/session";
@@ -19,6 +20,7 @@ export default async function EmailNotificationsPage() {
   return (
     <AppShell session={session}>
       <PageTitle title="Email notifications" subtitle={session.email ?? undefined} />
+      <AccountNav current="/account/notifications" />
       <div className="max-w-2xl">
         <Card
           title="Email me about"

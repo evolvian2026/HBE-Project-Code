@@ -207,6 +207,7 @@ test("the main pages meet WCAG 2.1 AA for every role", async ({ browser }) => {
     `${base}/notifications`,
     "/account/security",
     "/account/notifications",
+    "/account/data",
   ]) {
     await audit(student, path);
   }

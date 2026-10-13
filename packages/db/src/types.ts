@@ -420,7 +420,8 @@ export type NotificationType =
   | "regrade_answered"
   | "records_notice"
   | "account_security"
-  | "commit_claim";
+  | "commit_claim"
+  | "erasure_request";
 
 export interface NotificationsTable {
   id: Generated<string>;
@@ -810,6 +811,29 @@ export interface SsoConnectionsTable {
   updated_at: DefaultTimestamp;
 }
 
+/** A request to erase a person's data in an institution (FR-9.6). */
+export interface ErasureRequestsTable {
+  id: Generated<string>;
+  institution_id: string;
+  subject_id: string | null;
+  subject_role: InstitutionRole;
+  requested_via: "admin" | "self";
+  requested_by: string | null;
+  note: string | null;
+  status: Generated<"requested" | "approved" | "running" | "completed" | "rejected" | "failed">;
+  mode: "anonymise" | "delete" | null;
+  decided_by: string | null;
+  decided_at: Timestamp | null;
+  decision_note: string | null;
+  pseudonym_id: string | null;
+  pseudonym: string | null;
+  pending_objects: Json | null;
+  certificate: Json | null;
+  error: string | null;
+  created_at: DefaultTimestamp;
+  completed_at: Timestamp | null;
+}
+
 /** A bulk re-run of an assignment's submissions. */
 export interface RunBatchesTable {
   id: Generated<string>;
@@ -876,6 +900,7 @@ export interface Database {
   evaluation_runs: EvaluationRunsTable;
   run_batches: RunBatchesTable;
   sso_connections: SsoConnectionsTable;
+  erasure_requests: ErasureRequestsTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;
   rubric_scores: RubricScoresTable;

@@ -7,4 +7,5 @@ export const EMAIL_TYPES = [
   { type: "run_finished", label: "Test results (after every graded or requested run)" },
   { type: "regrade_requested", label: "Regrade requests from students (course staff)" },
   { type: "commit_claim", label: "Commit claims (to confirm, or the decision on yours)" },
+  { type: "erasure_request", label: "Requests to erase personal data (admins), and decisions on yours" },
 ] as const;

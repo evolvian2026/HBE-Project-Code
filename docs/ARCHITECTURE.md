@@ -968,6 +968,31 @@ against local Supabase Storage's S3 API.
   institution admin either **anonymises** the student (removing PII from the profile and
   reports, and replacing it with a pseudonymous ID in grade records) or deletes the records
   outright, following the institution's policy. Either way, the action is audited.
+- As built (Phase 3A): a person asks on **Your data** (`/account/data`), or an admin starts it
+  from the member's row; another admin decides on the **Members** page (the person never
+  can). The `erase-person` job (`apps/server/src/erasure.ts`) works in two steps so a
+  failure can be retried:
+  1. **Database**, in one transaction with row auditing off: a placeholder account ("Erased
+     student 3F7A2C", no email, can't sign in) gets a deactivated membership, and
+     `private.rekey_person` moves every row in the institution that points at the person (any
+     foreign key to `profiles` or to the membership, so new tables are covered) to it.
+     `private.scrub_person` then removes identifiers that aren't foreign keys: git author
+     names, emails and GitHub ids on commits, PRs, issues and pushes; raw webhooks that name
+     them; invitations, LMS and Google links, notifications, queued emails, confirmed git
+     emails; their login in repository names; and, in the audit log, their id (replaced),
+     email and login (erased) and the identifying fields of row snapshots about them. In
+     **delete** mode their solo submissions (with runs, results, grades, reports and
+     snapshots) and repositories are deleted, and on team work their grades, rubric scores,
+     feedback, regrade requests and process scores (the shared runs and snapshots stay). The
+     account itself is deleted unless they belong to another institution. The request then
+     keeps no link to the person: `subject_id` is cleared.
+  2. **Files**: grade reports that stay are re-issued with the pseudonym as the student
+     (same content, new hashes, PDF re-rendered); deleted records' files go from Storage; the
+     archive's copies of either are removed (replication copies the new versions), except
+     under compliance-mode Object Lock, where they wait for the lock to end and the
+     certificate says how many; earlier full exports are deleted.
+  The request ends with a certificate (counts only) and one audit entry, `personal_data`.
+  Database backups age out on their own schedule (14 days demo, PITR window in production).
 
 ---
 

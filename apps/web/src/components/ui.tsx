@@ -6,7 +6,7 @@ const buttonBase =
 const buttonVariants = {
   primary: "bg-accent text-accent-fg hover:bg-accent-hover",
   secondary: "border border-border bg-surface text-text hover:bg-surface-2",
-  danger: "bg-danger text-white hover:opacity-90",
+  danger: "bg-danger text-danger-fg hover:opacity-90",
 } as const;
 
 type Variant = keyof typeof buttonVariants;

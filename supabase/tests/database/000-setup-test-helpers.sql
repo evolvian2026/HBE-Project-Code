@@ -272,6 +272,9 @@ begin
     select distinct s.institution_id, 'old@home.test', s.user_id from public.submissions s
     where s.repository_id is not null and s.institution_id in (tests.id('inst_a'), tests.id('inst_b'));
   -- Single sign-on asked for by each institution.
+  insert into public.erasure_requests (institution_id, subject_id, subject_role, requested_via, requested_by)
+  values (tests.id('inst_a'), tests.id('student_a'), 'student', 'self', tests.id('student_a')),
+         (tests.id('inst_b'), tests.id('student_b'), 'student', 'self', tests.id('student_b'));
   insert into public.sso_connections (institution_id, domains, metadata_url)
     values (tests.id('inst_a'), '{alpha-seed.test}', 'https://idp.alpha-seed.test/m'),
            (tests.id('inst_b'), '{beta-seed.test}', 'https://idp.beta-seed.test/m');
@@ -340,6 +343,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'commit_author_aliases', count(*) from public.commit_author_aliases where institution_id = p_institution
   union all select 'run_batches', count(*) from public.run_batches where institution_id = p_institution
   union all select 'sso_connections', count(*) from public.sso_connections where institution_id = p_institution
+  union all select 'erasure_requests', count(*) from public.erasure_requests where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

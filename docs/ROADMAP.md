@@ -162,6 +162,11 @@ the platform.
 
 ## Phase 3: Scale & extend (ongoing) — in progress
 
+- **3A, erasure and retention.** People ask for their personal data to be erased; admins
+  anonymise (records stay under a pseudonym, identifiers removed everywhere, reports
+  re-issued) or delete, with a certificate and an audit entry. A daily retention sweep removes
+  processed webhook payloads, old emails, long-read notifications and old export ZIPs.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 

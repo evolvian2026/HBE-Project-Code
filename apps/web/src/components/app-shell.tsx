@@ -48,7 +48,7 @@ export function AppShell({
               >
                 Notifications
                 {notifications.unread > 0 && (
-                  <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-white tabular-nums">
+                  <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-accent-fg tabular-nums">
                     {notifications.unread}
                   </span>
                 )}

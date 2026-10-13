@@ -33,6 +33,8 @@ export const AUDITED: Record<string, string> = {
   lms_user_links: "LMS user link",
   lms_assignment_links: "LMS assignment link",
   platform_settings: "Platform setting",
+  mfa_factors: "Two-factor authentication",
+  personal_data: "Personal data erasure",
 };
 
 export interface AuditFilters {
