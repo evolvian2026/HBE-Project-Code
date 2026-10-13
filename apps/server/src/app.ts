@@ -22,6 +22,8 @@ import { runRoutes } from "./routes/runs.ts";
 import { rerunRoutes } from "./routes/reruns.ts";
 import { githubFeedbackRoutes } from "./routes/github-feedback.ts";
 import { stackRoutes } from "./routes/stacks.ts";
+import { ssoRoutes } from "./routes/sso.ts";
+import { supabaseSsoAdmin, type SsoAdmin } from "./sso-admin.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
@@ -50,6 +52,8 @@ export interface AppDeps {
   github?: GitHubClient;
   /** Defaults to Supabase Auth's admin API (signing people in after an LMS launch). */
   signIn?: SignInService;
+  /** Defaults to Supabase Auth's admin API (SAML identity providers). */
+  ssoAdmin?: SsoAdmin;
 }
 
 /** Dependencies of routes that only exist in api processes. */
@@ -120,6 +124,7 @@ export async function buildApp(
     await app.register(claimRoutes, apiDeps);
     await app.register(rerunRoutes, apiDeps);
     await app.register(stackRoutes, apiDeps);
+    await app.register(ssoRoutes, { ...apiDeps, ssoAdmin: deps.ssoAdmin ?? supabaseSsoAdmin(deps.settings) });
   }
 
   return app;

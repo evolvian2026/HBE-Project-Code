@@ -49,8 +49,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Start local Supabase (Postgres, Auth, REST, Storage, Mailpit)
-        run: pnpm db:start
+      - name: Start local Supabase (Postgres, Auth, REST, Storage, Realtime, Mailpit)
+        run: |
+          pnpm db:start
+          # SAML single sign-on, which the CLI can't turn on (the E2E tests sign in through a stand-in IdP).
+          bash scripts/local-saml.sh
 
       - name: Database tests (pgTAP) and schema lint
         run: |
@@ -100,6 +103,8 @@ jobs:
           GOOGLE_OAUTH_CLIENT_ID=fake-google-client
           GOOGLE_OAUTH_CLIENT_SECRET=fake-google-secret
           GOOGLE_FAKE_URL=http://127.0.0.1:54390
+          # Single sign-on is a paid-plan feature; the E2E tests use it with local SAML.
+          HBE__FEATURES__SAML_SSO=true
           ENV
           cd apps/server
           nohup node --env-file="$RUNNER_TEMP/app.env" dist/main.js > "$RUNNER_TEMP/app.log" 2>&1 &

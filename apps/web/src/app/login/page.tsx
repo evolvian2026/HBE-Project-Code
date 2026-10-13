@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Alert, Button, Field } from "@/components/ui";
 import { safeNext } from "@/lib/config";
-import { sendMagicLink, signInWithGithub } from "./actions";
+import { sendMagicLink, signInWithGithub, signInWithSso } from "./actions";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -40,6 +40,27 @@ export default async function LoginPage({
             Email me a sign-in link
           </Button>
         </form>
+
+        <details className="text-sm" open={Boolean(params.sso)}>
+          <summary className="cursor-pointer text-muted hover:text-text">
+            Use your institution&apos;s single sign-on
+          </summary>
+          <form action={signInWithSso} className="mt-3 space-y-3">
+            <input type="hidden" name="next" value={next} />
+            <Field
+              label="Institution email"
+              name="email"
+              id="sso-email"
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="you@uni.edu.sg"
+            />
+            <Button className="w-full" variant="secondary" type="submit">
+              Continue with single sign-on
+            </Button>
+          </form>
+        </details>
       </div>
     </main>
   );

@@ -190,6 +190,15 @@ domain on Render) or vanity domains can be added later without changing the data
   `verifyOtp` with the token hash) and redirects into the app.
 - Configure custom SMTP (e.g. Resend, Postmark, SES). The built-in Supabase mailer is
   rate-limited and not meant for production.
+- **Single sign-on** (as built, Phase 2F): SAML 2.0 through Supabase Auth (paid plan). An
+  institution's admins ask for it with their IdP's metadata and email domains
+  (`sso_connections`); the platform operator turns it on once they've checked the institution
+  owns those domains, which registers the IdP with Supabase Auth (turning it off disables the
+  provider, so people keep their accounts when it comes back). People choose "Use your
+  institution's single sign-on" and enter their address; the domain picks the IdP. Someone
+  signed in through an institution's IdP accepts only that institution's invitations (its IdP
+  vouches for its own people only), and joins as a student without an invitation if the
+  institution allows that, within its student limit. Setup: CONFIGURATION.md §5.3.
 
 ### 4.3 Role model
 

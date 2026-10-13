@@ -127,3 +127,29 @@ export async function registerSuite(formData: FormData) {
   revalidatePath("/platform");
   redirect(`/platform?suite=${encodeURIComponent(`${result.data.key} v${result.data.version}`)}`);
 }
+
+/** The operator turns an institution's single sign-on on (after checking its domains) or declines. */
+export async function reviewSso(formData: FormData) {
+  const v = z
+    .object({
+      connectionId: z.string().uuid(),
+      decision: z.enum(["approve", "reject"]),
+      note: z.string().trim().optional(),
+    })
+    .parse(Object.fromEntries(formData));
+  const result = await apiFetch(`/v1/platform/sso/${v.connectionId}/review`, {
+    method: "POST",
+    body: { decision: v.decision, note: v.note || undefined },
+  });
+  if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
+  revalidatePath("/platform");
+  redirect(`/platform?sso=${v.decision === "approve" ? "on" : "declined"}`);
+}
+
+export async function disableInstitutionSso(formData: FormData) {
+  const institutionId = z.string().uuid().parse(formData.get("institutionId"));
+  const result = await apiFetch(`/v1/institutions/${institutionId}/sso/disable`, { method: "POST" });
+  if (!result.ok) redirect(`/platform?error=${encodeURIComponent(result.message)}`);
+  revalidatePath("/platform");
+  redirect("/platform?sso=off");
+}

@@ -183,6 +183,32 @@ the platform team):
 Each school's Google Workspace admin may need to allow the app (Admin console → Security →
 API controls → App access control) before its teachers can connect.
 
+### 5.3 Single sign-on (SAML)
+
+Single sign-on runs through Supabase Auth's SAML 2.0 support, which needs **Supabase Pro**. It
+is on in the `paid` profile (`features.saml_sso`) and off in `free`; `HBE__FEATURES__SAML_SSO`
+overrides it.
+
+1. In the Supabase dashboard (the platform's project): **Authentication → Sign In / Providers →
+   SAML 2.0**, turn it on. Nothing else is configured there: the platform registers each
+   institution's identity provider through Supabase's admin API with `SUPABASE_SECRET_KEY`.
+2. An institution's admin asks for it on their Settings page (the IdP's metadata URL or file,
+   their email domains, and whether people who sign in join as students) and gives their IdP
+   the service-provider details shown there: entity ID / metadata
+   `https://<project>.supabase.co/auth/v1/sso/saml/metadata` and reply URL `…/sso/saml/acs`.
+3. The platform operator checks that the institution owns the domains (for example a letter
+   from its IT office, or a DNS TXT record it adds), then turns it on from the console.
+   An IdP can assert any address in its domains, so this check matters; public email domains
+   (gmail.com and the like) are refused.
+
+People who already signed in with GitHub or an email link keep that account; an SSO sign-in
+with the same address is a separate account. Someone signed in through an institution's IdP
+only accepts that institution's invitations.
+
+**Local development and CI:** the Supabase CLI can't turn SAML on, so `bash scripts/local-saml.sh`
+(after `pnpm db:start`) re-creates the local Auth container with SAML on. The E2E tests sign in
+through a stand-in IdP (`e2e/tests/fake-idp.ts`).
+
 ## 6. Platform settings in the database
 
 A few switches must be enforced by the database itself, so they live in the

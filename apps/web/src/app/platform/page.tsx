@@ -7,7 +7,16 @@ import { apiFetch } from "@/lib/api";
 import { enforceAdminMfa } from "@/lib/mfa";
 import { requireSession } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createInstitution, mapInstallation, registerSuite, reopenContract, saveBanner, saveLimits } from "./actions";
+import {
+  createInstitution,
+  disableInstitutionSso,
+  mapInstallation,
+  registerSuite,
+  reopenContract,
+  reviewSso,
+  saveBanner,
+  saveLimits,
+} from "./actions";
 
 export const metadata: Metadata = { title: "Platform console" };
 
@@ -42,20 +51,36 @@ export default async function PlatformPage({
   await enforceAdminMfa("/platform");
 
   const supabase = await createSupabaseServerClient();
-  const [institutions, installations, { data: banner }, { data: globalProfiles }] = await Promise.all([
-    apiFetch<{
-      institutions: InstitutionRow[];
-      plan: { institutionConcurrency: number; monthlyRunnerMinutes: number };
-    }>("/v1/platform/institutions"),
-    apiFetch<{ installations: InstallationRow[] }>("/v1/platform/github-installations"),
-    supabase.from("platform_settings").select("value").eq("key", "maintenance_banner").maybeSingle(),
-    supabase
-      .from("stack_profiles")
-      .select("id, display_name, version")
-      .is("institution_id", null)
-      .eq("status", "active")
-      .order("display_name"),
-  ]);
+  const [institutions, installations, { data: banner }, { data: globalProfiles }, { data: ssoRows }] =
+    await Promise.all([
+      apiFetch<{
+        institutions: InstitutionRow[];
+        plan: { institutionConcurrency: number; monthlyRunnerMinutes: number };
+      }>("/v1/platform/institutions"),
+      apiFetch<{ installations: InstallationRow[] }>("/v1/platform/github-installations"),
+      supabase.from("platform_settings").select("value").eq("key", "maintenance_banner").maybeSingle(),
+      supabase
+        .from("stack_profiles")
+        .select("id, display_name, version")
+        .is("institution_id", null)
+        .eq("status", "active")
+        .order("display_name"),
+      supabase
+        .from("sso_connections")
+        .select("id, institution_id, status, domains, metadata_url, join_as_student, created_at")
+        .in("status", ["pending", "active"])
+        .order("created_at"),
+    ]);
+  const sso = (ssoRows ?? []) as {
+    id: string;
+    institution_id: string;
+    status: "pending" | "active";
+    domains: string[];
+    metadata_url: string | null;
+    join_as_student: boolean;
+  }[];
+  const institutionName = (id: string) =>
+    (institutions.ok ? institutions.data.institutions : []).find((i) => i.id === id)?.name ?? id;
   const plan = institutions.ok ? institutions.data.plan : null;
   const institutionList = institutions.ok ? institutions.data.institutions : [];
   const unlinked = installations.ok
@@ -85,6 +110,11 @@ export default async function PlatformPage({
         {query.mapped && <Alert tone="success">Installation assigned.</Alert>}
         {query.limits && <Alert tone="success">Limits saved.</Alert>}
         {query.suite && <Alert tone="success">Test suite {query.suite} registered.</Alert>}
+        {query.sso && (
+          <Alert tone="success">
+            Single sign-on {query.sso === "declined" ? "request declined" : `turned ${query.sso}`}.
+          </Alert>
+        )}
         {query.banner && <Alert tone="success">Notice {query.banner === "on" ? "shown" : "removed"}.</Alert>}
         {!institutions.ok && <Alert tone="error">Could not load institutions: {institutions.message}</Alert>}
 
@@ -191,6 +221,60 @@ export default async function PlatformPage({
             </form>
           </Card>
         </div>
+
+        <Card
+          title="Single sign-on"
+          description="Turn it on only once you've checked the institution owns the domains: its identity provider can sign anyone in with an address there."
+        >
+          {sso.length === 0 ? (
+            <EmptyState title="No requests" />
+          ) : (
+            <ul className="divide-y divide-border text-sm" data-testid="sso-requests">
+              {sso.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-start justify-between gap-3 py-2.5">
+                  <span>
+                    <span className="font-medium">{institutionName(c.institution_id)}</span>{" "}
+                    <Badge tone={c.status === "active" ? "success" : "warning"}>
+                      {c.status === "active" ? "on" : "asked"}
+                    </Badge>
+                    <span className="block text-xs text-muted">
+                      {c.domains.join(", ")} · {c.metadata_url ?? "metadata file"}
+                      {c.join_as_student && " · open to students"}
+                    </span>
+                  </span>
+                  {c.status === "pending" ? (
+                    <form
+                      action={reviewSso}
+                      className="flex flex-wrap items-center gap-2"
+                      aria-label={`Review single sign-on for ${institutionName(c.institution_id)}`}
+                    >
+                      <input type="hidden" name="connectionId" value={c.id} />
+                      <input
+                        name="note"
+                        aria-label="Note"
+                        placeholder="Note (optional)"
+                        className="rounded-md border border-border bg-surface px-2 py-1.5"
+                      />
+                      <Button type="submit" name="decision" value="approve" variant="secondary">
+                        Turn on
+                      </Button>
+                      <Button type="submit" name="decision" value="reject" variant="secondary">
+                        Decline
+                      </Button>
+                    </form>
+                  ) : (
+                    <form action={disableInstitutionSso}>
+                      <input type="hidden" name="institutionId" value={c.institution_id} />
+                      <Button type="submit" variant="secondary">
+                        Turn off
+                      </Button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
         <Card
           title="Register a test suite version"

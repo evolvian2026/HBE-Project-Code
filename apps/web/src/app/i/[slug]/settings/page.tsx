@@ -7,6 +7,7 @@ import { formatBytes } from "@/lib/format";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InstitutionSettingsForm } from "./forms";
+import { SsoCard, type SsoConnection } from "./sso";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -19,6 +20,7 @@ interface Usage {
   storageBytes: { artifacts: number; snapshots: number; exports: number };
   gradeReports: number;
   emails: { sent: number; failed: number };
+  ssoAvailable: boolean;
 }
 
 const TRIGGER: Record<string, string> = {
@@ -29,14 +31,25 @@ const TRIGGER: Record<string, string> = {
   regrade: "re-grades",
 };
 
-export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function SettingsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const ctx = await requireMembership(slug);
   if (!ctx.isAdmin) notFound();
   const supabase = await createSupabaseServerClient();
-  const [{ data: inst }, usageResult] = await Promise.all([
+  const [{ data: inst }, usageResult, { data: sso }] = await Promise.all([
     supabase.from("institutions").select("name, settings").eq("id", ctx.institution.id).single(),
     apiFetch<Usage>(`/v1/institutions/${ctx.institution.id}/usage`),
+    supabase
+      .from("sso_connections")
+      .select("status, domains, metadata_url, join_as_student, review_note")
+      .eq("institution_id", ctx.institution.id)
+      .maybeSingle(),
   ]);
   const settings = institutionSettings(inst?.settings);
   const usage = usageResult.ok ? usageResult.data : null;
@@ -119,6 +132,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           </dl>
         )}
       </Card>
+      <SsoCard
+        slug={slug}
+        connection={(sso as SsoConnection | null) ?? null}
+        available={usage?.ssoAvailable ?? false}
+        query={query}
+      />
     </div>
   );
 }

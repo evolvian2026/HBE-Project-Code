@@ -109,7 +109,8 @@ Prerequisites: Node 22 (`.nvmrc`), Docker, and pnpm (`corepack enable`).
 
 ```bash
 pnpm install
-pnpm db:start                                  # local Supabase: Postgres, Auth, REST, Storage, Mailpit
+pnpm db:start                                  # local Supabase: Postgres, Auth, REST, Storage, Realtime, Mailpit
+bash scripts/local-saml.sh                     # optional: SAML single sign-on in the local Auth server
 pnpm env:local                                 # writes .env.local with the local stack's keys
 pnpm dev                                       # web on :3000, api + worker on :4000
 ```

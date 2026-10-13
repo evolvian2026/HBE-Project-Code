@@ -36,3 +36,21 @@ export async function sendMagicLink(formData: FormData) {
   if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
   redirect(`/login?sent=${encodeURIComponent(email.data)}`);
 }
+
+/** Sign-in through the institution's identity provider, found by the email's domain. */
+export async function signInWithSso(formData: FormData) {
+  const next = safeNext(formData.get("next"));
+  const email = z.string().trim().toLowerCase().email().safeParse(formData.get("email"));
+  if (!email.success) redirect(`/login?sso=1&error=${encodeURIComponent("Enter your institution email address")}`);
+  const domain = email.data.split("@")[1]!;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signInWithSSO({ domain, options: { redirectTo: callbackUrl(next) } });
+  if (error || !data?.url) {
+    redirect(
+      `/login?sso=1&error=${encodeURIComponent(
+        `${domain} doesn't use single sign-on here. Sign in with GitHub or an email link instead.`,
+      )}`,
+    );
+  }
+  redirect(data.url);
+}

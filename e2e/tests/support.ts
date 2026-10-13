@@ -57,7 +57,7 @@ export async function waitForEmail(to: string, subject: string, timeout = 90_000
 export async function signIn(page: Page, email: string): Promise<void> {
   await page.goto("/login");
   const sentAfter = Date.now();
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Email me a sign-in link" }).click();
   await expect(page.getByText(`Check ${email} for a sign-in link.`)).toBeVisible();
   await page.goto(await waitForMagicLink(email, sentAfter));

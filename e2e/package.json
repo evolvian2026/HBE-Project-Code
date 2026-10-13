@@ -13,6 +13,7 @@
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "pg": "8.23.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "xml-crypto": "6.3.2"
   }
 }

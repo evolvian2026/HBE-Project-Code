@@ -57,6 +57,8 @@ export async function institutionUsage(db: Db, settings: Settings, institutionId
     storageBytes: storage,
     gradeReports: reports.rows[0]!.n,
     emails: emails.rows[0]!,
+    /** Whether the plan offers single sign-on (Supabase Pro). */
+    ssoAvailable: settings.profile.features.saml_sso,
   };
 }
 

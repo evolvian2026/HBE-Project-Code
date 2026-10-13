@@ -791,6 +791,24 @@ export interface EvaluationRunsTable {
   batch_id: string | null;
 }
 
+/** An institution's single sign-on (SAML) through Supabase Auth. */
+export interface SsoConnectionsTable {
+  id: Generated<string>;
+  institution_id: string;
+  domains: string[];
+  metadata_url: string | null;
+  metadata_xml: string | null;
+  status: Generated<"pending" | "active" | "rejected" | "disabled">;
+  supabase_provider_id: string | null;
+  join_as_student: Generated<boolean>;
+  requested_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: Timestamp | null;
+  review_note: string | null;
+  created_at: DefaultTimestamp;
+  updated_at: DefaultTimestamp;
+}
+
 /** A bulk re-run of an assignment's submissions. */
 export interface RunBatchesTable {
   id: Generated<string>;
@@ -856,6 +874,7 @@ export interface Database {
   grader_suites: GraderSuitesTable;
   evaluation_runs: EvaluationRunsTable;
   run_batches: RunBatchesTable;
+  sso_connections: SsoConnectionsTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;
   rubric_scores: RubricScoresTable;
