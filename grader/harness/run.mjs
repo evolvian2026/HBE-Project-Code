@@ -6,10 +6,11 @@
  *     --profile '<stack profile JSON>' --api-url <url> [--token <token>] [--out results.json]
  *     [--timeout-minutes 20] [--no-callback] [--keep]
  *
- * Stages: contract → lint → student tests → build → health → the suite's test stages
- * (docs/ARCHITECTURE.md §6). Lint and student tests run when the assignment turns them on
- * (`options` in the profile JSON) and the profile defines them; the assignment can also turn
- * off hidden-test stages by kind (`api`, `browser`).
+ * Stages: contract → lint → student tests → coverage → static analysis → build → health →
+ * Lighthouse → the suite's test stages (docs/ARCHITECTURE.md §6). The optional stages run when
+ * the assignment turns them on (`options` in the profile JSON, which the platform sets only
+ * for stages the profile can run); the assignment can also turn off hidden-test stages by kind
+ * (`api`, `browser`).
  * The student's app runs with Docker Compose on an internal network with no internet access;
  * the hidden tests run in a separate container on that network, so the app never sees them.
  * Failures caused by the platform (Docker Hub limits, a full disk, a broken suite) are
@@ -24,6 +25,7 @@ import { parseArgs } from "node:util";
 import { createCallbacks } from "./lib/callback.mjs";
 import { prepareCompose, redact } from "./lib/compose.mjs";
 import { looksLikeInfraFailure, run } from "./lib/exec.mjs";
+import { lighthouseResult } from "./lib/quality.mjs";
 import { createToolchains } from "./lib/toolchain.mjs";
 
 const RUNNER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "runner");
@@ -31,6 +33,9 @@ const TESTER_IMAGE = process.env.HBE_TESTER_IMAGE ?? "node:22-bookworm-slim";
 /** Browser stages: Playwright's image plus playwright-core (harness/browser/Dockerfile). */
 const BROWSER_IMAGE = "hbe-browser-tester:1.56.1";
 const BROWSER_DOCKERFILE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "browser");
+/** Lighthouse: the same Playwright image plus the Lighthouse CLI (harness/lighthouse/Dockerfile). */
+const LIGHTHOUSE_IMAGE = "hbe-lighthouse:13.5.0";
+const LIGHTHOUSE_DOCKERFILE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "lighthouse");
 const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 const GATING = ["contract", "build", "health"];
 
@@ -158,15 +163,22 @@ function tester(mode, config, timeoutMs, { outDir } = {}) {
   );
 }
 
-/** Builds the browser tester image unless this runner already has it. */
-async function ensureBrowserImage() {
-  if ((await run("docker", ["image", "inspect", BROWSER_IMAGE], { timeoutMs: 30_000 })).code === 0) return;
-  log(`building ${BROWSER_IMAGE}`);
-  const r = await run("docker", ["build", "-t", BROWSER_IMAGE, BROWSER_DOCKERFILE_DIR], {
+/** Builds one of the harness's images unless this runner already has it. */
+async function ensureImage(tag, dir, what) {
+  if ((await run("docker", ["image", "inspect", tag], { timeoutMs: 30_000 })).code === 0) return;
+  log(`building ${tag}`);
+  const r = await run("docker", ["build", "-t", tag, dir], {
     timeoutMs: remaining(15 * 60_000),
     maxOutput: 64 * 1024,
   });
-  if (r.code !== 0) throw new InfraError(`Could not build the browser test image: ${tailLines(r.stderr, 5)}`);
+  if (r.code !== 0) throw new InfraError(`Could not build ${what}: ${tailLines(r.stderr, 5)}`);
+}
+const ensureBrowserImage = () => ensureImage(BROWSER_IMAGE, BROWSER_DOCKERFILE_DIR, "the browser test image");
+
+/** The service browsers open: `frontend`, or the only one. */
+function frontService() {
+  const names = Object.keys(profile.services ?? {});
+  return names.includes("frontend") ? "frontend" : names[0];
 }
 
 /**
@@ -174,7 +186,12 @@ async function ensureBrowserImage() {
  * screenshots and traces of failed browser tests. Text is redacted like everything else.
  */
 const artifacts = [];
-const CONTENT_TYPES = { ".png": "image/png", ".zip": "application/zip", ".xml": "application/xml" };
+const CONTENT_TYPES = {
+  ".png": "image/png",
+  ".zip": "application/zip",
+  ".xml": "application/xml",
+  ".json": "application/json",
+};
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 function keepArtifact(name, { text, file }) {
@@ -352,8 +369,7 @@ async function testStage(def) {
     await ensureBrowserImage();
     outDir = path.join(workdir, `out-${def.key}`);
     mkdirSync(outDir, { recursive: true });
-    const names = Object.keys(profile.services ?? {});
-    config.browser = { service: names.includes("frontend") ? "frontend" : names[0] };
+    config.browser = { service: frontService() };
   }
   const limit = remaining(10 * 60_000);
   const r = await tester("tests", config, limit, { outDir });
@@ -398,6 +414,61 @@ async function testStage(def) {
     );
   }
   return { status: anyFailed ? "failed" : "passed", tests };
+}
+
+/**
+ * Lighthouse (performance, accessibility, best practices) on the app's front page, from a
+ * container on the app's network. The HTTPS audits are skipped: the grader serves the app over
+ * plain HTTP on its private network, which says nothing about the student's work.
+ */
+async function lighthouse({ share, targets }) {
+  await ensureImage(LIGHTHOUSE_IMAGE, LIGHTHOUSE_DOCKERFILE_DIR, "the Lighthouse image");
+  const url = `${serviceUrls[frontService()]}/`;
+  const outDir = path.join(workdir, "out-lighthouse");
+  mkdirSync(outDir, { recursive: true });
+  const limit = remaining(4 * 60_000);
+  const r = await run(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--network",
+      network,
+      ...["--memory", "2g", "--pids-limit", "1024", "--shm-size", "1g"],
+      ...["--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`, "-e", "HOME=/tmp"],
+      ...["-v", `${outDir}:/out`],
+      LIGHTHOUSE_IMAGE,
+      "lighthouse",
+      url,
+      "--output=json",
+      "--output-path=/out/report.json",
+      "--only-categories=performance,accessibility,best-practices",
+      "--skip-audits=is-on-https,redirects-http",
+      "--preset=desktop",
+      "--max-wait-for-load=45000",
+      "--chrome-flags=--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage",
+      "--quiet",
+    ],
+    { timeoutMs: limit, maxOutput: 256 * 1024 },
+  );
+  const report = path.join(outDir, "report.json");
+  let lhr = null;
+  try {
+    lhr = existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : null;
+  } catch {
+    lhr = null;
+  }
+  if (!lhr) {
+    if (r.timedOut) {
+      const message = `Lighthouse did not finish within ${Math.round(limit / 60_000)} minutes: your front page may never finish loading.`;
+      return lighthouseResult({ runtimeError: { code: "TIMEOUT", message } }, { targets, share, url });
+    }
+    infraCheck(`${r.stdout}${r.stderr}`, "Lighthouse");
+    throw new InfraError(`Lighthouse could not run: ${tailLines(r.stderr, 5)}`);
+  }
+  keepArtifact("lighthouse/report.json", { file: report });
+  const outcome = lighthouseResult(lhr, { targets, share, url });
+  return { ...outcome, tests: outcome.tests.map((t) => cleanTest(t, "")) };
 }
 
 /**
@@ -455,16 +526,24 @@ async function main() {
   await snapshot();
   try {
     let ok = await stage("contract", contract);
-    for (const key of ["lint", "student_tests"]) {
+    // The stages that work on the repository (they need no running app).
+    const repoStages = {
+      lint: (opts) => toolchains.runStage("lint", profile.stages.lint, opts.share),
+      student_tests: (opts) => toolchains.runStage("student_tests", profile.stages.student_tests, opts.share),
+      coverage: (opts) => toolchains.runCoverage(profile.stages.coverage, opts),
+      static_analysis: (opts) => toolchains.runStaticAnalysis(opts, profile.ignore_paths ?? []),
+    };
+    for (const [key, runIt] of Object.entries(repoStages)) {
+      const opts = options.stages?.[key];
+      if (typeof opts?.share !== "number") continue;
       const def = profile.stages?.[key];
-      const share = options.stages?.[key]?.share;
-      if (!def?.image || !def?.run || typeof share !== "number") continue;
+      if (key !== "static_analysis" && (!def?.image || !def?.run)) continue;
       if (ok) {
         await stage(key, async () => {
-          const outcome = await toolchains.runStage(key, def, share);
+          const outcome = await runIt(opts);
           return { ...outcome, tests: outcome.tests.map((t) => cleanTest(t, "")) };
         });
-      } else results.stages.push({ key, status: "skipped", duration_ms: 0, share });
+      } else results.stages.push({ key, status: "skipped", duration_ms: 0, share: opts.share });
     }
     for (const [key, fn] of [
       ["build", build],
@@ -472,6 +551,11 @@ async function main() {
     ]) {
       if (ok) ok = await stage(key, fn);
       else results.stages.push({ key, status: "skipped", duration_ms: 0 });
+    }
+    const lighthouseOpts = options.stages?.lighthouse;
+    if (typeof lighthouseOpts?.share === "number" && lighthouseOpts.targets) {
+      if (ok) await stage("lighthouse", () => lighthouse(lighthouseOpts));
+      else results.stages.push({ key: "lighthouse", status: "skipped", duration_ms: 0, share: lighthouseOpts.share });
     }
     const blockedBy = results.stages.find((s) => GATING.includes(s.key) && s.status !== "passed")?.key;
     for (const def of manifest.stages) {

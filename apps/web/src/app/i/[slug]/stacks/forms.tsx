@@ -19,6 +19,14 @@ const EXAMPLE = JSON.stringify(
         report: "junit",
         junit: "junit.xml",
       },
+      coverage: {
+        image: "node:22-bookworm-slim",
+        setup: "npm ci",
+        run: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info",
+        format: "lcov",
+        file: "lcov.info",
+        exclude: ["test/**"],
+      },
     },
     services: { backend: { port: 4000, health: "/health" } },
     datastores: ["postgres:16"],
@@ -64,8 +72,9 @@ export function AddStackProfileForm({ slug }: { slug: string }) {
           className="mt-1 block w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs"
         />
         <span className="mt-1 block text-xs text-muted">
-          How the grader recognises, builds and starts the app, which services to wait for, and what lint and the
-          student&apos;s own tests run. Versions can&apos;t change once added: publish a new version instead.
+          How the grader recognises, builds and starts the app, which services to wait for, and what lint, the
+          student&apos;s own tests and their coverage (an lcov or coverage-py report) run. Versions can&apos;t change
+          once added: publish a new version instead.
         </span>
       </label>
       <FormStatus state={state} />

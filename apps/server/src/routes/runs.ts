@@ -24,7 +24,7 @@ const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 const artifactName = z.string().regex(/^[a-z0-9_-]{1,40}\/[A-Za-z0-9_.-]{1,160}$/);
 const artifactFile = z.object({
   name: artifactName,
-  content_type: z.enum(["image/png", "application/zip", "text/plain", "application/xml"]),
+  content_type: z.enum(["image/png", "application/zip", "text/plain", "application/xml", "application/json"]),
   size: z
     .number()
     .int()
@@ -53,6 +53,7 @@ const resultsSchema = z.object({
         duration_ms: z.number().int().nonnegative().default(0),
         message: text(4000).optional(),
         share: z.number().min(0).max(100).optional(),
+        ratio: z.number().min(0).max(1).optional(),
         tests: z
           .array(
             z.object({

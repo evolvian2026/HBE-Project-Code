@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
-import { handle } from "../src/app.js";
+import { handle, readJson } from "../src/app.js";
 
 let base;
 const server = createServer(handle);
@@ -24,4 +25,10 @@ test("GET /hello greets by name", async () => {
 
 test("unknown routes answer 404", async () => {
   assert.equal((await fetch(`${base}/nope`)).status, 404);
+});
+
+test("readJson parses the body, and returns null for invalid JSON", async () => {
+  assert.deepEqual(await readJson(Readable.from(['{"title":', '"Buy milk"}'])), { title: "Buy milk" });
+  assert.deepEqual(await readJson(Readable.from([])), {});
+  assert.equal(await readJson(Readable.from(["{oops"])), null);
 });

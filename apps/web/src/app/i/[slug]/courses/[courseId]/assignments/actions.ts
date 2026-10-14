@@ -54,6 +54,16 @@ const assignmentSchema = z
     stageLintShare: num(0, 50),
     stageStudentTests: z.literal("on").optional(),
     stageStudentTestsShare: num(0, 50),
+    stageCoverage: z.literal("on").optional(),
+    stageCoverageShare: num(0, 50),
+    stageCoverageTarget: num(1, 100),
+    stageStaticAnalysis: z.literal("on").optional(),
+    stageStaticAnalysisShare: num(0, 50),
+    stageLighthouse: z.literal("on").optional(),
+    stageLighthouseShare: num(0, 50),
+    stageLighthousePerformance: num(1, 100),
+    stageLighthouseAccessibility: num(1, 100),
+    stageLighthouseBestPractices: num(1, 100),
     spec: z.string().max(100_000),
   })
   .refine((v) => v.automated + v.rubric + v.process === 100, {
@@ -71,6 +81,17 @@ export async function saveAssignment(_prev: ActionState, formData: FormData): Pr
   const stages: StageSettings = {
     lint: { enabled: Boolean(v.stageLint), share: v.stageLintShare },
     student_tests: { enabled: Boolean(v.stageStudentTests), share: v.stageStudentTestsShare },
+    coverage: { enabled: Boolean(v.stageCoverage), share: v.stageCoverageShare, target: v.stageCoverageTarget },
+    static_analysis: { enabled: Boolean(v.stageStaticAnalysis), share: v.stageStaticAnalysisShare },
+    lighthouse: {
+      enabled: Boolean(v.stageLighthouse),
+      share: v.stageLighthouseShare,
+      targets: {
+        performance: v.stageLighthousePerformance,
+        accessibility: v.stageLighthouseAccessibility,
+        best_practices: v.stageLighthouseBestPractices,
+      },
+    },
     api: { enabled: Boolean(v.stageApi) },
     browser: { enabled: Boolean(v.stageBrowser) },
   };

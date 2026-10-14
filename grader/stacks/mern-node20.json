@@ -16,6 +16,14 @@
       "junit": "backend/junit.xml",
       "setup": "npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
       "report": "junit"
+    },
+    "coverage": {
+      "run": "cd backend && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info",
+      "image": "node:20-bookworm-slim",
+      "setup": "npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
+      "format": "lcov",
+      "file": "backend/lcov.info",
+      "exclude": ["backend/test/**", "**/*.test.js", "**/eslint.config.js"]
     }
   },
   "services": {

@@ -1,7 +1,8 @@
 /**
  * Grades every starter template (templates/<profile>) with the real harness and its stack
- * profile (grader/stacks/<profile>.json), with lint and the student's tests turned on: a
- * student's first push must build, start and pass everything. Needs Docker with internet
+ * profile (grader/stacks/<profile>.json), with every optional stage turned on at its default
+ * targets (lint, the student's tests, coverage, static analysis, and Lighthouse where there is
+ * a front end): a student's first push must build, start and pass everything. Needs Docker with internet
  * access (the builds and the lint/test setup install dependencies); CI job "Starter templates".
  */
 import assert from "node:assert/strict";
@@ -31,12 +32,17 @@ const SUITES = {
 describe("starter templates (Docker)", { timeout: 2_400_000 }, () => {
   for (const [key, suite] of Object.entries(SUITES)) {
     it(`${key}: builds, starts, lints, passes its own tests and the sample suite`, async () => {
-      const profile = {
-        key,
-        version: 1,
-        ...JSON.parse(readFileSync(path.join(root, "stacks", `${key}.json`), "utf8")),
-        options: { stages: { lint: { share: 10 }, student_tests: { share: 10 } }, skip_kinds: [] },
+      const stack = JSON.parse(readFileSync(path.join(root, "stacks", `${key}.json`), "utf8"));
+      const stages = {
+        lint: { share: 10 },
+        student_tests: { share: 10 },
+        coverage: { share: 10, target: 80 },
+        static_analysis: { share: 10 },
       };
+      if (stack.services.frontend) {
+        stages.lighthouse = { share: 10, targets: { performance: 70, accessibility: 90, best_practices: 90 } };
+      }
+      const profile = { key, version: 1, ...stack, options: { stages, skip_kinds: [] } };
       const out = path.join(work, `${key}.json`);
       await promisify(execFile)(
         process.execPath,
@@ -55,6 +61,10 @@ describe("starter templates (Docker)", { timeout: 2_400_000 }, () => {
         .flatMap((s) => (s.tests?.length ? s.tests.map((t) => ({ ...t, stage: s.key })) : [{ ...s, stage: s.key }]))
         .filter((t) => t.status !== "passed");
       assert.deepEqual(failed, [], JSON.stringify(failed, null, 2));
+      assert.deepEqual(
+        results.stages.filter((s) => s.share !== undefined).map((s) => s.key),
+        Object.keys(stages),
+      );
     });
   }
 });

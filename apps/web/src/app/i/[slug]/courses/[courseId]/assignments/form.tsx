@@ -1,7 +1,7 @@
 "use client";
 
-import { slugifyAssignment, type StageSettings } from "@hbe/core";
-import { useActionState, useState, useTransition, type FormEvent } from "react";
+import { slugifyAssignment, type OptionalStage, type StageSettings } from "@hbe/core";
+import { useActionState, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
 import { saveAssignment } from "./actions";
@@ -40,7 +40,7 @@ export function AssignmentForm({
   slug: string;
   courseId: string;
   timezone: string;
-  profiles: { id: string; label: string; description: string | null }[];
+  profiles: { id: string; label: string; description: string | null; stages: Record<OptionalStage, boolean> }[];
   suites: { id: string; label: string }[];
   values: AssignmentFormValues;
 }) {
@@ -56,6 +56,8 @@ export function AssignmentForm({
   const [shortName, setShortName] = useState(values.slug);
   const [touched, setTouched] = useState(Boolean(values.id));
   const locked = values.published;
+  const [profileId, setProfileId] = useState(values.stackProfileId || profiles[0]?.id || "");
+  const can = profiles.find((p) => p.id === profileId)?.stages;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -109,7 +111,8 @@ export function AssignmentForm({
           <span className="font-medium">Stack profile</span>
           <select
             name="stackProfileId"
-            defaultValue={values.stackProfileId}
+            value={profileId}
+            onChange={(e) => setProfileId(e.target.value)}
             required
             className={selectClass}
             disabled={locked}
@@ -167,9 +170,9 @@ export function AssignmentForm({
             ))}
           </div>
         </div>
-        <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+        <div className="mt-4 border-t border-border pt-4">
           <div className="space-y-2 text-sm">
-            <span className="font-medium">Stages</span>
+            <span className="font-medium">Hidden test stages</span>
             <label className="flex items-center gap-2">
               <input type="checkbox" name="stageApi" defaultChecked={values.stages.api.enabled} />
               Hidden API tests
@@ -180,37 +183,79 @@ export function AssignmentForm({
             </label>
             <span className="block text-xs text-muted">Used when the suite has stages of that kind.</span>
           </div>
-          <div className="space-y-3 text-sm">
-            {(
-              [
-                ["Lint", "lint", "stageLint", "Lint the code with the stack's linter"],
-                ["StudentTests", "student_tests", "stageStudentTests", "Run the student's own tests"],
-              ] as const
-            ).map(([suffix, key, name, label]) => (
-              <div key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" name={name} defaultChecked={values.stages[key].enabled} />
-                  {label}
-                </label>
-                <label className="flex items-center gap-1 text-muted">
-                  worth
-                  <input
-                    type="number"
-                    name={`stage${suffix}Share`}
-                    min={0}
-                    max={50}
-                    defaultValue={values.stages[key].share}
-                    aria-label={`${label}: share of the automated score (%)`}
-                    className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
+        </div>
+        <div className="mt-4 border-t border-border pt-4 text-sm">
+          <span className="font-medium">Optional stages</span>
+          <p className="mt-1 text-xs text-muted">
+            Each is worth a share of the automated score, together at most 50%; 0% shows the results without counting
+            them. Lint, tests and coverage use the stack profile&apos;s commands (e.g. <code>npm run lint</code>,{" "}
+            <code>npm test</code>).
+          </p>
+          <ul className="mt-2 divide-y divide-border">
+            <OptionalStageRow
+              id="Lint"
+              label="Lint the code with the stack's linter"
+              setting={values.stages.lint}
+              available={can?.lint}
+            />
+            <OptionalStageRow
+              id="StudentTests"
+              label="Run the student's own tests"
+              setting={values.stages.student_tests}
+              available={can?.student_tests}
+            />
+            <OptionalStageRow
+              id="Coverage"
+              label="Measure their tests' line coverage"
+              setting={values.stages.coverage}
+              available={can?.coverage}
+            >
+              <NumberInput
+                name="stageCoverageTarget"
+                label="Full credit at"
+                suffix="% of lines"
+                ariaLabel="Line coverage for full credit (%)"
+                min={1}
+                max={100}
+                defaultValue={values.stages.coverage.target}
+              />
+            </OptionalStageRow>
+            <OptionalStageRow
+              id="StaticAnalysis"
+              label="Check for security mistakes (static analysis)"
+              setting={values.stages.static_analysis}
+              available={can?.static_analysis}
+            />
+            <OptionalStageRow
+              id="Lighthouse"
+              label="Audit the front page with Lighthouse"
+              setting={values.stages.lighthouse}
+              available={can?.lighthouse}
+              unavailable="Needs a stack with a web front end."
+            >
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                <span className="text-muted">Full credit at scores of</span>
+                {(
+                  [
+                    ["stageLighthousePerformance", "performance", "performance"],
+                    ["stageLighthouseAccessibility", "accessibility", "accessibility"],
+                    ["stageLighthouseBestPractices", "best_practices", "best practices"],
+                  ] as const
+                ).map(([name, key, label]) => (
+                  <NumberInput
+                    key={name}
+                    name={name}
+                    label=""
+                    suffix={label}
+                    ariaLabel={`Lighthouse ${label} score for full credit`}
+                    min={1}
+                    max={100}
+                    defaultValue={values.stages.lighthouse.targets[key]}
                   />
-                  % of the automated score
-                </label>
-              </div>
-            ))}
-            <span className="block text-xs text-muted">
-              These use the commands the stack profile defines (e.g. <code>npm run lint</code>, <code>npm test</code>).
-            </span>
-          </div>
+                ))}
+              </span>
+            </OptionalStageRow>
+          </ul>
         </div>
       </fieldset>
 
@@ -347,5 +392,94 @@ export function AssignmentForm({
         {pending ? "Saving…" : values.id ? "Save changes" : "Create draft"}
       </Button>
     </form>
+  );
+}
+
+const numberClass = "w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text";
+
+function NumberInput({
+  name,
+  label,
+  suffix,
+  min,
+  max,
+  defaultValue,
+  ariaLabel,
+}: {
+  name: string;
+  label: string;
+  suffix: string;
+  min: number;
+  max: number;
+  defaultValue: number;
+  ariaLabel: string;
+}) {
+  return (
+    <label className="flex items-center gap-1 text-muted">
+      {label}
+      <input
+        type="number"
+        name={name}
+        min={min}
+        max={max}
+        required
+        defaultValue={defaultValue}
+        aria-label={ariaLabel}
+        className={numberClass}
+      />
+      {suffix}
+    </label>
+  );
+}
+
+/**
+ * One optional stage: on or off, what it is worth, and its targets. A stage the stack can't
+ * run keeps its values in hidden fields, so switching the stack back doesn't lose them.
+ */
+function OptionalStageRow({
+  id,
+  label,
+  setting,
+  available,
+  unavailable = "Not available for this stack profile.",
+  children,
+}: {
+  id: string;
+  label: string;
+  setting: { enabled: boolean; share: number };
+  available: boolean | undefined;
+  unavailable?: string;
+  children?: ReactNode;
+}) {
+  const off = available === false;
+  return (
+    <li className="grid gap-x-6 gap-y-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="space-y-2">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" name={`stage${id}`} defaultChecked={setting.enabled} disabled={off} />
+          {label}
+        </label>
+        {off && <p className="pl-6 text-xs text-muted">{unavailable}</p>}
+        {children && (
+          <div className="pl-6" hidden={off}>
+            {children}
+          </div>
+        )}
+      </div>
+      <label className={`${off ? "hidden" : "flex"} items-center gap-1 pl-6 text-muted sm:pl-0`}>
+        worth
+        <input
+          type="number"
+          name={`stage${id}Share`}
+          min={0}
+          max={50}
+          required
+          defaultValue={setting.share}
+          aria-label={`${label}: share of the automated score (%)`}
+          className={numberClass}
+        />
+        % of the automated score
+      </label>
+    </li>
   );
 }

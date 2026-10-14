@@ -87,6 +87,20 @@ describe("scoreRun with stage shares", () => {
     const blocked = run([...gates("failed"), lint("passed"), ownTests("passed"), api]);
     expect(scoreRun(blocked)).toMatchObject({ score: 0, blockedBy: "contract" });
   });
+
+  it("gives partial credit where a stage reports a ratio (coverage, Lighthouse)", () => {
+    // 64% coverage against an 80% target: 0.8 of its 20%, though its one test failed.
+    const coverage = { key: "coverage", status: "failed" as const, duration_ms: 1, share: 20, ratio: 0.8 };
+    const stages = [...gates(), { ...coverage, tests: [test("coverage", "failed")] }, api];
+    // 20% × 0.8 + 80% × 3/4 = 16 + 60
+    expect(scoreRun(run(stages))).toMatchObject({ score: 76, passed: 1, failed: 2 });
+    expect(scoreRun(run([...gates("failed"), coverage, api])).score).toBe(0);
+  });
+
+  it("counts a stage worth 0% for nothing (informational)", () => {
+    const info = { key: "static_analysis", status: "failed" as const, duration_ms: 1, share: 0 };
+    expect(scoreRun(run([...gates(), { ...info, tests: [test("rule", "failed")] }, api])).score).toBe(75);
+  });
 });
 
 describe("checkRunSummary", () => {

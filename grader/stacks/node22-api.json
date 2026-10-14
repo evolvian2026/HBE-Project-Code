@@ -16,6 +16,14 @@
       "junit": "junit.xml",
       "setup": "npm ci --no-audit --no-fund",
       "report": "junit"
+    },
+    "coverage": {
+      "run": "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info",
+      "image": "node:22-bookworm-slim",
+      "setup": "npm ci --no-audit --no-fund",
+      "format": "lcov",
+      "file": "lcov.info",
+      "exclude": ["test/**", "**/*.test.js", "eslint.config.js"]
     }
   },
   "services": {

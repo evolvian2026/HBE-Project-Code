@@ -30,9 +30,25 @@ const containerStage = z
   .strict();
 
 /**
+ * Line coverage of the student's own tests: `run` writes a report to `file` (relative to the
+ * repository) in an `lcov` (Node, Jest, Vitest, c8) or `coverage-py` (`coverage json`) format.
+ * Files matching `exclude` (globs, e.g. test files) don't count.
+ */
+const coverageStage = z
+  .object({
+    run: command,
+    image,
+    setup: command.optional(),
+    format: z.enum(["lcov", "coverage-py"]),
+    file: relativePath,
+    exclude: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
+  })
+  .strict();
+
+/**
  * What a stack profile tells the grader harness (grader/harness): how to recognise, build and
- * start the student's app, which services to wait for, and what lint and the student's own
- * tests run. The same shape as grader/stacks/*.json.
+ * start the student's app, which services to wait for, and what lint, the student's own
+ * tests and their coverage run. The same shape as grader/stacks/*.json.
  */
 export const stackDefinitionSchema = z
   .object({
@@ -42,6 +58,7 @@ export const stackDefinitionSchema = z
         build: z.object({ run: command }).strict().optional(),
         lint: containerStage.optional(),
         student_tests: containerStage.optional(),
+        coverage: coverageStage.optional(),
       })
       .strict()
       .default({}),

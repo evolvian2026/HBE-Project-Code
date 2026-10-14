@@ -172,6 +172,13 @@ the platform.
   students who may need help, with the reasons (rule-based, staff only, never affecting
   grades). The same course compared across terms, with figures withheld for cohorts under 5.
 
+- **3C, optional grader stages.** Assignments can add test coverage (against a target, with
+  partial credit), static analysis (the platform's Semgrep rules for common security
+  mistakes, which the repository can't switch off) and Lighthouse (performance, accessibility
+  and best practices of the front page, against targets), each worth a share of the automated
+  score or shown without counting. The starter templates pass all of them. Similarity
+  detection between submissions follows.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 

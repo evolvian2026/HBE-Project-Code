@@ -238,7 +238,7 @@ describe("dispatching", () => {
     expect(github.dispatches).toHaveLength(1);
   });
 
-  it("tells the grader which stages the assignment runs, and what lint and the student's tests are worth", async () => {
+  it("tells the grader which stages the assignment runs, and what the optional ones are worth", async () => {
     const s = await scenario();
     await db
       .updateTable("assignments")
@@ -261,6 +261,33 @@ describe("dispatching", () => {
     // The scenario's profile (mern-node20) defines lint and student tests; only lint is on.
     expect(profile.options).toEqual({ stages: { lint: { share: 15 } }, skip_kinds: ["browser"] });
     expect(profile.stages.lint).toMatchObject({ image: "node:20-bookworm-slim", run: expect.stringContaining("lint") });
+
+    // Lighthouse needs a front end (mern has one); static analysis works on any repository.
+    await db
+      .updateTable("assignments")
+      .set({
+        stage_settings: JSON.stringify({
+          static_analysis: { enabled: true, share: 0 },
+          lighthouse: { enabled: true, share: 10, targets: { performance: 60 } },
+          coverage: { enabled: true, share: 5, target: 70 },
+        }) as Json,
+      })
+      .where("id", "=", s.assignmentId)
+      .execute();
+    const second = await queuedRun(s);
+    await db
+      .updateTable("evaluation_runs")
+      .set({
+        stack_profile_id: sql<string>`(select stack_profile_id from assignments where id = ${s.assignmentId})`,
+      })
+      .where("id", "=", second.id)
+      .execute();
+    await dispatchRun({ db, queue: new FakeQueue(), github, settings: roomy, log }, second.id);
+    expect(JSON.parse(github.dispatches[1]!.inputs.stack_profile!).options.stages).toEqual({
+      coverage: { share: 5, target: 70 },
+      static_analysis: { share: 0 },
+      lighthouse: { share: 10, targets: { performance: 60, accessibility: 90, best_practices: 90 } },
+    });
   });
 
   it("defers when the institution is at its concurrency cap", async () => {
@@ -457,6 +484,33 @@ describe("grader callbacks (per-run token)", () => {
       key: "lint",
       share: 20,
     });
+  });
+
+  it("gives partial credit for coverage below its target", async () => {
+    const s = await scenario();
+    const { runId, token } = await dispatched(s);
+    await post(`/v1/runs/${runId}/started`, token);
+    const withCoverage = {
+      ...results,
+      stages: [
+        ...results.stages.slice(0, 1),
+        {
+          key: "coverage",
+          status: "failed",
+          duration_ms: 900,
+          share: 20,
+          ratio: 0.5,
+          message: "Your tests cover 40% of the lines (40 of 100); the target is 80%.",
+          tests: [{ id: "coverage", title: "Your tests cover at least 80% of the code", status: "failed", weight: 1 }],
+        },
+        ...results.stages.slice(1),
+      ],
+    };
+    expect((await post(`/v1/runs/${runId}/results`, token, withCoverage)).statusCode).toBe(200);
+    // 20% × 0.5 + 80% × 1/4 of the hidden tests' weight = 30
+    expect(await scoreAndReport({ db, queue: new FakeQueue(), github: new FakeGitHub(), settings, log }, runId)).toBe(
+      30,
+    );
   });
 
   it("does not grade infrastructure errors", async () => {

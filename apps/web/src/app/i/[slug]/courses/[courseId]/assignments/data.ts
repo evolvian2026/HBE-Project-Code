@@ -1,4 +1,4 @@
-import { institutionSettings } from "@hbe/core";
+import { availableStages, institutionSettings, type ProfileShape } from "@hbe/core";
 import { notFound } from "next/navigation";
 import { requireCourse } from "@/lib/course";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -54,7 +54,7 @@ export async function loadProfiles(institutionId: string, keep?: string) {
   const [{ data }, { data: inst }] = await Promise.all([
     supabase
       .from("stack_profiles")
-      .select("id, display_name, description, version, institution_id, status")
+      .select("id, display_name, description, version, institution_id, status, definition")
       .or(`institution_id.is.null,institution_id.eq.${institutionId}`)
       .order("display_name"),
     supabase.from("institutions").select("settings").eq("id", institutionId).single(),
@@ -65,6 +65,7 @@ export async function loadProfiles(institutionId: string, keep?: string) {
     id: p.id,
     label: `${p.display_name} · v${p.version}${p.institution_id ? "" : " (global)"}`,
     description: p.description,
+    stages: availableStages((p.definition as ProfileShape | null) ?? undefined),
   }));
 }
 

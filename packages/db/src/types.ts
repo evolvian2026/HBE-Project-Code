@@ -625,7 +625,7 @@ export interface RunArtifactsTable {
   run_id: string;
   name: string;
   path: string;
-  content_type: "image/png" | "application/zip" | "text/plain" | "application/xml";
+  content_type: "image/png" | "application/zip" | "text/plain" | "application/xml" | "application/json";
   size: number;
   expires_at: Timestamp | null;
   created_at: DefaultTimestamp;

@@ -5,6 +5,7 @@ import {
   institutionLimits,
   scoreRun,
   stageSettings,
+  type ProfileShape,
   type RunResults,
   type StageResult,
 } from "@hbe/core";
@@ -90,12 +91,12 @@ export async function dispatchRun(
   }
 
   // The profile, plus which of its stages this assignment runs (and what they're worth).
-  const definition = (run.definition ?? {}) as { stages?: Record<string, unknown> };
+  const definition = (run.definition ?? {}) as ProfileShape;
   const profileJson = JSON.stringify({
     key: run.profile_key,
     version: run.profile_version,
     ...definition,
-    options: harnessOptions(stageSettings(run.stage_settings), definition.stages),
+    options: harnessOptions(stageSettings(run.stage_settings), definition),
   });
 
   const [graderOwner, graderRepo] = (settings.env.GRADER_REPO ?? "").split("/");

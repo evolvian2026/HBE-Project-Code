@@ -46,6 +46,14 @@ const withStages = (options) =>
         report: "junit",
         junit: "junit.xml",
       },
+      coverage: {
+        image: "node:22-bookworm-slim",
+        setup: "npm ci --no-audit --no-fund",
+        run: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info",
+        format: "lcov",
+        file: "lcov.info",
+        exclude: ["test/**"],
+      },
     },
     options,
   });
@@ -183,6 +191,59 @@ describe("grader harness (Docker)", { timeout: 900_000 }, () => {
       message: "Turned off for this assignment.",
     });
     assert.equal(stage(results, "student_tests"), undefined);
+  });
+
+  it("measures coverage, runs static analysis the repository can't switch off, and audits the page", async () => {
+    const submission = path.join(work, "quality");
+    cpSync(path.join(root, "test-fixtures/todo-api-good"), submission, { recursive: true });
+    writeFileSync(path.join(submission, "debug.mjs"), "export const run = (code) => eval(code); // nosemgrep\n");
+    writeFileSync(path.join(submission, ".semgrepignore"), "*\n");
+    const targets = { performance: 50, accessibility: 50, best_practices: 50 };
+    const options = {
+      stages: {
+        coverage: { share: 10, target: 100 },
+        static_analysis: { share: 10 },
+        lighthouse: { share: 10, targets },
+      },
+      skip_kinds: [],
+    };
+    const results = await harness(submission, [], withStages(options));
+    assert.equal(results.infra_error, null);
+    assert.deepEqual(
+      results.stages.map((s) => [s.key, s.share]),
+      [
+        ["contract", undefined],
+        ["coverage", 10],
+        ["static_analysis", 10],
+        ["build", undefined],
+        ["health", undefined],
+        ["lighthouse", 10],
+        ["api", undefined],
+      ],
+    );
+
+    const coverage = stage(results, "coverage");
+    assert.match(coverage.message, /^Your tests cover [\d.]+% of the lines \(\d+ of \d+\); the target is 100%\.$/);
+    // The fixture tests validate.mjs completely (server.mjs only runs in the app).
+    assert.deepEqual([coverage.status, coverage.ratio], ["passed", 1]);
+    assert.match(coverage.tests[0].evidence["lowest coverage"], /^ {2}100% {2}validate\.mjs/);
+
+    const analysis = stage(results, "static_analysis");
+    assert.equal(analysis.status, "failed");
+    const evalRule = analysis.tests.find((t) => t.id === "static_analysis.js-eval");
+    assert.equal(evalRule.status, "failed");
+    assert.equal(evalRule.weight, 3);
+    assert.match(evalRule.evidence.findings, /^debug\.mjs:1 {2}export const run/);
+    assert.ok(analysis.tests.filter((t) => t !== evalRule).every((t) => t.status === "passed"));
+    assert.ok(!analysis.tests.some((t) => t.id.startsWith("static_analysis.py-")));
+
+    const lighthouse = stage(results, "lighthouse");
+    assert.deepEqual(
+      lighthouse.tests.map((t) => t.id),
+      ["lighthouse.performance", "lighthouse.accessibility", "lighthouse.best_practices"],
+    );
+    for (const t of lighthouse.tests) assert.match(t.message, /^Scored \d+; the target is 50\.$/);
+    assert.ok(lighthouse.ratio > 0 && lighthouse.ratio <= 1);
   });
 
   it("runs browser tests, with a screenshot and a trace of each failure", async () => {

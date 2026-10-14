@@ -33,6 +33,20 @@ describe("stack profile definitions", () => {
     }
   });
 
+  it("are the same in the database as in the grader (the global profiles' stages)", async () => {
+    for (const file of readdirSync(stacksDir).filter((f) => f.endsWith(".json"))) {
+      const def = JSON.parse(readFileSync(resolve(stacksDir, file), "utf8"));
+      const row = await db
+        .selectFrom("stack_profiles")
+        .select("definition")
+        .where("key", "=", file.replace(/\.json$/, ""))
+        .where("institution_id", "is", null)
+        .orderBy("version", "desc")
+        .executeTakeFirstOrThrow();
+      expect((row.definition as { stages: unknown }).stages, file).toEqual(def.stages);
+    }
+  });
+
   it("refuse what the grader couldn't run safely or at all", () => {
     const bad = (patch: Record<string, unknown>) => stackDefinitionSchema.safeParse({ ...mern, ...patch }).success;
     expect(bad({ detect: ["/etc/passwd"] })).toBe(false);

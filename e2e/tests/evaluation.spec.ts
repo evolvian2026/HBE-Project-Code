@@ -107,24 +107,41 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
       { timeout: 300_000 },
     );
   };
-  // What the worker sends for this assignment: the profile, with lint and the student's tests on.
+  // What the worker sends for this assignment: the profile, with lint and the student's tests
+  // on, and coverage and static analysis shown without counting.
   await grade(runId, "suites/sample/todo-api", {
-    stages: { lint: { share: 10 }, student_tests: { share: 20 } },
+    stages: {
+      lint: { share: 10 },
+      student_tests: { share: 20 },
+      coverage: { share: 0, target: 80 },
+      static_analysis: { share: 0 },
+    },
     skip_kinds: [],
   });
 
   // The page updates by itself: the score, and each failure with what was expected.
-  // 10% lint (passed) + 20% own tests (one failed) + 70% × 70% of the hidden tests' weight = 59.
-  await expect(page.getByText("6 of 9 tests passed.")).toBeVisible({ timeout: 60_000 });
+  // 10% lint (passed) + 20% own tests (one failed) + 70% × 70% of the hidden tests' weight = 59
+  // (coverage and the static analysis rules count as tests, but for none of the score).
+  await expect(page.getByText("14 of 17 tests passed.")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("59 / 100")).toBeVisible();
   await expect(page.getByText("Lint · 10% of the score")).toBeVisible();
+  await expect(page.getByText("Static analysis · 0% of the score")).toBeVisible();
+  await expect(page.getByText(/^No issues found by \d+ rules\.$/)).toBeVisible();
+  await expect(page.getByText("Test coverage · 0% of the score")).toBeVisible();
   const own = page.getByTestId("test-student_tests");
   await expect(own.getByText("1 of 2 tests failed.")).toBeVisible();
   await own.getByText("Failing tests", { exact: true }).click();
 
   // The run's files are kept: logs, the student's test output and JUnit report.
   const runFiles = page.getByTestId("run-files");
-  for (const name of ["Build log", "Your app's logs", "Your tests' output", "Your tests' JUnit report"]) {
+  for (const name of [
+    "Build log",
+    "Your app's logs",
+    "Your tests' output",
+    "Your tests' JUnit report",
+    "Coverage report (LCOV)",
+    "Static analysis findings (Semgrep JSON)",
+  ]) {
     await expect(runFiles.getByRole("link", { name })).toBeVisible();
   }
   const appLog = await page.request.get(
@@ -146,14 +163,14 @@ test("a student runs the hidden tests and sees what to fix", async ({ page, base
   // One of today's runs is used.
   await page.goto(assignmentUrl);
   await expect(tests.getByText("2 of 3 test runs left today.")).toBeVisible();
-  await expect(tests.getByText("6/9 passed · 59")).toBeVisible();
+  await expect(tests.getByText("14/17 passed · 59")).toBeVisible();
 
   // The instructor sees the same run, with the staff notes.
   const teacherContext = await browser.newContext();
   const teacher = await teacherContext.newPage();
   await signIn(teacher, email("teacher"));
   await teacher.goto(assignmentUrl);
-  await expect(teacher.getByText("tests 6/9 passed · 59")).toBeVisible();
+  await expect(teacher.getByText("tests 14/17 passed · 59")).toBeVisible();
   await teacher.goto(`${assignmentUrl}/submissions/${submission!.id}/runs/${runId}`);
   await expect(
     teacher.getByTestId("test-todos.delete").getByText(/usually means the delete handler is a stub/),

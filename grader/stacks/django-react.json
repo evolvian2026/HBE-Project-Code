@@ -15,6 +15,23 @@
       "image": "python:3.12-slim",
       "setup": "pip install --quiet --disable-pip-version-check -r backend/requirements.txt",
       "report": "text"
+    },
+    "coverage": {
+      "run": "cd backend && coverage run --source=. manage.py test; status=$?; coverage json --quiet -o coverage.json; exit $status",
+      "image": "python:3.12-slim",
+      "setup": "pip install --quiet --disable-pip-version-check -r backend/requirements.txt coverage==7.16.1",
+      "format": "coverage-py",
+      "file": "backend/coverage.json",
+      "exclude": [
+        "**/migrations/**",
+        "**/tests/**",
+        "**/tests.py",
+        "**/test_*.py",
+        "backend/manage.py",
+        "backend/config/wsgi.py",
+        "backend/config/asgi.py",
+        "**/management/commands/wait_for_db.py"
+      ]
     }
   },
   "services": {

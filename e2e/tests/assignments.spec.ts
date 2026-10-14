@@ -58,6 +58,24 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
   const sample = await suite.locator("option", { hasText: "Todo API (sample suite)" }).getAttribute("value");
   await suite.selectOption(sample!);
   await teacher.getByLabel("On pull requests").uncheck();
+  // Optional stages: Lighthouse needs a front end; the rest are worth a share of the score.
+  const stack = teacher.getByLabel("Stack profile");
+  await stack.selectOption({ label: "Node.js API (Node 22) · v1 (global)" });
+  const lighthouse = teacher.getByLabel("Audit the front page with Lighthouse", { exact: true });
+  await expect(lighthouse).toBeDisabled();
+  await expect(teacher.getByText("Needs a stack with a web front end.")).toBeVisible();
+  await stack.selectOption({ label: "MERN (Node 20, React, MongoDB) · v1 (global)" });
+  await lighthouse.check();
+  await teacher.getByLabel("Lighthouse accessibility score for full credit").fill("95");
+  await teacher.getByLabel("Measure their tests' line coverage", { exact: true }).check();
+  await teacher.getByLabel("Line coverage for full credit (%)").fill("70");
+  await teacher.getByLabel("Check for security mistakes (static analysis)", { exact: true }).check();
+  await teacher
+    .getByLabel("Check for security mistakes (static analysis): share of the automated score (%)")
+    .fill("35");
+  await teacher.getByRole("button", { name: "Create draft" }).click();
+  await expect(teacher.getByText(/can be worth at most 50% of the automated score together/)).toBeVisible();
+  await teacher.getByLabel("Check for security mistakes (static analysis): share of the automated score (%)").fill("0");
   await teacher
     .getByLabel("Specification (Markdown)")
     .fill("## Goal\n\nBuild a **todo** API.\n\n- `GET /todos`\n- `POST /todos`");
@@ -66,6 +84,15 @@ test("a teacher drafts, completes and publishes an assignment; students see thei
   await expect(teacher.getByText("draft", { exact: true })).toBeVisible();
   await expect(teacher.getByRole("strong")).toHaveText("todo"); // Markdown rendered
   await expect(teacher.getByText("Todo API (sample suite)")).toBeVisible();
+  const [saved] = await sql<{ stage_settings: Record<string, unknown> }>(
+    "select stage_settings from public.assignments where course_id = $1",
+    [course!.id],
+  );
+  expect(saved!.stage_settings).toMatchObject({
+    coverage: { enabled: true, share: 10, target: 70 },
+    static_analysis: { enabled: true, share: 0 },
+    lighthouse: { enabled: true, share: 10, targets: { performance: 70, accessibility: 95, best_practices: 90 } },
+  });
 
   // Students can't see drafts.
   await student.goto(`/i/${slug}/courses/${course!.id}`);

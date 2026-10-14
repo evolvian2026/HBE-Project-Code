@@ -30,6 +30,12 @@ export interface StageResult {
    * the assignment sets them). Stages without a share split the rest by test weight.
    */
   share?: number;
+  /**
+   * Partial credit (0–1) for a stage with a share, where passing or failing its tests is too
+   * coarse: coverage against its target, Lighthouse scores against theirs. Without it the
+   * stage's tests decide.
+   */
+  ratio?: number;
   tests?: TestResult[];
 }
 
@@ -82,7 +88,8 @@ export function scoreRun(results: RunResults): RunScore {
   for (const stage of results.stages) {
     const share = Number.isFinite(stage.share) ? Math.min(100, Math.max(0, stage.share!)) : null;
     if (share === null) continue;
-    const r = ratio((stage.tests ?? []).filter(counted));
+    const partial = Number.isFinite(stage.ratio) ? Math.min(1, Math.max(0, stage.ratio!)) : null;
+    const r = partial === null ? ratio((stage.tests ?? []).filter(counted)) : blocked ? 0 : partial;
     if (r === null) continue;
     parts.push({ share, ratio: r });
     shared += share;

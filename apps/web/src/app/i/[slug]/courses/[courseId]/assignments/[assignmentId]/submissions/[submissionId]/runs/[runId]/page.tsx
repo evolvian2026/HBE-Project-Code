@@ -26,6 +26,9 @@ const STAGE_LABEL: Record<string, string> = {
   ui: "Browser tests",
   lint: "Lint",
   student_tests: "Your own tests",
+  coverage: "Test coverage",
+  static_analysis: "Static analysis",
+  lighthouse: "Lighthouse",
 };
 
 const TEST_TONE = { passed: "success", failed: "danger", error: "warning", skipped: "neutral" } as const;
@@ -67,6 +70,11 @@ const FILE_LABEL: Record<string, string> = {
   "lint/output.log": "Lint output",
   "student_tests/output.log": "Your tests' output",
   "student_tests/junit.xml": "Your tests' JUnit report",
+  "coverage/output.log": "Coverage run output",
+  "coverage/lcov.info": "Coverage report (LCOV)",
+  "coverage/coverage.json": "Coverage report (coverage.py)",
+  "static_analysis/semgrep.json": "Static analysis findings (Semgrep JSON)",
+  "lighthouse/report.json": "Lighthouse report (JSON, for the Lighthouse viewer)",
 };
 const kib = (bytes: number) => (bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KB`);
 
@@ -79,6 +87,9 @@ const EVIDENCE_LABEL: Record<string, string> = {
   step: "The step that failed",
   playwright: "Browser details",
   console: "Browser console",
+  "lowest coverage": "Files with the lowest coverage",
+  findings: "Where",
+  "audits to improve": "Audits to improve",
 };
 const seconds = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
@@ -144,8 +155,12 @@ export default async function RunPage({ params }: Props) {
     blockedBy?: string | null;
   };
   const stages = summary.stages ?? [];
-  /** Lint and the student's own tests are worth a share of the score, not points. */
-  const shareOf = new Map(stages.filter((s) => s.share !== undefined).map((s) => [s.key, s.share!]));
+  /** The optional stages are worth a share of the score, not points (one-test stages show it per test). */
+  const testsIn = new Map<string, number>();
+  for (const t of (tests.data ?? []) as TestRow[]) testsIn.set(t.stage, (testsIn.get(t.stage) ?? 0) + 1);
+  const shareOf = new Map(
+    stages.filter((s) => s.share !== undefined && testsIn.get(s.key) === 1).map((s) => [s.key, s.share!]),
+  );
   const rows = ((tests.data ?? []) as TestRow[]).sort(
     (x, y) => ORDER[x.status] - ORDER[y.status] || x.title.localeCompare(y.title),
   );
@@ -231,7 +246,9 @@ export default async function RunPage({ params }: Props) {
                         <Badge tone={TEST_TONE[s.status] ?? "neutral"}>{s.status}</Badge>
                       </span>
                     </div>
-                    {s.message && s.status === "skipped" && <p className="mt-1 text-muted">{s.message}</p>}
+                    {s.message && (s.status === "skipped" || s.status === "passed") && (
+                      <p className="mt-1 text-muted">{s.message}</p>
+                    )}
                     {s.message && s.status === "failed" && (
                       <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-xs">
                         {s.message}
