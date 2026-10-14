@@ -31,6 +31,7 @@ import { supabaseSsoAdmin, type SsoAdmin } from "./sso-admin.ts";
 import { supabaseMfaAdmin, type MfaAdmin } from "./mfa-admin.ts";
 import { mfaResetRoutes } from "./routes/mfa-reset.ts";
 import { erasureRoutes } from "./routes/erasure.ts";
+import { analyticsRoutes } from "./routes/analytics.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
@@ -158,6 +159,7 @@ export async function buildApp(
     await app.register(ssoRoutes, { ...apiDeps, ssoAdmin: deps.ssoAdmin ?? supabaseSsoAdmin(deps.settings) });
     await app.register(mfaResetRoutes, { ...apiDeps, mfaAdmin: deps.mfaAdmin ?? supabaseMfaAdmin(deps.settings) });
     await app.register(erasureRoutes, apiDeps);
+    await app.register(analyticsRoutes, apiDeps);
   }
 
   return app;

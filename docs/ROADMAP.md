@@ -167,6 +167,11 @@ the platform.
   re-issued) or delete, with a certificate and an audit entry. A daily retention sweep removes
   processed webhook payloads, old emails, long-read notifications and old export ZIPs.
 
+- **3B, analytics.** Per assignment: started, tested, graded, late and missing; the tests
+  students fail; failures by day as a heat-map; score and grade distributions. Per course:
+  students who may need help, with the reasons (rule-based, staff only, never affecting
+  grades). The same course compared across terms, with figures withheld for cohorts under 5.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 

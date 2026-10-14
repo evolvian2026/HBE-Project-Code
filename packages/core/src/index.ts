@@ -10,3 +10,4 @@ export * from "./grading.ts";
 export * from "./dashboard.ts";
 export * from "./stages.ts";
 export * from "./institution.ts";
+export * from "./analytics.ts";

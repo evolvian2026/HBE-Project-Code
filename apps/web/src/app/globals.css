@@ -17,6 +17,16 @@
   --success-bg: #ecfdf3;
   --warning: #93370d;
   --warning-bg: #fffaeb;
+  /* Charts (the dataviz reference palette): one series hue; and for the heat-map a recessive
+     "none" step plus a five-step one-hue ramp (validated as ordinal against the card surface). */
+  --viz-1: #2a78d6;
+  --viz-seq-0: #eef4fc; /* none failed: recedes toward the surface */
+  --viz-seq-1: #86b6ef;
+  --viz-seq-2: #5598e7;
+  --viz-seq-3: #2a78d6;
+  --viz-seq-4: #1c5cab;
+  --viz-seq-5: #0d366b;
+  --viz-grid: #e1e0d9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,6 +47,15 @@
     --success-bg: #0f2419;
     --warning: #ffc46b;
     --warning-bg: #2a2010;
+    /* Dark: the same hue, stepped for the dark surface; low values recede into it. */
+    --viz-1: #3987e5;
+    --viz-seq-0: #1b2433;
+    --viz-seq-1: #184f95;
+    --viz-seq-2: #256abf;
+    --viz-seq-3: #3987e5;
+    --viz-seq-4: #6da7ec;
+    --viz-seq-5: #b7d3f6;
+    --viz-grid: #2c2c2a;
   }
 }
 

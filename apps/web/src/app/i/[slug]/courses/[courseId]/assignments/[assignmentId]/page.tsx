@@ -607,7 +607,15 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
       )}
 
       {isCourseStaff && a.status !== "draft" && (
-        <Card title="Submissions" description={`${subs.length} students`}>
+        <Card
+          title="Submissions"
+          description={`${subs.length} students`}
+          actions={
+            <Link href={`${base}/assignments/${a.id}/analytics`} className="text-sm link">
+              Analytics
+            </Link>
+          }
+        >
           {subs.length === 0 ? (
             <EmptyState title="No students in this course" />
           ) : (

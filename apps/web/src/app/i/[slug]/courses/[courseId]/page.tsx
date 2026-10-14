@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { CourseMatrix, OVERVIEW_COLUMNS, type OverviewRow } from "@/components/course-matrix";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Alert, Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
+import type { StudentRisk } from "@/lib/analytics";
+import { apiFetch } from "@/lib/api";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadMembers } from "../../members/data";
@@ -133,11 +135,10 @@ export default async function CoursePage({ params, searchParams }: Props) {
       href: row ? `/i/${slug}/courses/${course.id}/assignments/${assignmentId}/submissions/${row.submission_id}` : null,
     };
   };
-  const atRisk = students.flatMap((st) =>
-    openAssignments
-      .map((a) => ({ student: st, assignment: a, ...cell(st.userId, a.id) }))
-      .filter((c) => c.risks.length > 0),
-  );
+  const atRiskResult = isCourseStaff
+    ? await apiFetch<{ students: StudentRisk[] }>(`/v1/courses/${course.id}/at-risk`)
+    : null;
+  const atRiskStudents = atRiskResult?.ok ? atRiskResult.data.students : [];
 
   const { data: lmsLinks } = isCourseStaff
     ? await supabase
@@ -256,28 +257,39 @@ export default async function CoursePage({ params, searchParams }: Props) {
         </Card>
       )}
 
-      {isCourseStaff && atRisk.length > 0 && (
-        <Card title="May need a nudge" description="Signals only; they never affect grades.">
-          <ul className="divide-y divide-border">
-            {atRisk.map((r) => (
-              <li
-                key={`${r.student.userId}/${r.assignment.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
-              >
-                <span>
-                  {r.href ? (
-                    <Link href={r.href} className="font-medium hover:text-accent">
-                      {r.student.name}
+      {isCourseStaff && (
+        <Card
+          title="Students who may need help"
+          description="Signals from their work so far, with the reasons. They prompt a conversation; they never affect grades."
+          actions={
+            <Link href={`/i/${slug}/courses/${course.id}/cohorts`} className="text-sm link">
+              Compare with other terms
+            </Link>
+          }
+        >
+          {atRiskStudents.length === 0 ? (
+            <EmptyState title="Nobody stands out right now" />
+          ) : (
+            <ul className="divide-y divide-border" data-testid="at-risk">
+              {atRiskStudents.map((r) => (
+                <li key={r.userId} className="space-y-1 py-2.5 text-sm">
+                  <p className="flex flex-wrap items-center gap-2">
+                    <Link href={`/i/${slug}/students/${r.userId}`} className="font-medium hover:text-accent">
+                      {r.name}
                     </Link>
-                  ) : (
-                    <span className="font-medium">{r.student.name}</span>
-                  )}
-                  <span className="text-muted"> · {r.assignment.title}</span>
-                </span>
-                <span className="text-warning">{r.risks.join("; ")}</span>
-              </li>
-            ))}
-          </ul>
+                    <Badge tone={r.level === "high" ? "danger" : "warning"}>
+                      {r.level === "high" ? "▲ needs attention" : "● keep an eye on"}
+                    </Badge>
+                  </p>
+                  <ul className="list-disc pl-5 text-muted">
+                    {r.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       )}
 

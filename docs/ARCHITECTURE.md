@@ -917,6 +917,26 @@ As built (Phase 1):
   at-risk students, cohort comparisons across terms.
 - Built on SQL views and nightly materialised views (`mv_student_performance`,
   `mv_assignment_stats`) scoped by `institution_id`.
+- As built (Phase 3B, `apps/server/src/analytics.ts`, for course staff and institution admins;
+  computed on request from `submission_overview`, runs and test results, nothing stored, so no
+  materialised views yet):
+  - **Assignment analytics** (`/v1/assignments/:id/analytics`, the assignment's *Analytics*
+    page): how many started, were tested, graded, late or missing; the share of submissions
+    failing each hidden test on their latest run; a heat-map of tests by day (the share of that
+    day's runs failing each test, 21 days at most, ending at the deadline); distributions of
+    latest test scores and of grades.
+  - **Students who may need help** (`/v1/courses/:id/at-risk`, on the course page): a
+    rule-based assessment (`assessStudentRisk` in `@hbe/core`), every reason spelled out:
+    nothing submitted, a low average over the last three grades, a fall of 20 points, late
+    twice or more, a low process score, plus the existing signals on open assignments. Never
+    shown to students; never affects a grade.
+  - **Compare terms** (`/v1/courses/:id/cohorts`): courses with the same code, assignment by
+    assignment (matched by slug): median and mean grade, median test score, on-time and
+    missing rates, most failed tests. Aggregates only, and a term with fewer than 5 students
+    shows only its size.
+  - Charts follow the dataviz method: one series hue or a one-hue ramp validated against the
+    card surface in light and dark mode, a tooltip on every mark, and a table view of every
+    chart.
 
 ### 12.4 Durability
 
