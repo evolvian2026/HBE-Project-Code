@@ -3,7 +3,14 @@
 import { useActionState } from "react";
 import { FormStatus } from "@/components/form-status";
 import { Button, Field } from "@/components/ui";
-import { addCriterion, publishAssignment, releaseAssignmentGrades, rerunAssignment, startRun } from "../actions";
+import {
+  addCriterion,
+  checkSimilarity,
+  publishAssignment,
+  releaseAssignmentGrades,
+  rerunAssignment,
+  startRun,
+} from "../actions";
 
 type Ids = { slug: string; courseId: string; assignmentId: string };
 
@@ -141,6 +148,19 @@ export function RerunForm({
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Queueing…" : "Re-run tests"}
       </Button>
+    </form>
+  );
+}
+
+export function SimilarityCheckForm({ again, ...ids }: Ids & { again: boolean }) {
+  const [state, action, pending] = useActionState(checkSimilarity, null);
+  return (
+    <form action={action} className="space-y-2">
+      <Hidden {...ids} />
+      <Button type="submit" variant={again ? "secondary" : "primary"} disabled={pending}>
+        {again ? "Check again" : "Check for similar code"}
+      </Button>
+      <FormStatus state={state} />
     </form>
   );
 }

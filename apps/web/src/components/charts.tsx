@@ -68,7 +68,10 @@ export function BarList({
     <ChartTips>
       <ul aria-label={label} className="space-y-2">
         {rows.map((r) => (
-          <li key={r.key} className="grid grid-cols-[minmax(0,14rem)_1fr] items-center gap-3 text-sm">
+          <li
+            key={r.key}
+            className="grid grid-cols-1 items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_1fr]"
+          >
             <span className="truncate" title={r.name}>
               {r.name}
             </span>
@@ -79,7 +82,7 @@ export function BarList({
                   style={{ width: `${Math.max(r.value > 0 ? 1 : 0, r.value * 100)}%`, background: "var(--viz-1)" }}
                 />
               </span>
-              <span className="w-24 shrink-0 text-right tabular-nums text-muted">{r.display}</span>
+              <span className="shrink-0 text-right tabular-nums text-muted sm:w-24">{r.display}</span>
             </span>
           </li>
         ))}

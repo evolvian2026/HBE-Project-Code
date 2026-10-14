@@ -34,6 +34,8 @@ export interface QueuePayloads {
   "artifact-sweep": Record<string, never>;
   "retention-sweep": Record<string, never>;
   "erase-person": { requestId: string };
+  /** Compare an assignment's graded commits for similar code (similarity_reports.id). */
+  "similarity-check": { reportId: string };
   /** Copy new record files to the external archive bucket. */
   "records-replication": Record<string, never>;
   /** Build an institution's full export (record_exports.id). */
@@ -92,6 +94,7 @@ export const QUEUES: Record<QueueName, QueueDefinition> = {
   "artifact-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 900, policy: "stately" },
   "retention-sweep": { retryLimit: 0, retryDelay: 0, retryBackoff: false, expireInSeconds: 900, policy: "stately" },
   "erase-person": { retryLimit: 5, retryDelay: 60, retryBackoff: true, expireInSeconds: 900 },
+  "similarity-check": { retryLimit: 2, retryDelay: 60, retryBackoff: true, expireInSeconds: 1800 },
   "records-replication": {
     retryLimit: 0,
     retryDelay: 0,

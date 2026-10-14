@@ -448,3 +448,20 @@ export async function resolveRegrade(_prev: ActionState, formData: FormData): Pr
   revalidatePath(submissionPath(v.data));
   return { ok: true, message: `Request ${v.data.outcome}; the student has been told.` };
 }
+
+/** Course staff: compare the assignment's graded commits for similar code. */
+export async function checkSimilarity(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const v = idsSchema.parse(Object.fromEntries(formData));
+  const result = await apiFetch<{ id: string; status: string }>(`/v1/assignments/${v.assignmentId}/similarity`, {
+    method: "POST",
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  revalidatePath(`/i/${v.slug}/courses/${v.courseId}/assignments/${v.assignmentId}/similarity`);
+  return {
+    ok: true,
+    message:
+      result.data.status === "already_running"
+        ? "A check is already running."
+        : "Checking. This takes a minute or two; refresh the page to see the results.",
+  };
+}

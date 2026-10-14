@@ -24,6 +24,7 @@ import { noErrorReports, type ErrorReporter } from "../error-reports.ts";
 import { observedQueue } from "./observe.ts";
 import { sweepRetention } from "./retention.ts";
 import { erasePerson } from "../erasure.ts";
+import { checkSimilarity } from "../similarity.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
 export async function startWorker(
@@ -127,6 +128,9 @@ export async function startWorker(
   await queue.schedule("retention-sweep", "37 3 * * *", {});
   await queue.work("erase-person", async (job) => {
     await erasePerson({ ...records, queue: deps.queue }, job.data.requestId);
+  });
+  await queue.work("similarity-check", async (job) => {
+    await checkSimilarity({ db: deps.db, store: deps.store, github: deps.github, log }, job.data.reportId);
   });
 
   // LMS gradebooks and rosters (LTI Advantage).

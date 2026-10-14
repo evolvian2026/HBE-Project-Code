@@ -227,6 +227,7 @@ test("the main pages meet WCAG 2.1 AA for every role", async ({ browser }) => {
     assignmentUrl,
     `${assignmentUrl}/edit`,
     `${assignmentUrl}/analytics`,
+    `${assignmentUrl}/similarity`,
     `${courseUrl}/cohorts`,
     submissionUrl,
     `${base}/students/${ada!.id}`,

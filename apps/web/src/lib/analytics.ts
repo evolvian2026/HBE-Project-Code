@@ -47,3 +47,36 @@ export interface Cohorts {
 /** "14 Oct" for a YYYY-MM-DD day. */
 export const shortDay = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-SG", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/** GET /v1/assignments/:id/similarity (apps/server/src/routes/similarity.ts). */
+export interface SimilarityReport {
+  report: {
+    id: string;
+    status: "queued" | "running" | "completed" | "failed";
+    error: string | null;
+    compared: number;
+    skipped: { submission_id: string; reason: string }[];
+    starterExcluded: boolean;
+    createdAt: string;
+    finishedAt: string | null;
+  } | null;
+  pairs: {
+    id: string;
+    score: number;
+    shared: number;
+    a: SimilaritySide;
+    b: SimilaritySide;
+    matches: {
+      a: { path: string; from: number; to: number };
+      b: { path: string; from: number; to: number };
+      fingerprints: number;
+    }[];
+  }[];
+}
+
+export interface SimilaritySide {
+  submissionId: string;
+  finalSha: string | null;
+  team: string | null;
+  people: string[];
+}

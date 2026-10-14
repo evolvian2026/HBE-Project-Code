@@ -278,6 +278,10 @@ begin
   insert into public.sso_connections (institution_id, domains, metadata_url)
     values (tests.id('inst_a'), '{alpha-seed.test}', 'https://idp.alpha-seed.test/m'),
            (tests.id('inst_b'), '{beta-seed.test}', 'https://idp.beta-seed.test/m');
+  -- A similarity check of each institution's assignment.
+  insert into public.similarity_reports (institution_id, assignment_id, status)
+    select a.institution_id, a.id, 'completed' from public.assignments a
+    where a.id in (tests.id('assign_a1'), tests.id('assign_b1'));
   -- A bulk re-run of each institution's assignment.
   insert into public.run_batches (institution_id, assignment_id, grader_suite_id, scope, runs)
     select a.institution_id, a.id, (select id from public.grader_suites where key = 'todo-api' and institution_id is null), 'all', 1
@@ -344,6 +348,8 @@ language sql security invoker set search_path = '' as $$
   union all select 'run_batches', count(*) from public.run_batches where institution_id = p_institution
   union all select 'sso_connections', count(*) from public.sso_connections where institution_id = p_institution
   union all select 'erasure_requests', count(*) from public.erasure_requests where institution_id = p_institution
+  union all select 'similarity_reports', count(*) from public.similarity_reports where institution_id = p_institution
+  union all select 'similarity_pairs', count(*) from public.similarity_pairs where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

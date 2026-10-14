@@ -611,9 +611,14 @@ export default async function AssignmentPage({ params, searchParams }: Props) {
           title="Submissions"
           description={`${subs.length} students`}
           actions={
-            <Link href={`${base}/assignments/${a.id}/analytics`} className="text-sm link">
-              Analytics
-            </Link>
+            <span className="flex gap-4 text-sm">
+              <Link href={`${base}/assignments/${a.id}/analytics`} className="link">
+                Analytics
+              </Link>
+              <Link href={`${base}/assignments/${a.id}/similarity`} className="link">
+                Similar code
+              </Link>
+            </span>
           }
         >
           {subs.length === 0 ? (

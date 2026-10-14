@@ -176,8 +176,11 @@ the platform.
   partial credit), static analysis (the platform's Semgrep rules for common security
   mistakes, which the repository can't switch off) and Lighthouse (performance, accessibility
   and best practices of the front page, against targets), each worth a share of the automated
-  score or shown without counting. The starter templates pass all of them. Similarity
-  detection between submissions follows.
+  score or shown without counting. The starter templates pass all of them. Course staff can
+  also check an assignment's graded commits for similar code (winnowing, as MOSS does:
+  renaming and reformatting don't hide copying; the starter code and common code are left
+  out), with the matching passages linked to the review screen. For staff only, never part of
+  a grade.
 
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).

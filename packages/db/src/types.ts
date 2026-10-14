@@ -812,6 +812,32 @@ export interface SsoConnectionsTable {
 }
 
 /** A request to erase a person's data in an institution (FR-9.6). */
+export interface SimilarityReportsTable {
+  id: Generated<string>;
+  institution_id: string;
+  assignment_id: string;
+  requested_by: string | null;
+  status: Generated<"queued" | "running" | "completed" | "failed">;
+  error: string | null;
+  compared: Generated<number>;
+  skipped: Generated<Json>;
+  starter_excluded: Generated<boolean>;
+  created_at: Generated<Timestamp>;
+  finished_at: Timestamp | null;
+}
+
+export interface SimilarityPairsTable {
+  id: Generated<string>;
+  institution_id: string;
+  report_id: string;
+  submission_a: string;
+  submission_b: string;
+  /** numeric(4,3), as a string. */
+  score: string;
+  shared: number;
+  matches: Generated<Json>;
+}
+
 export interface ErasureRequestsTable {
   id: Generated<string>;
   institution_id: string;
@@ -901,6 +927,8 @@ export interface Database {
   run_batches: RunBatchesTable;
   sso_connections: SsoConnectionsTable;
   erasure_requests: ErasureRequestsTable;
+  similarity_reports: SimilarityReportsTable;
+  similarity_pairs: SimilarityPairsTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;
   rubric_scores: RubricScoresTable;

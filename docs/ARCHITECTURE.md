@@ -955,6 +955,17 @@ As built (Phase 1):
   - Charts follow the dataviz method: one series hue or a one-hue ramp validated against the
     card surface in light and dark mode, a tooltip on every mark, and a table view of every
     chart.
+  - **Similar code** (FR-4.7, Phase 3C; `/v1/assignments/:id/similarity`, the assignment's
+    *Similar code* page): course staff start a check (job `similarity-check`), which reads each
+    repository's graded commit from its archived tarball (a team's counts once) and compares
+    every pair by winnowing (`packages/core/src/similarity.ts`, the method behind MOSS): code is
+    reduced to tokens with names, strings and numbers normalised, so renaming and reformatting
+    don't hide copying; k-grams of 12 tokens are hashed and each window of 8 keeps its
+    smallest. Fingerprints of the starter code (the repositories' first commit, read from
+    GitHub) and those in 40% or more of the submissions are left out. A pair's score is the
+    share of the smaller submission's remaining fingerprints found in the other; pairs from
+    25% are kept (`similarity_reports`, `similarity_pairs`) with their matching passages,
+    which link to the review screen at those lines. For staff only, and never part of a grade.
 
 ### 12.4 Durability
 
