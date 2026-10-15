@@ -189,6 +189,15 @@ export async function domainRoutes(
    * Which institution a host serves (the web app asks, then caches): a live vanity domain, or
    * a subdomain of an institution that exists. Public: it reveals no more than visiting does.
    */
+  /**
+   * Caddy's on-demand TLS asks here before it gets a certificate for a host (AWS stage A):
+   * only institutions' addresses, so nobody can make it request certificates for any name.
+   */
+  app.get<{ Querystring: { domain?: string } }>("/v1/hosts/tls-check", async (req) => {
+    if (!req.query.domain || !(await slugForHost(req.query.domain))) throw notFound("Not an institution's address");
+    return { ok: true };
+  });
+
   app.get<{ Params: { host: string } }>("/v1/hosts/:host", async (req) => {
     const slug = await slugForHost(req.params.host);
     if (!slug) throw notFound("No institution at this address");

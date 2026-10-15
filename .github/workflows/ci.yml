@@ -158,6 +158,28 @@ jobs:
       - name: Grade every starter template with the real harness
         run: node --test --test-concurrency=1 grader/test/templates.docker.test.mjs
 
+  terraform:
+    name: AWS Terraform (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: deploy/aws/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: Both stages plan as intended (mocked AWS, no credentials)
+        run: terraform test
+      - name: State bucket bootstrap
+        working-directory: deploy/aws/terraform/bootstrap
+        run: terraform init -backend=false -input=false && terraform validate
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest

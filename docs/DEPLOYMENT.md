@@ -188,7 +188,14 @@ Route 53 / existing DNS ──▶ Elastic IP ──▶ EC2 t4g.medium (Graviton,
   checked against `/healthz`.
 - **Logs and metrics**: CloudWatch agent (container logs, memory and disk) and Sentry. CloudWatch
   alarms notify SNS → email/Slack.
-- **Infrastructure as code**: Terraform in `deploy/aws/`, with state in S3 and locking in DynamoDB.
+- **Infrastructure as code**: Terraform in `deploy/aws/terraform/` (its README is the
+  runbook), with state in S3 locked by an S3 lock file (no DynamoDB table). Settings and
+  secrets go into SSM with `deploy/aws/put-env.sh`; the **Deploy to AWS** workflow builds the
+  arm64 image, pushes it to ECR and runs `/opt/hbe/deploy.sh` on each host in turn, through
+  GitHub's OIDC token (no AWS keys in GitHub).
+- **Institutions' vanity domains**: Caddy gets each certificate on demand, asking the API
+  first (`GET /v1/hosts/tls-check`) so it only does so for institutions' live addresses;
+  `DOMAIN_PROVISIONER=caddy` marks a domain live once its TXT record is found.
 
 This is enough for about 100 concurrent students. Because the host is stateless, if it fails
 the Auto Scaling group replaces it in a few minutes.
@@ -198,8 +205,17 @@ the Auto Scaling group replaces it in a few minutes.
 - An **ALB** with an **ACM** certificate replaces Caddy. An Auto Scaling group of 2+ instances
   across two availability zones runs `web` + `api`, and a separate small group runs `worker`.
   pg-boss safely handles several workers, and its schedules run only once even with many workers.
-- Optionally move to **ECS on EC2** (same images) for rolling deploys.
 - AWS WAF on the ALB with managed rule sets, plus rate limiting on `/webhooks` and `/lti`.
+- **As built (3F):** the same Terraform with `stage = "b"`. The ALB sends `api_host` to the
+  api containers (port 4000) and everything else to web (3000), redirects HTTP to HTTPS and
+  uses a TLS 1.3 policy; its certificate covers the app and API hosts and
+  `*.<institution base domain>`, and each institution's vanity domain gets its own ACM
+  certificate on the listener (`vanity_domains`; `DOMAIN_PROVISIONER=manual`, so the operator
+  marks it live once the certificate is issued). Hosts that fail the ALB's `/healthz` check
+  are replaced; deploys go one host at a time while the others keep serving, and a launch
+  template change rolls the hosts keeping half of them in service. Alarms: CPU, failed status
+  checks, ALB 5xx and p95 latency, unhealthy targets. Moving from A to B replaces the hosts
+  and moves DNS from the Elastic IP to the ALB.
 
 ### 2.4 Grader runners on EC2 (platform-paid compute)
 

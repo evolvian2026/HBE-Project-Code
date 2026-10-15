@@ -24,7 +24,7 @@ export const dnsTxt: TxtResolver = async (name) => {
 /** Adds verified domains to the hosting and reports when they are served. */
 export interface DomainProvisioner {
   /** Who adds the domain: the platform, through the hosting's API, or its operator by hand. */
-  readonly mode: "render" | "manual";
+  readonly mode: "render" | "manual" | "caddy";
   add(hostname: string): Promise<{ providerId: string | null }>;
   /** Whether the hosting serves it yet (certificate issued). Manual: the operator says so. */
   status(hostname: string, providerId: string | null): Promise<"provisioning" | "active" | { failed: string }>;
@@ -39,6 +39,22 @@ export const manualProvisioner: DomainProvisioner = {
   },
   async status() {
     return "provisioning";
+  },
+  async remove() {},
+};
+
+/**
+ * Caddy issues certificates on demand (AWS stage A, deploy/aws/Caddyfile): once ownership is
+ * proven the domain is live, and its first visit gets the certificate (Caddy asks
+ * GET /v1/hosts/tls-check first).
+ */
+export const caddyProvisioner: DomainProvisioner = {
+  mode: "caddy",
+  async add() {
+    return { providerId: null };
+  },
+  async status() {
+    return "active";
   },
   async remove() {},
 };
@@ -91,7 +107,8 @@ export function renderProvisioner(settings: Settings, fetchImpl: typeof fetch = 
 }
 
 export function domainProvisioner(settings: Settings): DomainProvisioner {
-  return settings.env.DOMAIN_PROVISIONER === "render" ? renderProvisioner(settings) : manualProvisioner;
+  if (settings.env.DOMAIN_PROVISIONER === "render") return renderProvisioner(settings);
+  return settings.env.DOMAIN_PROVISIONER === "caddy" ? caddyProvisioner : manualProvisioner;
 }
 
 export const addressConfig = (settings: Settings): AddressConfig => ({

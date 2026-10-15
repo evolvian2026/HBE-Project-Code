@@ -142,6 +142,12 @@ describe("institution addresses", () => {
     expect(await institutionAddresses(db, settings).forId(inst.id)).toBe(`http://${inst.slug}.localhost:3000`);
   });
 
+  it("let Caddy get certificates for institutions' addresses only", async () => {
+    expect((await call("GET", `/v1/hosts/tls-check?domain=${inst.slug}.localhost`)).statusCode).toBe(200);
+    expect((await call("GET", "/v1/hosts/tls-check?domain=attacker.example.com")).statusCode).toBe(404);
+    expect((await call("GET", "/v1/hosts/tls-check")).statusCode).toBe(404);
+  });
+
   it("serve institutions' subdomains, and nothing else", async () => {
     expect((await call("GET", `/v1/hosts/${inst.slug}.localhost:3000`)).json()).toEqual({ slug: inst.slug });
     expect((await call("GET", `/v1/hosts/no-such-place.localhost`)).statusCode).toBe(404);

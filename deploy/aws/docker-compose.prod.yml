@@ -1,7 +1,12 @@
-# Production on AWS EC2 (ap-southeast-1), stage A single host. See docs/DEPLOYMENT.md §2.2.
-# /opt/hbe/.env is rendered from SSM Parameter Store at boot
-# (template: config/env/production-aws.env.example).
-# Same image as the Render demo; only ROLES and the env differ.
+# Production on AWS EC2 (ap-southeast-1). See docs/DEPLOYMENT.md §2.2–2.3 and terraform/.
+# /opt/hbe/.env is rendered from SSM Parameter Store at boot by the instance's user data
+# (template: config/env/production-aws.env.example). Same image as the Render demo; only
+# ROLES and the env differ.
+#
+# Which services run on a host is chosen with COMPOSE_PROFILES:
+#   stage A (one host):          app,worker,tls   (Caddy terminates TLS)
+#   stage B, web+api hosts:      app              (the ALB terminates TLS, ports 3000/4000)
+#   stage B, worker host:        worker
 name: hbe
 
 x-app: &app
@@ -12,8 +17,8 @@ x-app: &app
   logging:
     driver: awslogs
     options:
-      awslogs-region: ap-southeast-1
-      awslogs-group: /hbe/prod/app
+      awslogs-region: ${AWS_REGION:-ap-southeast-1}
+      awslogs-group: ${HBE_LOG_GROUP:-/hbe/prod/app}
       awslogs-create-group: "true"
   healthcheck:
     test:
@@ -30,20 +35,27 @@ x-app: &app
 services:
   web:
     <<: *app
+    profiles: [app]
     # Server-side calls from the web app go straight to the api container.
     environment: { ROLES: web, PORT: "3000", INTERNAL_API_URL: "http://api:4000" }
+    # The ALB's target (stage B); stage A's security group keeps it closed.
+    ports: ["3000:3000"]
 
   api:
     <<: *app
+    profiles: [app]
     environment: { ROLES: api, PORT: "4000" }
+    ports: ["4000:4000"]
 
   worker:
     <<: *app
+    profiles: [worker]
     # The worker serves /healthz only on the internal network.
     environment: { ROLES: worker, PORT: "4100" }
 
   caddy:
     image: caddy:2.8.4-alpine
+    profiles: [tls]
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     env_file: .env

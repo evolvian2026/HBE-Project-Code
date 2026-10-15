@@ -1,0 +1,49 @@
+#!/bin/bash
+# Boot script for an HBE host (rendered by Terraform; see deploy/aws/terraform/compute.tf).
+# Installs Docker and Compose, writes the Compose file and /opt/hbe/deploy.sh, then deploys.
+set -euo pipefail
+exec > >(tee -a /var/log/hbe-boot.log) 2>&1
+
+dnf install -y -q docker
+systemctl enable --now docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+  "https://github.com/docker/compose/releases/download/v${compose_version}/docker-compose-linux-aarch64"
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+mkdir -p /opt/hbe
+cd /opt/hbe
+echo '${compose_b64}' | base64 -d > docker-compose.yml
+echo '${caddyfile_b64}' | base64 -d > Caddyfile
+
+# Deploys (SSM Run Command) run this again: fresh settings, the image in ${ssm_path}/image.
+cat > deploy.sh <<'DEPLOY'
+#!/bin/bash
+set -euo pipefail
+cd /opt/hbe
+umask 077
+{
+  aws ssm get-parameters-by-path --region "${region}" --path "${ssm_path}/env/" --recursive \
+    --with-decryption --query 'Parameters[*].[Name,Value]' --output text |
+    while IFS=$'\t' read -r name value; do echo "$${name##*/}=$value"; done
+  echo "HBE_IMAGE=$(aws ssm get-parameter --region "${region}" --name "${ssm_path}/image" --query Parameter.Value --output text)"
+  echo "AWS_REGION=${region}"
+  echo "HBE_LOG_GROUP=${log_group}"
+  echo "COMPOSE_PROFILES=${profiles}"
+} > .env.next
+mv .env.next .env
+aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${registry}"
+docker compose pull --quiet
+docker compose up -d --remove-orphans --wait --wait-timeout 300
+docker image prune -f > /dev/null
+DEPLOY
+chmod 700 deploy.sh
+
+%{ if eip_allocation_id != "" ~}
+# Stage A: this host takes the Elastic IP (also after the Auto Scaling group replaces it).
+token=$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+instance=$(curl -fsS -H "X-aws-ec2-metadata-token: $token" http://169.254.169.254/latest/meta-data/instance-id)
+aws ec2 associate-address --region "${region}" --allocation-id "${eip_allocation_id}" --instance-id "$instance" --allow-reassociation
+%{ endif ~}
+
+./deploy.sh

@@ -1,7 +1,12 @@
-# TLS via Let's Encrypt for the same hostnames used on Render.
-# Stage B replaces Caddy with an ALB + ACM (DEPLOYMENT.md §2.3).
+# Stage A: TLS via Let's Encrypt for the same hostnames used on Render, and for institutions'
+# own addresses (Phase 3E). Stage B replaces Caddy with an ALB + ACM (DEPLOYMENT.md §2.3).
 {
 	email {$ACME_EMAIL}
+	# Institutions' subdomains and vanity domains get certificates on their first visit, but
+	# only once the api confirms the host is an institution's (DOMAIN_PROVISIONER=caddy).
+	on_demand_tls {
+		ask http://api:4000/v1/hosts/tls-check
+	}
 }
 
 {$APP_HOST} {
@@ -17,4 +22,14 @@
 		max_size 50MB
 	}
 	reverse_proxy api:4000
+}
+
+# Any other host: an institution's address (the web app serves its pages there).
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:3000
 }

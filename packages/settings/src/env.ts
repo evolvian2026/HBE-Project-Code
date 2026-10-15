@@ -35,8 +35,11 @@ export const envSchema = z.object({
   ),
   /** What institutions point their vanity domain at (a CNAME target), shown in the instructions. */
   CUSTOM_DOMAIN_TARGET: optional,
-  /** How verified vanity domains are added to the hosting: by the platform operator, or Render's API. */
-  DOMAIN_PROVISIONER: z.enum(["manual", "render"]).default("manual"),
+  /**
+   * How verified vanity domains are added to the hosting: by the platform operator, Render's
+   * API, or Caddy's on-demand TLS (AWS stage A: live at once, the certificate comes on first visit).
+   */
+  DOMAIN_PROVISIONER: z.enum(["manual", "render", "caddy"]).default("manual"),
   RENDER_API_KEY: optional,
   /** The Render web service that serves the app (srv-…). */
   RENDER_SERVICE_ID: optional,

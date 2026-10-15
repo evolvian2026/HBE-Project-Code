@@ -11,6 +11,10 @@ coverage/
 *.pem
 deploy/aws/terraform/*.tfvars
 !deploy/aws/terraform/*.tfvars.example
+deploy/aws/terraform/backend.hcl
+.terraform/
+*.tfstate
+*.tfstate.*
 
 # Playwright
 e2e/test-results/

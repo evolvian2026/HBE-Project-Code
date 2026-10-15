@@ -81,7 +81,7 @@ graded runs' artifacts) and holds full exports. With `ARCHIVE_OBJECT_LOCK=govern
 must have Object Lock enabled; objects are locked until the institution's purge date, and the
 purge bypasses governance retention (the IAM role needs `s3:BypassGovernanceRetention`). Leave
 `ARCHIVE_S3_BUCKET` empty locally: nothing is replicated and exports go to Storage.
-| `HBE_IMAGE`, `APP_HOST`, `API_HOST`, `ACME_EMAIL` | — | set (used by Compose and Caddy) |
+| `HBE_IMAGE`, `APP_HOST`, `API_HOST`, `ACME_EMAIL` | — | set by Terraform and the deploy workflow (used by Compose and Caddy) |
 | DNS for `app.` / `api.` | CNAME → Render | A → Elastic IP (or ALIAS → ALB) |
 | Keep-awake job | installed | run `remove-keep-awake.sql` |
 
@@ -221,10 +221,13 @@ through a stand-in IdP (`e2e/tests/fake-idp.ts`).
 - `CUSTOM_DOMAIN_TARGET`: the hostname institutions point their vanity domain's CNAME at
   (shown in their instructions; default: APP_URL's host).
 - `DOMAIN_PROVISIONER`: `manual` (default; the operator adds each verified domain to the
-  hosting and marks it live in the console) or `render` (with `RENDER_API_KEY` and
+  hosting and marks it live in the console), `render` (with `RENDER_API_KEY` and
   `RENDER_SERVICE_ID`, the platform adds it through Render's API and Render issues the
-  certificate). On AWS, use `manual` with an ALB certificate per domain, or a wildcard SAN
-  certificate, until a provisioner for it is added.
+  certificate) or `caddy` (AWS stage A: the domain is live once its TXT record is found, and
+  Caddy gets its certificate on the first visit, after checking with
+  `GET /v1/hosts/tls-check` that it is an institution's address). Terraform sets it on AWS:
+  `caddy` in stage A, `manual` in stage B (an ACM certificate per domain,
+  `deploy/aws/terraform/README.md`).
 
 ## 6. Platform settings in the database
 

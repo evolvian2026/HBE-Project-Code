@@ -1,0 +1,99 @@
+# Deploys to AWS EC2 (docs/DEPLOYMENT.md §2.2–2.3): builds the image for the Graviton hosts,
+# pushes it to ECR, records it in SSM (/hbe/<environment>/image, which new hosts also boot
+# with), then runs /opt/hbe/deploy.sh on the hosts one at a time with SSM Run Command, each
+# waiting for its containers to be healthy. The worker host goes last.
+#
+# AWS access is through GitHub's OIDC token and the role Terraform creates (github.tf): no AWS
+# keys are stored here. Set up a GitHub environment (Settings → Environments; add required
+# reviewers and limit it to main if you like) with these variables, from `terraform output`:
+#   AWS_DEPLOY_ROLE_ARN   deploy_role_arn
+#   AWS_REGION            ap-southeast-1
+#   ECR_REPOSITORY_URL    ecr_repository_url
+#   HBE_DEPLOYMENT        the Terraform environment variable (prod)
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment holding the AWS settings
+        default: production
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-aws-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      IMAGE: ${{ vars.ECR_REPOSITORY_URL }}:${{ github.sha }}
+      DEPLOYMENT: ${{ vars.HBE_DEPLOYMENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Is this commit's image already pushed? (tags are immutable)
+        id: existing
+        run: |
+          repo="${IMAGE%%:*}"; repo="${repo#*/}"
+          if aws ecr describe-images --repository-name "$repo" --image-ids imageTag="${{ github.sha }}" > /dev/null 2>&1; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-qemu-action@v3
+        if: steps.existing.outputs.pushed != 'true'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.existing.outputs.pushed != 'true'
+      - uses: docker/build-push-action@v6
+        if: steps.existing.outputs.pushed != 'true'
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+      - name: Run this image from now on
+        run: aws ssm put-parameter --name "/hbe/$DEPLOYMENT/image" --value "$IMAGE" --overwrite > /dev/null
+      - name: Deploy to each host, one at a time
+        run: |
+          deploy_group() {
+            local group="hbe-$DEPLOYMENT-$1"
+            echo "::group::$group"
+            local id
+            id=$(aws ssm send-command --document-name AWS-RunShellScript \
+              --targets "Key=tag:HbeGroup,Values=$group" \
+              --max-concurrency 1 --max-errors 0 --timeout-seconds 600 \
+              --comment "deploy ${GITHUB_SHA::12}" \
+              --parameters 'commands=["/opt/hbe/deploy.sh"],executionTimeout=["900"]' \
+              --query Command.CommandId --output text)
+            local status=Pending
+            for _ in $(seq 1 120); do
+              status=$(aws ssm list-commands --command-id "$id" --query 'Commands[0].Status' --output text)
+              case "$status" in Pending | InProgress | Delayed) sleep 10 ;; *) break ;; esac
+            done
+            aws ssm list-command-invocations --command-id "$id" --details \
+              --query 'CommandInvocations[*].[InstanceId,Status,CommandPlugins[0].Output]' --output text
+            echo "::endgroup::"
+            if [ "$status" != Success ]; then
+              echo "::error::$group: the deploy ended with $status"
+              return 1
+            fi
+          }
+          deploy_group app
+          # Stage A has no separate worker host.
+          if aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "hbe-$DEPLOYMENT-worker" \
+              --query 'length(AutoScalingGroups)' --output text | grep -qx 1; then
+            deploy_group worker
+          fi

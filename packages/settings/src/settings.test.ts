@@ -86,6 +86,7 @@ describe("loadSettings", () => {
       loadSettings({ ...demo, DOMAIN_PROVISIONER: "render", RENDER_API_KEY: "rnd_x", RENDER_SERVICE_ID: "srv-1" }).env
         .DOMAIN_PROVISIONER,
     ).toBe("render");
+    expect(loadSettings({ ...demo, DOMAIN_PROVISIONER: "caddy" }).env.DOMAIN_PROVISIONER).toBe("caddy");
   });
 
   it("requires keys for a custom S3 endpoint but not for AWS instance roles", () => {

@@ -195,10 +195,16 @@ the platform.
   in once, on the platform's address, and a one-time code signs them in on the institution's;
   emails, GitHub checks and LMS links use the institution's address.
 
+- **3F, high availability on AWS.** Terraform (`deploy/aws/terraform/`) for both stages:
+  stage A, one self-healing host with Caddy, where institutions' domains get certificates on
+  demand; stage B, an ALB with ACM certificates and WAF in front of web+api hosts across two
+  availability zones, and a worker host. Both: SSM settings, ECR, the Object Lock archive
+  bucket, CloudWatch logs and alarms, and a GitHub Actions deploy (OIDC, one host at a time).
+  Checked offline with `terraform test` in CI; applied with Phase 2.5.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 
-- Stage B high availability (ALB + multi-AZ Auto Scaling group) when uptime needs require it
 - More stack profiles (Spring Boot, .NET, Laravel, …) contributed by institutions
 - Analytics: per-test failure heat-maps, cohort comparisons across terms, at-risk prediction
 - Optional stages: Lighthouse, Semgrep, coverage, similarity detection
