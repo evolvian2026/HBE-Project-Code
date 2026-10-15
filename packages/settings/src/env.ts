@@ -25,6 +25,21 @@ export const envSchema = z.object({
   API_URL: url,
   /** Private address of the api role for server-side calls from web (e.g. http://api:4000). */
   INTERNAL_API_URL: url.optional(),
+  /**
+   * Institutions' own subdomains: <slug>.<this> (e.g. hbe.example.com). Needs a wildcard DNS
+   * record and certificate (DEPLOYMENT.md). Without it, institutions use APP_URL/i/<slug>.
+   */
+  INSTITUTION_BASE_DOMAIN: optional.refine(
+    (v) => !v || /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(v),
+    "must be a hostname such as hbe.example.com (no scheme or port)",
+  ),
+  /** What institutions point their vanity domain at (a CNAME target), shown in the instructions. */
+  CUSTOM_DOMAIN_TARGET: optional,
+  /** How verified vanity domains are added to the hosting: by the platform operator, or Render's API. */
+  DOMAIN_PROVISIONER: z.enum(["manual", "render"]).default("manual"),
+  RENDER_API_KEY: optional,
+  /** The Render web service that serves the app (srv-…). */
+  RENDER_SERVICE_ID: optional,
 
   SUPABASE_URL: url,
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
@@ -129,6 +144,10 @@ const rules: Rule[] = [
     when: deployed,
     check: (e) =>
       [e.APP_URL, e.API_URL].some((u) => !u.startsWith("https://")) ? "APP_URL and API_URL must use https" : undefined,
+  },
+  {
+    when: (e) => e.DOMAIN_PROVISIONER === "render",
+    check: required("RENDER_API_KEY", "RENDER_SERVICE_ID"),
   },
   {
     when: (e) => e.GRADER_CALLBACK_AUTH === "token",

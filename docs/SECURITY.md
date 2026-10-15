@@ -22,6 +22,12 @@ recommended before the pilot (see "Still open").
 - SAML single sign-on is turned on per institution only after the operator has checked the
   domain. SSO sign-ins can only take up invitations of the institution that owns the domain.
 - **Changed:** session cookies are `Secure` whenever the site is served over HTTPS.
+- Institutions' own addresses (Phase 3E) never see a password or a sign-in provider: people
+  sign in on the platform's address, which hands over with a random one-time code (stored
+  as a SHA-256 hash, valid for 60 seconds, usable once and only by the host it was issued
+  for), redeemed server-side for a separate session. A vanity domain is served only after its
+  owner proves control with a DNS TXT record and the hosting has added it; the platform's own
+  names and the institutions' base domain can't be claimed.
 
 ## Web app
 

@@ -13,6 +13,8 @@ export interface RetentionResult {
   emails: number;
   notifications: number;
   exports: number;
+  /** Expired sign-in handoff codes. */
+  handoffs: number;
 }
 
 /**
@@ -84,7 +86,17 @@ export async function sweepRetention(
       .execute();
   }
 
-  return { webhookEvents, emails, notifications, exports: oldExports.length };
+  // Sign-in handoff codes live for a minute; a day later nothing needs them.
+  const handoffs = Number(
+    (
+      await db
+        .deleteFrom("session_handoffs")
+        .where("expires_at", "<", new Date(Date.now() - 86_400_000))
+        .executeTakeFirst()
+    ).numDeletedRows,
+  );
+
+  return { webhookEvents, emails, notifications, exports: oldExports.length, handoffs };
 }
 
 async function inBatches(query: (limit: number) => RawBuilder<{ n: number }>, db: Db): Promise<number> {

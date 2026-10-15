@@ -12,3 +12,4 @@ export * from "./stages.ts";
 export * from "./institution.ts";
 export * from "./analytics.ts";
 export * from "./similarity.ts";
+export * from "./domains.ts";

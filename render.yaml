@@ -32,6 +32,17 @@ services:
         value: https://app.example.com
       - key: API_URL
         value: https://api.example.com
+      # Institution addresses (docs/CONFIGURATION.md §5.4): optional.
+      - key: INSTITUTION_BASE_DOMAIN
+        sync: false
+      - key: CUSTOM_DOMAIN_TARGET
+        sync: false
+      - key: DOMAIN_PROVISIONER
+        sync: false
+      - key: RENDER_API_KEY
+        sync: false
+      - key: RENDER_SERVICE_ID
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY

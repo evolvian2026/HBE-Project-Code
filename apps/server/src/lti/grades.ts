@@ -1,6 +1,7 @@
 import type { Db } from "@hbe/db";
 import type { JobQueue } from "@hbe/queue";
 import { gradebookOf, gradebooksOfCourse, type Column, type LmsDeps } from "./gradebook.ts";
+import { institutionAddresses } from "../domains.ts";
 
 export type { LmsDeps } from "./gradebook.ts";
 export { ensureLineItem } from "./gradebook.ts";
@@ -23,6 +24,7 @@ export interface SyncSummary {
  */
 export async function syncGrade(deps: LmsDeps, gradeId: string, opts: { force?: boolean } = {}): Promise<SyncSummary> {
   const { db, settings } = deps;
+  const addresses = institutionAddresses(db, settings);
   const summary: SyncSummary = { synced: 0, skipped: 0, failed: 0 };
   const g = await db
     .selectFrom("grades as g")
@@ -99,7 +101,7 @@ export async function syncGrade(deps: LmsDeps, gradeId: string, opts: { force?: 
       const scoreGiven = round2((Number(g.final_score) / 100) * column.score_maximum);
       await book.postScore(column, lmsUser.lms_user_id, {
         given: scoreGiven,
-        comment: `Grade report: ${settings.env.APP_URL}/i/${g.slug}/courses/${g.course_id}/assignments/${g.assignment_id}`,
+        comment: `Grade report: ${await addresses.forSlug(g.slug)}/i/${g.slug}/courses/${g.course_id}/assignments/${g.assignment_id}`,
         timestamp: new Date(g.released_at),
       });
       await db

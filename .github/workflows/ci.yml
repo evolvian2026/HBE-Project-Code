@@ -84,6 +84,7 @@ jobs:
           PORT=3000
           APP_URL=http://localhost:3000
           API_URL=http://localhost:3000
+          INSTITUTION_BASE_DOMAIN=localhost
           SUPABASE_URL=${SB_API_URL}
           SUPABASE_PUBLISHABLE_KEY=${SB_PUBLISHABLE_KEY}
           SUPABASE_SECRET_KEY=${SB_SECRET_KEY}

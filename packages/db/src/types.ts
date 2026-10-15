@@ -812,6 +812,31 @@ export interface SsoConnectionsTable {
 }
 
 /** A request to erase a person's data in an institution (FR-9.6). */
+export interface InstitutionDomainsTable {
+  id: Generated<string>;
+  institution_id: string;
+  hostname: string;
+  status: Generated<"pending" | "provisioning" | "active" | "failed">;
+  verification_token: string;
+  error: string | null;
+  provider_id: string | null;
+  last_checked_at: Timestamp | null;
+  verified_at: Timestamp | null;
+  activated_at: Timestamp | null;
+  created_by: string | null;
+  created_at: DefaultTimestamp;
+}
+
+export interface SessionHandoffsTable {
+  id: Generated<string>;
+  code_hash: string;
+  user_id: string;
+  host: string;
+  expires_at: Timestamp;
+  used_at: Timestamp | null;
+  created_at: DefaultTimestamp;
+}
+
 export interface SimilarityReportsTable {
   id: Generated<string>;
   institution_id: string;
@@ -822,7 +847,7 @@ export interface SimilarityReportsTable {
   compared: Generated<number>;
   skipped: Generated<Json>;
   starter_excluded: Generated<boolean>;
-  created_at: Generated<Timestamp>;
+  created_at: DefaultTimestamp;
   finished_at: Timestamp | null;
 }
 
@@ -928,6 +953,8 @@ export interface Database {
   sso_connections: SsoConnectionsTable;
   erasure_requests: ErasureRequestsTable;
   similarity_reports: SimilarityReportsTable;
+  institution_domains: InstitutionDomainsTable;
+  session_handoffs: SessionHandoffsTable;
   similarity_pairs: SimilarityPairsTable;
   test_results: TestResultsTable;
   branch_pushes: BranchPushesTable;

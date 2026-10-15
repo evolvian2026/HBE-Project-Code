@@ -189,6 +189,12 @@ the platform.
   (PHP) is next: its packages download from GitHub, which this build environment can't reach,
   so its starter is still to be built and checked.
 
+- **3E, institution addresses.** Every institution answers at its own subdomain
+  (`<slug>.<base domain>`), and its admin can add a vanity domain (verified with a DNS TXT
+  record, added to the hosting through Render's API or by the platform operator). People sign
+  in once, on the platform's address, and a one-time code signs them in on the institution's;
+  emails, GitHub checks and LMS links use the institution's address.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 

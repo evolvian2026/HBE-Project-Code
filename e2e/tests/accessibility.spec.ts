@@ -256,7 +256,8 @@ test("the main pages meet WCAG 2.1 AA for every role", async ({ browser }) => {
   ]);
   await operator.goto("/platform");
   await setUpMfa(operator);
-  for (const path of ["/platform", "/platform/health", "/platform/audit"]) await audit(operator, path);
+  for (const path of ["/platform", "/platform/health", "/platform/audit", "/platform/domains"])
+    await audit(operator, path);
 
   expect(problems, problems.join("\n")).toEqual([]);
 });

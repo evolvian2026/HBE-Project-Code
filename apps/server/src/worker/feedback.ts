@@ -4,6 +4,7 @@ import { GitHubError, type GitHubClient } from "@hbe/github";
 import type { JobQueue } from "@hbe/queue";
 import type { Settings } from "@hbe/settings";
 import type { FastifyBaseLogger } from "fastify";
+import { institutionAddresses } from "../domains.ts";
 
 export interface FeedbackDeps {
   db: Db;
@@ -32,7 +33,8 @@ const encodePath = (path: string) => path.split("/").map(encodeURIComponent).joi
  */
 export async function composeFeedback(
   db: Db,
-  appUrl: string,
+  /** The institution's address (its own domain when it has one). */
+  addressOf: (slug: string) => Promise<string>,
   repositoryId: string,
 ): Promise<{ status: "off" } | { status: "empty" } | { status: "ready"; title: string; body: string }> {
   const subs = await db
@@ -86,7 +88,10 @@ export async function composeFeedback(
     .execute();
   if (!written && !comments.length) return { status: "empty" };
 
-  const link = new URL(`/i/${first.slug}/courses/${first.course_id}/assignments/${first.assignment_id}`, appUrl);
+  const link = new URL(
+    `/i/${first.slug}/courses/${first.course_id}/assignments/${first.assignment_id}`,
+    await addressOf(first.slug),
+  );
   const parts = [
     MARKER,
     `Feedback on **${first.title}** from your course staff. Your grade and its breakdown are on the platform: ${link}`,
@@ -124,7 +129,7 @@ export async function postFeedback(deps: FeedbackDeps, repositoryId: string): Pr
       .forUpdate("r")
       .executeTakeFirst();
     if (!repo) return "off";
-    const composed = await composeFeedback(tx, settings.env.APP_URL, repositoryId);
+    const composed = await composeFeedback(tx, institutionAddresses(tx, settings).forSlug, repositoryId);
     if (composed.status === "off") return "off";
     const stamp = (values: { feedback_issue_number?: number; feedback_hash?: string; feedback_error: string | null }) =>
       tx

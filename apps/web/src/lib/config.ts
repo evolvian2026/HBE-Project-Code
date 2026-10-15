@@ -8,6 +8,8 @@ const schema = z.object({
   INTERNAL_API_URL: z.string().url().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  /** Institutions' subdomains: <slug>.<this> (Phase 3E). */
+  INSTITUTION_BASE_DOMAIN: z.string().optional(),
 });
 
 export type WebConfig = z.infer<typeof schema>;
@@ -21,6 +23,7 @@ export function webConfig(): WebConfig {
     INTERNAL_API_URL: process.env.INTERNAL_API_URL || undefined,
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
+    INSTITUTION_BASE_DOMAIN: process.env.INSTITUTION_BASE_DOMAIN || undefined,
   });
   return cached;
 }

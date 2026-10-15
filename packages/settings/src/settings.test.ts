@@ -76,6 +76,18 @@ describe("loadSettings", () => {
     expect(() => loadSettings({ ...demo, API_URL: "https://hbe-app.onrender.com" })).toThrow(/own domain/);
   });
 
+  it("checks institution addresses: a bare base domain, and Render's keys to add vanity domains", () => {
+    expect(loadSettings({ ...demo, INSTITUTION_BASE_DOMAIN: "hbe.example.com" }).env.INSTITUTION_BASE_DOMAIN).toBe(
+      "hbe.example.com",
+    );
+    expect(() => loadSettings({ ...demo, INSTITUTION_BASE_DOMAIN: "https://hbe.example.com" })).toThrow(/hostname/);
+    expect(() => loadSettings({ ...demo, DOMAIN_PROVISIONER: "render" })).toThrow(/RENDER_API_KEY/);
+    expect(
+      loadSettings({ ...demo, DOMAIN_PROVISIONER: "render", RENDER_API_KEY: "rnd_x", RENDER_SERVICE_ID: "srv-1" }).env
+        .DOMAIN_PROVISIONER,
+    ).toBe("render");
+  });
+
   it("requires keys for a custom S3 endpoint but not for AWS instance roles", () => {
     expect(() => loadSettings({ ...demo, ARCHIVE_S3_ACCESS_KEY_ID: "" })).toThrow(/ARCHIVE_S3_ACCESS_KEY_ID/);
   });

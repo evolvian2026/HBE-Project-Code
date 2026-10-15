@@ -209,6 +209,23 @@ only accepts that institution's invitations.
 (after `pnpm db:start`) re-creates the local Auth container with SAML on. The E2E tests sign in
 through a stand-in IdP (`e2e/tests/fake-idp.ts`).
 
+### 5.4 Institution addresses (subdomains and vanity domains)
+
+- `INSTITUTION_BASE_DOMAIN` (e.g. `hbe.example.com`): institutions answer at
+  `<slug>.hbe.example.com`. Needs a wildcard DNS record (`*.hbe.example.com` CNAME to the
+  app's host) and a wildcard certificate; on Render, add `*.hbe.example.com` as a custom domain
+  of the web service (Render issues the certificate). Some names are never institutions' (www,
+  app, api, admin, platform, …). Set it on the web and api roles. Locally it is `localhost`:
+  browsers resolve `<slug>.localhost` to your machine (use the single-process server,
+  `ROLES=web,api,…`, to try it).
+- `CUSTOM_DOMAIN_TARGET`: the hostname institutions point their vanity domain's CNAME at
+  (shown in their instructions; default: APP_URL's host).
+- `DOMAIN_PROVISIONER`: `manual` (default; the operator adds each verified domain to the
+  hosting and marks it live in the console) or `render` (with `RENDER_API_KEY` and
+  `RENDER_SERVICE_ID`, the platform adds it through Render's API and Render issues the
+  certificate). On AWS, use `manual` with an ALB certificate per domain, or a wildcard SAN
+  certificate, until a provisioner for it is added.
+
 ## 6. Platform settings in the database
 
 A few switches must be enforced by the database itself, so they live in the

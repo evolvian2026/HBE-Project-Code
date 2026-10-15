@@ -101,6 +101,10 @@ export default async function PlatformPage({
             <Link href="/platform/audit" className="link">
               Audit log
             </Link>
+            {" · "}
+            <Link href="/platform/domains" className="link">
+              Institution domains
+            </Link>
           </>
         }
       />

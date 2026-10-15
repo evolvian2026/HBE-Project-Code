@@ -278,6 +278,10 @@ begin
   insert into public.sso_connections (institution_id, domains, metadata_url)
     values (tests.id('inst_a'), '{alpha-seed.test}', 'https://idp.alpha-seed.test/m'),
            (tests.id('inst_b'), '{beta-seed.test}', 'https://idp.beta-seed.test/m');
+  -- Each institution's own domain.
+  insert into public.institution_domains (institution_id, hostname, status, verification_token)
+    values (tests.id('inst_a'), 'projects.alpha-seed.test', 'active', 'tokentokentokentokentoken-a'),
+           (tests.id('inst_b'), 'projects.beta-seed.test', 'pending', 'tokentokentokentokentoken-b');
   -- A similarity check of each institution's assignment.
   insert into public.similarity_reports (institution_id, assignment_id, status)
     select a.institution_id, a.id, 'completed' from public.assignments a
@@ -350,6 +354,7 @@ language sql security invoker set search_path = '' as $$
   union all select 'erasure_requests', count(*) from public.erasure_requests where institution_id = p_institution
   union all select 'similarity_reports', count(*) from public.similarity_reports where institution_id = p_institution
   union all select 'similarity_pairs', count(*) from public.similarity_pairs where institution_id = p_institution
+  union all select 'institution_domains', count(*) from public.institution_domains where institution_id = p_institution
 $$;
 
 grant execute on all functions in schema tests to authenticated;

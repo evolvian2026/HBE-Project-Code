@@ -18,6 +18,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { hashToken, queueRun } from "../evaluation.ts";
 import { teamSubmissionIds } from "../teams.ts";
 import { notify, submissionLinks } from "../notifications.ts";
+import { institutionAddresses } from "../domains.ts";
 
 export interface EvaluationDeps {
   db: Db;
@@ -310,7 +311,7 @@ export async function scoreAndReport(deps: EvaluationDeps, runId: string): Promi
   if (!run.check_run_id) {
     const url = new URL(
       `/i/${run.slug}/courses/${run.course_id}/assignments/${run.assignment_id}/submissions/${run.submission_id}/runs/${run.id}`,
-      settings.env.APP_URL,
+      await institutionAddresses(db, settings).forSlug(run.slug),
     ).toString();
     const { title, summary } = checkRunSummary(results, score, url);
     try {

@@ -7,6 +7,7 @@ import { formatBytes } from "@/lib/format";
 import { requireMembership } from "@/lib/institution";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { InstitutionSettingsForm } from "./forms";
+import { AddressCard, type InstitutionAddress } from "./address";
 import { SsoCard, type SsoConnection } from "./sso";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -42,7 +43,7 @@ export default async function SettingsPage({
   const ctx = await requireMembership(slug);
   if (!ctx.isAdmin) notFound();
   const supabase = await createSupabaseServerClient();
-  const [{ data: inst }, usageResult, { data: sso }] = await Promise.all([
+  const [{ data: inst }, usageResult, { data: sso }, addressResult] = await Promise.all([
     supabase.from("institutions").select("name, settings").eq("id", ctx.institution.id).single(),
     apiFetch<Usage>(`/v1/institutions/${ctx.institution.id}/usage`),
     supabase
@@ -50,6 +51,7 @@ export default async function SettingsPage({
       .select("status, domains, metadata_url, join_as_student, review_note")
       .eq("institution_id", ctx.institution.id)
       .maybeSingle(),
+    apiFetch<InstitutionAddress>(`/v1/institutions/${ctx.institution.id}/address`),
   ]);
   const settings = institutionSettings(inst?.settings);
   const usage = usageResult.ok ? usageResult.data : null;
@@ -132,6 +134,7 @@ export default async function SettingsPage({
           </dl>
         )}
       </Card>
+      {addressResult.ok && <AddressCard slug={slug} address={addressResult.data} query={query} />}
       <SsoCard
         slug={slug}
         connection={(sso as SsoConnection | null) ?? null}

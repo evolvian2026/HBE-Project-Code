@@ -5,11 +5,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
  * Serves the built Next.js app (apps/web) from this process when ROLES includes web.
  * API routes are registered first and win; everything else is handed to Next.
  */
-export async function mountWeb(app: FastifyInstance, dir: string | undefined): Promise<void> {
+export async function mountWeb(app: FastifyInstance, dir: string | undefined, port: number): Promise<void> {
   const { default: next } = await import("next");
   // dist/main.js → apps/server/dist → apps/web (Docker images set WEB_DIR explicitly)
   const webDir = dir ?? fileURLToPath(new URL("../../web", import.meta.url));
-  const nextApp = next({ dev: false, dir: webDir });
+  // Next names this server's own origin from hostname and port, and makes redirects to that
+  // origin relative. The loopback address keeps redirects to the platform's public address
+  // (APP_URL) absolute, so they leave an institution's own address (Phase 3E).
+  const nextApp = next({ dev: false, dir: webDir, hostname: "127.0.0.1", port });
   await nextApp.prepare();
   const handle = nextApp.getRequestHandler();
 

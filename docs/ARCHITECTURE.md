@@ -172,6 +172,32 @@ Each **institution** (university, college, bootcamp) is a tenant with its own:
 (`/i/{slug}/…`). Per-institution subdomains (`{slug}.example.com`, served by a wildcard custom
 domain on Render) or vanity domains can be added later without changing the data model.
 
+As built (Phase 3E):
+
+- With `INSTITUTION_BASE_DOMAIN` set, every institution also answers at `<slug>.<base domain>`;
+  an institution's admin can add one vanity domain (`projects.example.edu`) on the Settings
+  page. They prove they control it with a TXT record at `_hbe-verify.<domain>` (checked when
+  they ask, and by the `domain-sweep` job every 10 minutes for a week) and point it at the
+  platform with a CNAME (`CUSTOM_DOMAIN_TARGET`). Then a provisioner adds it to the hosting:
+  `render` calls Render's custom-domain API (Render issues the certificate and the domain goes
+  live once Render has verified it); `manual` leaves it to the platform operator, who adds it
+  to the hosting and marks it live under Platform console → Institution domains. A domain
+  serves only while `active` (`institution_domains`).
+- The web app's middleware asks the API which institution a host serves (`GET /v1/hosts/:host`,
+  cached for a minute) and serves its pages there: `/` is the institution's home and other
+  paths are under `/i/<slug>/`; platform-only pages (the console, GitHub and LMS set-up) and
+  other institutions' pages go back to the platform's address. Unknown hosts get a 404.
+- People sign in on the platform's address only, so no sign-in provider (GitHub, Google, SAML
+  IdPs, LMSs) needs to know institutions' addresses. An institution's address sends someone
+  without a session to `/auth/handoff/start` there; once signed in, the API issues a one-time
+  code (`session_handoffs`: stored hashed, valid for 60 seconds, for that host only), and the
+  institution's address redeems it server-side for a sign-in token, which becomes a separate
+  session there (Supabase's `verifyOtp`; admins confirm two-factor authentication again).
+  Signing out on an institution's address also signs out on the platform's.
+- Links the platform sends out (emails, GitHub check runs and feedback issues, LMS grade
+  comments, Google Classroom coursework) use the institution's address: its live vanity
+  domain, else its subdomain, else the platform's.
+
 ### 4.2 Authentication (Supabase Auth)
 
 | User type | Sign-in methods | Notes |

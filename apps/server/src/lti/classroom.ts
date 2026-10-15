@@ -1,6 +1,7 @@
 import type { Db } from "@hbe/db";
 import { gradebooksOfCourse, withClassroom, type LmsDeps } from "./gradebook.ts";
 import { queueAssignmentSync } from "./grades.ts";
+import { institutionAddresses } from "../domains.ts";
 
 export interface PostResult {
   posted: number;
@@ -15,6 +16,7 @@ export interface PostResult {
  */
 export async function postToClassroom(deps: LmsDeps, assignmentId: string, actorId: string): Promise<PostResult> {
   const { db, settings } = deps;
+  const addresses = institutionAddresses(db, settings);
   const a = await db
     .selectFrom("assignments as a")
     .innerJoin("courses as c", "c.id", "a.course_id")
@@ -49,7 +51,7 @@ export async function postToClassroom(deps: LmsDeps, assignmentId: string, actor
       result.already++;
       continue;
     }
-    const url = `${settings.env.APP_URL}/i/${a.slug}/courses/${a.course_id}/assignments/${a.id}`;
+    const url = `${await addresses.forSlug(a.slug)}/i/${a.slug}/courses/${a.course_id}/assignments/${a.id}`;
     try {
       const work = await withClassroom(deps, link.google_account_id, (c) =>
         c.createCourseWork(link.context_id, {

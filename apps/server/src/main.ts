@@ -64,7 +64,7 @@ async function start(): Promise<void> {
   }
   if (roles.has("web")) {
     const { mountWeb } = await import("./web.ts");
-    await mountWeb(app, env.WEB_DIR);
+    await mountWeb(app, env.WEB_DIR, env.PORT);
   }
 
   await app.listen({ port: env.PORT, host: "0.0.0.0" });

@@ -33,6 +33,8 @@ import { mfaResetRoutes } from "./routes/mfa-reset.ts";
 import { erasureRoutes } from "./routes/erasure.ts";
 import { analyticsRoutes } from "./routes/analytics.ts";
 import { similarityRoutes } from "./routes/similarity.ts";
+import { domainRoutes } from "./routes/domains.ts";
+import { dnsTxt, domainProvisioner, type DomainProvisioner, type TxtResolver } from "./domains.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { googleRoutes } from "./routes/google.ts";
 import { teamRoutes } from "./routes/teams.ts";
@@ -63,6 +65,10 @@ export interface AppDeps {
   signIn?: SignInService;
   /** Defaults to Supabase Auth's admin API (SAML identity providers). */
   ssoAdmin?: SsoAdmin;
+  /** Adds verified vanity domains to the hosting (default: from DOMAIN_PROVISIONER). */
+  provisioner?: DomainProvisioner;
+  /** DNS TXT lookups for domain verification (default: the system resolver). */
+  resolveTxt?: TxtResolver;
   /** Defaults to Supabase Auth's admin API (members' two-factor factors). */
   mfaAdmin?: MfaAdmin;
   /** Where unexpected errors are reported besides the logs (none by default). */
@@ -162,6 +168,12 @@ export async function buildApp(
     await app.register(erasureRoutes, apiDeps);
     await app.register(analyticsRoutes, apiDeps);
     await app.register(similarityRoutes, apiDeps);
+    await app.register(domainRoutes, {
+      ...apiDeps,
+      provisioner: deps.provisioner ?? domainProvisioner(deps.settings),
+      resolveTxt: deps.resolveTxt ?? dnsTxt,
+      signIn: deps.signIn ?? supabaseSignIn(deps.settings),
+    });
   }
 
   return app;

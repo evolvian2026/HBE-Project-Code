@@ -25,6 +25,7 @@ import { observedQueue } from "./observe.ts";
 import { sweepRetention } from "./retention.ts";
 import { erasePerson } from "../erasure.ts";
 import { checkSimilarity } from "../similarity.ts";
+import { dnsTxt, domainProvisioner, institutionAddresses, sweepDomains } from "../domains.ts";
 
 /** Registers job handlers and schedules. Runs only in processes with the worker role. */
 export async function startWorker(
@@ -44,7 +45,8 @@ export async function startWorker(
 
   const sender = createEmailSender(settings, log);
   await queue.work("email-outbox", async () => {
-    await drainEmailOutbox({ db: deps.db, sender, appUrl: settings.env.APP_URL, log });
+    const addressOf = institutionAddresses(deps.db, settings).forId;
+    await drainEmailOutbox({ db: deps.db, sender, appUrl: settings.env.APP_URL, addressOf, log });
   });
   await queue.schedule("email-outbox", "* * * * *", {});
 
@@ -129,6 +131,11 @@ export async function startWorker(
   await queue.work("erase-person", async (job) => {
     await erasePerson({ ...records, queue: deps.queue }, job.data.requestId);
   });
+  await queue.work("domain-sweep", async () => {
+    const checked = await sweepDomains({ db: deps.db, provisioner: domainProvisioner(settings), resolveTxt: dnsTxt });
+    if (checked) log.info({ checked }, "domain sweep");
+  });
+  await queue.schedule("domain-sweep", "*/10 * * * *", {});
   await queue.work("similarity-check", async (job) => {
     await checkSimilarity({ db: deps.db, store: deps.store, github: deps.github, log }, job.data.reportId);
   });

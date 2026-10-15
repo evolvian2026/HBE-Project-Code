@@ -15,6 +15,8 @@ export interface OutboxDeps {
   db: Db;
   sender: EmailSender;
   appUrl: string;
+  /** An institution's address, for its emails' links (default: APP_URL). */
+  addressOf?: (institutionId: string) => Promise<string>;
   log: FastifyBaseLogger;
 }
 
@@ -27,10 +29,12 @@ export async function drainEmailOutbox({
   db,
   sender,
   appUrl,
+  addressOf,
   log,
 }: OutboxDeps): Promise<{ sent: number; failed: number }> {
   const { rows } = await sql<{
     id: number;
+    institution_id: string | null;
     to_email: string;
     template: string;
     payload: InvitationPayload | NotificationPayload;
@@ -43,16 +47,17 @@ export async function drainEmailOutbox({
       order by created_at
       limit ${BATCH}
       for update skip locked)
-    returning id, to_email, template, payload, attempts`.execute(db);
+    returning id, institution_id, to_email, template, payload, attempts`.execute(db);
 
   let sent = 0;
   let failed = 0;
   for (const row of rows) {
     try {
+      const base = row.institution_id && addressOf ? await addressOf(row.institution_id) : appUrl;
       if (row.template === "invitation") {
-        await sender.send(invitationEmail(row.to_email, row.payload as InvitationPayload, appUrl));
+        await sender.send(invitationEmail(row.to_email, row.payload as InvitationPayload, base));
       } else if (row.template === "notification") {
-        await sender.send(notificationEmail(row.to_email, row.payload as NotificationPayload, appUrl));
+        await sender.send(notificationEmail(row.to_email, row.payload as NotificationPayload, base));
       } else {
         throw new Error(`Unknown email template ${row.template}`);
       }
