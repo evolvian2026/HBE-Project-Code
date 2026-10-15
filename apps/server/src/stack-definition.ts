@@ -31,7 +31,8 @@ const containerStage = z
 
 /**
  * Line coverage of the student's own tests: `run` writes a report to `file` (relative to the
- * repository) in an `lcov` (Node, Jest, Vitest, c8) or `coverage-py` (`coverage json`) format.
+ * repository) in one of these formats: `lcov` (Node, Jest, Vitest, c8), `coverage-py` (`coverage
+ * json`), `jacoco` (JaCoCo XML), `cobertura` (coverlet and others) or `clover` (PHPUnit).
  * Files matching `exclude` (globs, e.g. test files) don't count.
  */
 const coverageStage = z
@@ -39,7 +40,7 @@ const coverageStage = z
     run: command,
     image,
     setup: command.optional(),
-    format: z.enum(["lcov", "coverage-py"]),
+    format: z.enum(["lcov", "coverage-py", "jacoco", "cobertura", "clover"]),
     file: relativePath,
     exclude: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   })

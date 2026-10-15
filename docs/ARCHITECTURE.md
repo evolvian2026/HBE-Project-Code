@@ -463,23 +463,28 @@ and adapter. No platform code changes are needed.
 
 As built:
 
-- The global profiles are `node22-api`, `mern-node20` and `django-react`; their definitions are
-  in `grader/stacks/<key>.json` (a test keeps the database seed identical). `lint` and
-  `student_tests` name an `image`, a `setup` command (run once per image and command) and a `run`
-  command; `report: junit` points at the JUnit file the run writes. The harness runs them in
+- The global profiles are `node22-api`, `mern-node20`, `django-react` and (Phase 3D)
+  `spring-react` (Spring Boot 4, Java 21) and `dotnet-react` (ASP.NET Core, .NET 10), both with
+  a React frontend and PostgreSQL; their definitions are in `grader/stacks/<key>.json` (a test
+  keeps the database seed identical). `lint` and `student_tests` name an `image`, a `setup`
+  command (run once per image and command) and a `run` command; `report: junit` points at the
+  JUnit file the run writes, or a folder of them (Maven writes one per test class). Setup
+  caches that must outlive its container go in the tools volume: Maven's repository
+  (`-Dmaven.repo.local=/opt/hbe-tools/m2`) and NuGet's packages (`--packages /opt/hbe-tools/nuget`). The harness runs them in
   fresh containers on a copy of the repository (§6.4); assignments turn them on and give each a
   share of the automated score (`assignments.stage_settings`), and can turn off hidden API or
   browser stages.
 - Optional stages (Phase 3C), each off by default and worth a share of the automated score
   (all optional stages together at most 50%; 0% shows the results without counting them):
   - **Coverage**: the profile's `coverage` stage runs the student's tests with coverage and names
-    the report (`format: lcov` for Node, Jest, Vitest and c8; `coverage-py` for `coverage json`)
+    the report (`format: lcov` for Node, Jest, Vitest and c8; `coverage-py` for `coverage json`;
+    `jacoco` for JaCoCo XML; `cobertura` for coverlet and other Cobertura XML; `clover` for PHPUnit)
     and globs to `exclude` (test files, start-up scripts). Line coverage is scored against the
     assignment's target with partial credit below it (`ratio` in the stage result). Files the
     tests never load don't appear in Node's report.
   - **Static analysis**: the harness's own Semgrep rules (`grader/harness/lib/semgrep-rules.mjs`:
     injection, code from strings, hard-coded secrets, weak hashing, unsafe HTML, switched-off TLS
-    checks), run offline with a pinned Semgrep image. One test per rule for the repository's
+    checks, in JavaScript and TypeScript, Python, Java, C# and PHP), run offline with a pinned Semgrep image. One test per rule for the repository's
     languages, weighted by severity. Tests, dependencies and the profile's `ignore_paths` are
     skipped; the student's `.semgrepignore` files and `nosemgrep` comments are not honoured.
   - **Lighthouse**: performance, accessibility and best practices of the front page (the
@@ -488,7 +493,7 @@ As built:
     skipped (the grader serves the app over plain HTTP).
   Pinned tool versions (Semgrep, Lighthouse, coverage.py) change only between terms: a new
   version can score differently.
-- Starter templates for the three profiles are in `templates/` (published to GitHub as template
+- Starter templates for the global profiles are in `templates/` (published to GitHub as template
   repositories with `scripts/publish-template.sh`); CI grades each one with the real harness.
   The harness provides the profile's datastores, so templates keep their own database behind a
   `local` Compose profile for students' computers.

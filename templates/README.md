@@ -9,8 +9,11 @@ first push already builds, starts and passes lint and their own tests.
 | `node22-api` | `node22-api` | `backend` :4000 | ESLint | `node:test` → `junit.xml` |
 | `mern-node20` | `mern-node20` | `frontend` :3000 (nginx, React), `backend` :4000 (Express, MongoDB) | ESLint (both) | `node:test` → `backend/junit.xml` |
 | `django-react` | `django-react` | `frontend` :3000 (nginx, React), `backend` :8000 (Django REST, PostgreSQL) | Ruff | `manage.py test` |
+| `spring-react` | `spring-react` | `frontend` :3000 (nginx, React), `backend` :8080 (Spring Boot 4, Java 21, PostgreSQL) | Checkstyle | JUnit (`mvn test`, JaCoCo coverage) |
+| `dotnet-react` | `dotnet-react` | `frontend` :3000 (nginx, React), `backend` :8080 (ASP.NET Core, .NET 10, PostgreSQL) | `dotnet format` | xUnit (`dotnet test`, coverlet coverage) |
 
-The MERN and Django templates share the same example (a notes API and page);
+The MERN, Django, Spring Boot and .NET templates share the same example (a notes API and page,
+and the same React frontend);
 `grader/suites/sample/starter-notes` is a hidden suite for it, and a starting point for an
 assignment's own.
 

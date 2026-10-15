@@ -70,6 +70,89 @@ export function parseCoveragePy(json, dir = "") {
   }));
 }
 
+const xmlAttrs = (tag) =>
+  Object.fromEntries([...tag.matchAll(/([\w:-]+)="([^"]*)"/g)].map((m) => [m[1], m[2].replace(/&amp;/g, "&")]));
+
+/**
+ * Line coverage per file from JaCoCo's XML report (Maven, Gradle): each source file's LINE
+ * counter, named by its package path (e.g. com/example/notes/NoteController.java).
+ */
+export function parseJacoco(xml) {
+  const files = [];
+  for (const pkg of xml.matchAll(/<package\b([^>]*)>([\s\S]*?)<\/package>/g)) {
+    const dir = xmlAttrs(pkg[1]).name ?? "";
+    for (const src of pkg[2].matchAll(/<sourcefile\b([^>]*)>([\s\S]*?)<\/sourcefile>/g)) {
+      const line = /<counter\b[^>]*type="LINE"[^>]*\/>/.exec(src[2]);
+      if (!line) continue;
+      const c = xmlAttrs(line[0]);
+      const missed = Number(c.missed ?? 0);
+      const covered = Number(c.covered ?? 0);
+      files.push({ file: path.posix.join(dir, xmlAttrs(src[1]).name ?? ""), total: missed + covered, covered });
+    }
+  }
+  return files;
+}
+
+/**
+ * Line coverage per file from a Cobertura XML report (coverlet for .NET, also Python and PHP
+ * tools): lines of every class in a file, joined to the report's first source folder.
+ */
+export function parseCobertura(xml, base = "/work") {
+  const source = /<source>([^<]*)<\/source>/.exec(xml)?.[1]?.trim() ?? "";
+  const lines = new Map();
+  for (const cls of xml.matchAll(/<class\b([^>]*)>([\s\S]*?)<\/class>/g)) {
+    const name = xmlAttrs(cls[1]).filename;
+    if (!name) continue;
+    const file = relative(name.startsWith("/") ? name : path.posix.join(source || "/", name), base);
+    const seen = lines.get(file) ?? new Map();
+    for (const l of cls[2].matchAll(/<line\b([^>]*?)\/?>/g)) {
+      const a = xmlAttrs(l[1]);
+      if (a.number === undefined) continue;
+      seen.set(a.number, (seen.get(a.number) ?? false) || Number(a.hits ?? 0) > 0);
+    }
+    lines.set(file, seen);
+  }
+  return [...lines].map(([file, seen]) => ({
+    file,
+    total: seen.size,
+    covered: [...seen.values()].filter(Boolean).length,
+  }));
+}
+
+/** Statement coverage per file from a Clover XML report (PHPUnit's --coverage-clover). */
+export function parseClover(xml, base = "/work") {
+  const files = [];
+  for (const f of xml.matchAll(/<file\b([^>]*)>([\s\S]*?)<\/file>/g)) {
+    const name = xmlAttrs(f[1]).name;
+    const metrics = /<metrics\b([^>]*)\/>/.exec(f[2]);
+    if (!name || !metrics) continue;
+    const m = xmlAttrs(metrics[1]);
+    files.push({
+      file: relative(name, base),
+      total: Number(m.statements ?? 0),
+      covered: Number(m.coveredstatements ?? 0),
+    });
+  }
+  return files;
+}
+
+/** A coverage report in one of the formats stack profiles name, as lines per file. */
+export function parseCoverage(format, text, reportPath) {
+  const dir = path.posix.dirname(reportPath);
+  switch (format) {
+    case "coverage-py":
+      return parseCoveragePy(text, dir === "." ? "" : dir).map((f) => ({ ...f, file: relative(f.file, "/work") }));
+    case "jacoco":
+      return parseJacoco(text);
+    case "cobertura":
+      return parseCobertura(text);
+    case "clover":
+      return parseClover(text);
+    default:
+      return parseLcov(text, "/work");
+  }
+}
+
 function relative(file, base) {
   const f = file.replace(/\\/g, "/");
   if (f.startsWith(`${base}/`)) return f.slice(base.length + 1);
@@ -126,6 +209,9 @@ const EXTENSION_LANGUAGES = {
   ".ts": "typescript",
   ".tsx": "typescript",
   ".py": "python",
+  ".java": "java",
+  ".cs": "csharp",
+  ".php": "php",
 };
 
 /** The languages of the files Semgrep scanned (for which rules apply). */
@@ -183,7 +269,7 @@ export function staticAnalysisResult(rules, output, { share, source = () => "" }
     share,
     message:
       tests.length === 0
-        ? "No JavaScript, TypeScript or Python files to check."
+        ? "No JavaScript, TypeScript, Python, Java, C# or PHP files to check."
         : issues.length
           ? `${count} ${count === 1 ? "issue" : "issues"} found by ${issues.length} of ${tests.length} rules.`
           : `No issues found by ${tests.length} rules.`,

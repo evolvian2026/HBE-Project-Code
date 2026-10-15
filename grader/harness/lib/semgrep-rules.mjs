@@ -1,5 +1,6 @@
 /**
- * The platform's static analysis rules (Semgrep), for the mistakes student web apps make most:
+ * The platform's static analysis rules (Semgrep) for JavaScript and TypeScript, Python, Java, C#
+ * and PHP, for the mistakes student web apps make most:
  * injection, code from strings, hard-coded secrets, weak hashing, unsafe HTML and switched-off
  * security checks. Each rule is one test on the run page; its severity is its weight
  * (ERROR 3, WARNING 2, INFO 1). The harness writes them as a Semgrep config file (JSON is
@@ -276,6 +277,263 @@ export const SEMGREP_RULES = [
       fix: "Remove verify=False; fix the certificate instead.",
     },
     pattern: "requests.$M(..., verify=False, ...)",
+  },
+  {
+    id: "java-sql-injection",
+    languages: ["java"],
+    severity: "ERROR",
+    message: "an SQL query is built by pasting values into the text.",
+    metadata: {
+      title: "No SQL built by string concatenation",
+      category: "Security",
+      fix: "Use placeholders and pass the values separately (PreparedStatement, or JdbcClient's .param()).",
+    },
+    patterns: [
+      {
+        "pattern-either": [
+          { pattern: '$DB.$METHOD("..." + $X, ...)' },
+          { pattern: '$DB.$METHOD($X + "...", ...)' },
+          { pattern: "$DB.$METHOD(String.format(...), ...)" },
+          { pattern: '$DB.$METHOD("...".formatted(...), ...)' },
+        ],
+      },
+      { "pattern-not": '$DB.$METHOD("..." + "...", ...)' },
+      {
+        "metavariable-regex": {
+          metavariable: "$METHOD",
+          regex:
+            "^(executeQuery|executeUpdate|execute|addBatch|prepareStatement|prepareCall|query|queryForObject|queryForList|queryForMap|update|batchUpdate|sql|createQuery|createNativeQuery)$",
+        },
+      },
+    ],
+  },
+  {
+    id: "java-command-injection",
+    languages: ["java"],
+    severity: "ERROR",
+    message: "a command is run that may contain values from users.",
+    metadata: {
+      title: "No shell commands built from input",
+      category: "Security",
+      fix: "Don't run commands built from input; if you must, use ProcessBuilder with a fixed program and separate arguments.",
+    },
+    patterns: [
+      { pattern: "Runtime.getRuntime().exec($X, ...)" },
+      { "pattern-not": 'Runtime.getRuntime().exec("...", ...)' },
+    ],
+  },
+  {
+    id: "java-weak-hash",
+    languages: ["java"],
+    severity: "WARNING",
+    message: "MD5 or SHA-1 is used.",
+    metadata: {
+      title: "No MD5 or SHA-1 hashing",
+      category: "Security",
+      fix: "Hash passwords with BCrypt (spring-security-crypto) and use SHA-256 or better for anything else.",
+    },
+    patterns: [
+      { pattern: "MessageDigest.getInstance($ALG, ...)" },
+      { "metavariable-regex": { metavariable: "$ALG", regex: '(?i)^"(md5|sha-?1)"$' } },
+    ],
+  },
+  {
+    id: "cs-sql-injection",
+    languages: ["csharp"],
+    severity: "ERROR",
+    message: "an SQL query is built by pasting values into the text.",
+    metadata: {
+      title: "No SQL built by string concatenation",
+      category: "Security",
+      fix: "Use parameters ($1 or @name with cmd.Parameters), or EF Core's FromSql with an interpolated string.",
+    },
+    "pattern-either": [
+      {
+        patterns: [
+          {
+            "pattern-either": [
+              { pattern: '$DB.$METHOD("..." + $X, ...)' },
+              { pattern: '$DB.$METHOD($X + "...", ...)' },
+              { pattern: "$DB.$METHOD(string.Format(...), ...)" },
+              { pattern: "$DB.$METHOD(String.Format(...), ...)" },
+            ],
+          },
+          { "pattern-not": '$DB.$METHOD("..." + "...", ...)' },
+          {
+            "metavariable-regex": {
+              metavariable: "$METHOD",
+              regex:
+                "^(CreateCommand|ExecuteSqlRaw|ExecuteSqlRawAsync|FromSqlRaw|SqlQueryRaw|Query|Execute|QueryAsync|ExecuteAsync)$",
+            },
+          },
+        ],
+      },
+      {
+        patterns: [
+          {
+            "pattern-either": [
+              { pattern: 'new SqlCommand("..." + $X, ...)' },
+              { pattern: 'new NpgsqlCommand("..." + $X, ...)' },
+              { pattern: 'new MySqlCommand("..." + $X, ...)' },
+              { pattern: 'new SqliteCommand("..." + $X, ...)' },
+              { pattern: 'new SqlCommand($X + "...", ...)' },
+              { pattern: 'new NpgsqlCommand($X + "...", ...)' },
+              { pattern: 'new MySqlCommand($X + "...", ...)' },
+              { pattern: 'new SqliteCommand($X + "...", ...)' },
+            ],
+          },
+          { "pattern-not": 'new $CMD("..." + "...", ...)' },
+        ],
+      },
+      { patterns: [{ pattern: '$C.CommandText = "..." + $X' }, { "pattern-not": '$C.CommandText = "..." + "..."' }] },
+    ],
+  },
+  {
+    id: "cs-command-injection",
+    languages: ["csharp"],
+    severity: "ERROR",
+    message: "a program is started that may contain values from users.",
+    metadata: {
+      title: "No shell commands built from input",
+      category: "Security",
+      fix: "Don't start programs named by input; pass arguments through ProcessStartInfo.ArgumentList, never one string.",
+    },
+    "pattern-either": [
+      {
+        patterns: [
+          { pattern: "Process.Start($X, ...)" },
+          { "pattern-not": 'Process.Start("...")' },
+          { "pattern-not": 'Process.Start("...", "...")' },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cs-weak-hash",
+    languages: ["csharp"],
+    severity: "WARNING",
+    message: "MD5 or SHA-1 is used.",
+    metadata: {
+      title: "No MD5 or SHA-1 hashing",
+      category: "Security",
+      fix: "Hash passwords with ASP.NET Core Identity's PasswordHasher and use SHA256 or better for anything else.",
+    },
+    "pattern-either": [
+      { pattern: "MD5.Create(...)" },
+      { pattern: "SHA1.Create(...)" },
+      { pattern: "MD5.HashData(...)" },
+      { pattern: "SHA1.HashData(...)" },
+    ],
+  },
+  {
+    id: "cs-tls-verification-off",
+    languages: ["csharp"],
+    severity: "WARNING",
+    message: "TLS certificate checks are turned off.",
+    metadata: {
+      title: "TLS certificates are checked",
+      category: "Security",
+      fix: "Remove the custom certificate callback; fix the certificate instead.",
+    },
+    "pattern-either": [
+      { pattern: "$H.ServerCertificateCustomValidationCallback = (...) => true" },
+      { pattern: "HttpClientHandler.DangerousAcceptAnyServerCertificateValidator" },
+    ],
+  },
+  {
+    id: "php-eval",
+    languages: ["php"],
+    severity: "ERROR",
+    message: "code is built from a string at run time.",
+    metadata: {
+      title: "No eval()",
+      category: "Security",
+      fix: "Don't run strings as code: decode data with json_decode.",
+    },
+    pattern: "eval(...)",
+  },
+  {
+    id: "php-command-injection",
+    languages: ["php"],
+    severity: "ERROR",
+    message: "a shell runs a command that may contain values from users.",
+    metadata: {
+      title: "No shell commands built from input",
+      category: "Security",
+      fix: "Avoid shell commands; if you must, escape every argument with escapeshellarg (or use Symfony Process with an array).",
+    },
+    patterns: [
+      {
+        "pattern-either": [
+          { pattern: "exec($X, ...)" },
+          { pattern: "system($X, ...)" },
+          { pattern: "shell_exec($X)" },
+          { pattern: "passthru($X, ...)" },
+          { pattern: "popen($X, ...)" },
+          { pattern: "proc_open($X, ...)" },
+        ],
+      },
+      { "pattern-not": "$F('...', ...)" },
+      { "pattern-not": '$F("...", ...)' },
+    ],
+  },
+  {
+    id: "php-sql-injection",
+    languages: ["php"],
+    severity: "ERROR",
+    message: "an SQL query is built by pasting values into the text.",
+    metadata: {
+      title: "No SQL built by string concatenation",
+      category: "Security",
+      fix: "Use bindings (DB::select('… where id = ?', [$id])) or the query builder; in PDO, prepare() with placeholders.",
+    },
+    patterns: [
+      {
+        "pattern-either": [
+          { pattern: '$DB->$METHOD("..." . $X, ...)' },
+          { pattern: '$DB->$METHOD($X . "...", ...)' },
+          { pattern: "$DB->$METHOD('...' . $X, ...)" },
+          { pattern: '$CLS::$METHOD("..." . $X, ...)' },
+          { pattern: "$CLS::$METHOD('...' . $X, ...)" },
+          { pattern: '$Q->$METHOD("...$X...", ...)' },
+          { pattern: '$CLS::$METHOD("...$X...", ...)' },
+        ],
+      },
+      { "pattern-not": "$DB->$METHOD('...' . '...', ...)" },
+      { "pattern-not": '$DB->$METHOD("..." . "...", ...)' },
+      { "pattern-not": "$CLS::$METHOD('...' . '...', ...)" },
+      {
+        "metavariable-regex": {
+          metavariable: "$METHOD",
+          regex:
+            "^(query|exec|prepare|select|insert|update|delete|statement|unprepared|raw|whereRaw|selectRaw|orderByRaw|havingRaw)$",
+        },
+      },
+    ],
+  },
+  {
+    id: "php-unsafe-deserialization",
+    languages: ["php"],
+    severity: "WARNING",
+    message: "data is loaded in a way that can run code.",
+    metadata: {
+      title: "No unserialize() of data",
+      category: "Security",
+      fix: "Use json_encode and json_decode for data that passes through users.",
+    },
+    patterns: [{ pattern: "unserialize($X, ...)" }, { "pattern-not": "unserialize('...', ...)" }],
+  },
+  {
+    id: "php-weak-hash",
+    languages: ["php"],
+    severity: "WARNING",
+    message: "MD5 or SHA-1 is used.",
+    metadata: {
+      title: "No MD5 or SHA-1 hashing",
+      category: "Security",
+      fix: "Hash passwords with password_hash (or Laravel's Hash::make) and use hash('sha256', …) for anything else.",
+    },
+    "pattern-either": [{ pattern: "md5(...)" }, { pattern: "sha1(...)" }],
   },
 ];
 

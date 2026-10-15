@@ -1,0 +1,42 @@
+{
+  "detect": ["backend/Notes.slnx", "frontend/package.json", "compose.yaml"],
+  "stages": {
+    "lint": {
+      "run": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet format --verify-no-changes --no-restore",
+      "image": "mcr.microsoft.com/dotnet/sdk:10.0",
+      "setup": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet restore --packages /opt/hbe-tools/nuget",
+      "report": "text"
+    },
+    "build": {
+      "run": "docker compose build"
+    },
+    "student_tests": {
+      "run": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet test --no-restore --logger 'junit;LogFilePath=/work/backend/TestResults/{assembly}.junit.xml'",
+      "image": "mcr.microsoft.com/dotnet/sdk:10.0",
+      "setup": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet restore --packages /opt/hbe-tools/nuget",
+      "report": "junit",
+      "junit": "backend/TestResults"
+    },
+    "coverage": {
+      "run": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet test --no-restore /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=/work/backend/coverage/",
+      "image": "mcr.microsoft.com/dotnet/sdk:10.0",
+      "setup": "export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; cd backend && dotnet restore --packages /opt/hbe-tools/nuget",
+      "format": "cobertura",
+      "file": "backend/coverage/coverage.cobertura.xml",
+      "exclude": ["**/*Tests/**"]
+    }
+  },
+  "services": {
+    "backend": {
+      "port": 8080,
+      "health": "/health"
+    },
+    "frontend": {
+      "port": 3000,
+      "health": "/"
+    }
+  },
+  "datastores": ["postgres:16"],
+  "env_required": ["DATABASE_URL"],
+  "ignore_paths": ["**/bin/**", "**/obj/**", "**/node_modules/**", "**/dist/**", "**/package-lock.json"]
+}

@@ -27,9 +27,11 @@ const SUITES = {
   "node22-api": emptySuite,
   "mern-node20": path.join(root, "suites/sample/starter-notes"),
   "django-react": path.join(root, "suites/sample/starter-notes"),
+  "spring-react": path.join(root, "suites/sample/starter-notes"),
+  "dotnet-react": path.join(root, "suites/sample/starter-notes"),
 };
 
-describe("starter templates (Docker)", { timeout: 2_400_000 }, () => {
+describe("starter templates (Docker)", { timeout: 4_800_000 }, () => {
   for (const [key, suite] of Object.entries(SUITES)) {
     it(`${key}: builds, starts, lints, passes its own tests and the sample suite`, async () => {
       const stack = JSON.parse(readFileSync(path.join(root, "stacks", `${key}.json`), "utf8"));

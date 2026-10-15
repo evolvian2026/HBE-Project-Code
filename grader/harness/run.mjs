@@ -427,36 +427,46 @@ async function lighthouse({ share, targets }) {
   const outDir = path.join(workdir, "out-lighthouse");
   mkdirSync(outDir, { recursive: true });
   const limit = remaining(4 * 60_000);
-  const r = await run(
-    "docker",
-    [
-      "run",
-      "--rm",
-      "--network",
-      network,
-      ...["--memory", "2g", "--pids-limit", "1024", "--shm-size", "1g"],
-      ...["--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`, "-e", "HOME=/tmp"],
-      ...["-v", `${outDir}:/out`],
-      LIGHTHOUSE_IMAGE,
-      "lighthouse",
-      url,
-      "--output=json",
-      "--output-path=/out/report.json",
-      "--only-categories=performance,accessibility,best-practices",
-      "--skip-audits=is-on-https,redirects-http",
-      "--preset=desktop",
-      "--max-wait-for-load=45000",
-      "--chrome-flags=--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage",
-      "--quiet",
-    ],
-    { timeoutMs: limit, maxOutput: 256 * 1024 },
-  );
   const report = path.join(outDir, "report.json");
-  let lhr = null;
-  try {
-    lhr = existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : null;
-  } catch {
-    lhr = null;
+  const audit = () =>
+    run(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--network",
+        network,
+        ...["--memory", "2g", "--pids-limit", "1024", "--shm-size", "1g"],
+        ...["--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`, "-e", "HOME=/tmp"],
+        ...["-v", `${outDir}:/out`],
+        LIGHTHOUSE_IMAGE,
+        "lighthouse",
+        url,
+        "--output=json",
+        "--output-path=/out/report.json",
+        "--only-categories=performance,accessibility,best-practices",
+        "--skip-audits=is-on-https,redirects-http",
+        "--preset=desktop",
+        "--max-wait-for-load=45000",
+        "--chrome-flags=--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage",
+        "--quiet",
+      ],
+      { timeoutMs: limit, maxOutput: 256 * 1024 },
+    );
+  const read = () => {
+    try {
+      return existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : null;
+    } catch {
+      return null;
+    }
+  };
+  let r = await audit();
+  let lhr = read();
+  // Chrome can be slow to start on a busy runner: one more try before calling it the platform's.
+  if (!lhr && !r.timedOut) {
+    log("lighthouse: no report, trying once more");
+    r = await audit();
+    lhr = read();
   }
   if (!lhr) {
     if (r.timedOut) {

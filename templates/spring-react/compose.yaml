@@ -1,0 +1,29 @@
+# How the grader (and you) run the app. Keep this file at the top of the repository.
+#
+# The grader provides its own PostgreSQL and sets DATABASE_URL for the backend, so the `db`
+# service here is for your computer only: `docker compose --profile local up --build`.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+  db:
+    image: postgres:16
+    profiles: ["local"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:

@@ -182,6 +182,13 @@ the platform.
   out), with the matching passages linked to the review screen. For staff only, never part of
   a grade.
 
+- **3D, more stack profiles.** Spring Boot (Java 21) and .NET (ASP.NET Core 10), each with a
+  React frontend and PostgreSQL, as global profiles with starter templates that pass every
+  stage: Checkstyle or `dotnet format`, JUnit or xUnit, JaCoCo or coverlet coverage, static
+  analysis rules for Java and C# (and PHP), Lighthouse, and the sample notes suite. Laravel
+  (PHP) is next: its packages download from GitHub, which this build environment can't reach,
+  so its starter is still to be built and checked.
+
 Order: 3A erasure and retention, 3B analytics, 3C optional grader stages, 3D more stack
 profiles, 3E subdomains and vanity domains, 3F high availability (applied with Phase 2.5).
 

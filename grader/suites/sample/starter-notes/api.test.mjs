@@ -1,7 +1,7 @@
 /**
- * Hidden API tests for the starter templates' example notes API (templates/mern-node20 and
- * templates/django-react): GET and POST /api/notes/ on the backend, and the same through the
- * frontend's proxy. A starting point for an assignment's own suite.
+ * Hidden API tests for the starter templates' example notes API (templates/mern-node20,
+ * django-react, spring-react and dotnet-react): GET and POST /api/notes/ on the backend, and
+ * the same through the frontend's proxy. A starting point for an assignment's own suite.
  */
 const CATEGORY = "Notes API";
 

@@ -35,7 +35,7 @@ test/                            Unit tests and Docker-backed harness tests
 | `contract` | The files the stack profile expects exist; `compose.yaml` is valid and doesn't reach outside its containers | Nothing else runs; score 0 |
 | `lint` (optional) | The profile's lint command passes | Shown with the linter's output; worth the assignment's share of the score |
 | `student_tests` (optional) | The student's own tests pass (the profile's test command) | Shown with the failing tests (from JUnit) and the output; worth its share |
-| `coverage` (optional) | The student's tests cover the target share of lines (the profile's `coverage` command and report) | Shown with the least-covered files; partial credit below the target |
+| `coverage` (optional) | The student's tests cover the target share of lines (the profile's `coverage` command and its LCOV, coverage.py JSON, JaCoCo, Cobertura or Clover report) | Shown with the least-covered files; partial credit below the target |
 | `static_analysis` (optional) | The platform's Semgrep rules find nothing (one test per rule, weighted by severity) | Each rule lists where it matched and how to fix it |
 | `build` | `docker compose build` succeeds | Nothing else runs; score 0 |
 | `health` | The app starts and every service answers its health URL within 2 minutes | Tests don't run; score 0 |

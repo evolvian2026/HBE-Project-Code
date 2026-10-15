@@ -11,11 +11,11 @@
  * mounted at /opt/hbe-tools (PIP_USER, PYTHONUSERBASE; its bin directory is on PATH). A stage
  * passes when its command exits 0 and, for `report: junit`, the JUnit file lists no failures.
  */
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { looksLikeInfraFailure, run } from "./exec.mjs";
 import { parseJUnit } from "./junit.mjs";
-import { coverageResult, parseCoveragePy, parseLcov, staticAnalysisResult } from "./quality.mjs";
+import { coverageResult, parseCoverage, staticAnalysisResult } from "./quality.mjs";
 import { SEMGREP_RULES, semgrepConfig } from "./semgrep-rules.mjs";
 
 /** Semgrep, pinned: a new version can find different things, which changes grades. */
@@ -135,26 +135,49 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
     return prepared.get(key);
   }
 
-  /** Copies a file out of the volume; null when it is missing or larger than `maxBytes`. */
-  async function copyOut(volume, image, file, maxBytes) {
+  /**
+   * Copies a file (or, with `dir`, a folder) out of the volume; null when it is missing or
+   * larger than `maxBytes` (a folder: its files together).
+   */
+  async function copyOut(volume, image, file, maxBytes, { dir = false } = {}) {
     const holder = `${project}-out${++seq}`;
     const local = path.join(workdir, `out-${seq}-${path.basename(file)}`);
     await run("docker", ["create", "--name", holder, "-v", `${volume}:/work`, image], { timeoutMs: 30_000 });
     const cp = await run("docker", ["cp", "-L", `${holder}:/work/${file}`, local], { timeoutMs: 60_000 });
     await run("docker", ["rm", "-f", holder], { timeoutMs: 30_000 });
     try {
-      return cp.code === 0 && statSync(local).isFile() && statSync(local).size <= maxBytes ? local : null;
+      if (cp.code !== 0) return null;
+      const stat = statSync(local);
+      if (stat.isFile()) return stat.size <= maxBytes ? local : null;
+      if (!dir || !stat.isDirectory()) return null;
+      const size = readdirSync(local).reduce((sum, f) => sum + statSync(path.join(local, f)).size, 0);
+      return size <= maxBytes ? local : null;
     } catch {
       return null;
     }
   }
 
+  /**
+   * The JUnit report at `file`, or every .xml report in that folder (Maven's surefire writes
+   * one per test class), as one report.
+   */
   async function readJUnit(volume, image, file) {
-    const local = await copyOut(volume, image, file, 5 * 1024 * 1024);
+    const local = await copyOut(volume, image, file, 5 * 1024 * 1024, { dir: true });
     if (!local) return null;
     try {
-      const report = parseJUnit(readFileSync(local, "utf8"));
-      return report.total > 0 ? { ...report, file: local } : null;
+      let xml = readFileSync(local, "utf8");
+      let merged = local;
+      if (statSync(local).isDirectory()) {
+        const reports = readdirSync(local)
+          .filter((f) => f.endsWith(".xml"))
+          .sort()
+          .map((f) => readFileSync(path.join(local, f), "utf8").replace(/<\?xml[^>]*\?>/, ""));
+        xml = `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites>\n${reports.join("\n")}\n</testsuites>\n`;
+        merged = `${local}.xml`;
+        writeFileSync(merged, xml);
+      }
+      const report = parseJUnit(xml);
+      return report.total > 0 ? { ...report, file: merged } : null;
     } catch {
       return null;
     }
@@ -267,12 +290,7 @@ export function createToolchains({ project, submissionDir, workdir, remaining, i
     }
     let files;
     try {
-      const text = readFileSync(local, "utf8");
-      const dir = path.posix.dirname(def.file);
-      files =
-        def.format === "coverage-py"
-          ? parseCoveragePy(text, dir === "." ? "" : dir).map((f) => ({ ...f, file: f.file.replace(/^\/work\//, "") }))
-          : parseLcov(text, "/work");
+      files = parseCoverage(def.format, readFileSync(local, "utf8"), def.file);
     } catch {
       return failed(`The coverage report (${def.file}) could not be read.`);
     }

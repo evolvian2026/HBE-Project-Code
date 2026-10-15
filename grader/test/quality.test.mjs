@@ -4,7 +4,11 @@ import {
   coverageResult,
   globToRegExp,
   lighthouseResult,
+  parseClover,
+  parseCobertura,
+  parseCoverage,
   parseCoveragePy,
+  parseJacoco,
   parseLcov,
   staticAnalysisResult,
 } from "../harness/lib/quality.mjs";
@@ -53,6 +57,34 @@ describe("coverage", () => {
   it("reads coverage.py JSON, relative to where it ran", () => {
     const json = { files: { "notes/views.py": { summary: { num_statements: 30, covered_lines: 27 } } } };
     assert.deepEqual(parseCoveragePy(json, "backend"), [{ file: "backend/notes/views.py", total: 30, covered: 27 }]);
+  });
+
+  it("reads JaCoCo, Cobertura and Clover XML", () => {
+    const jacoco = `<report name="notes"><package name="edu/example/notes">
+      <class name="edu/example/notes/A"><counter type="LINE" missed="9" covered="1"/></class>
+      <sourcefile name="NoteController.java"><line nr="1" mi="0" ci="3"/><counter type="INSTRUCTION" missed="4" covered="40"/><counter type="LINE" missed="2" covered="18"/></sourcefile>
+      <sourcefile name="Note.java"><counter type="LINE" missed="0" covered="1"/></sourcefile>
+    </package><counter type="LINE" missed="2" covered="19"/></report>`;
+    assert.deepEqual(parseJacoco(jacoco), [
+      { file: "edu/example/notes/NoteController.java", total: 20, covered: 18 },
+      { file: "edu/example/notes/Note.java", total: 1, covered: 1 },
+    ]);
+    const cobertura = `<coverage><sources><source>/work/backend/Notes.Api/</source></sources><packages><package><classes>
+      <class name="Program" filename="Program.cs"><lines><line number="3" hits="1"/><line number="4" hits="0"/></lines></class>
+      <class name="Program/Inner" filename="Program.cs"><lines><line number="4" hits="2"/><line number="9" hits="0"/></lines></class>
+      <class name="Store" filename="Data/Store.cs"><lines><line number="1" hits="5"/></lines></class>
+    </classes></package></packages></coverage>`;
+    assert.deepEqual(parseCobertura(cobertura), [
+      { file: "backend/Notes.Api/Program.cs", total: 3, covered: 2 },
+      { file: "backend/Notes.Api/Data/Store.cs", total: 1, covered: 1 },
+    ]);
+    const clover = `<coverage><project><file name="/work/backend/app/Http/NoteController.php"><line num="5" type="stmt" count="1"/>
+      <metrics loc="40" statements="12" coveredstatements="9"/></file><metrics files="1"/></project></coverage>`;
+    assert.deepEqual(parseClover(clover), [{ file: "backend/app/Http/NoteController.php", total: 12, covered: 9 }]);
+    assert.deepEqual(parseCoverage("clover", clover, "backend/clover.xml"), parseClover(clover));
+    assert.deepEqual(parseCoverage("lcov", "SF:/work/a.js\nLF:2\nLH:1\nend_of_record\n", "lcov.info"), [
+      { file: "a.js", total: 2, covered: 1 },
+    ]);
   });
 
   it("gives partial credit below the target, leaving out excluded files", () => {

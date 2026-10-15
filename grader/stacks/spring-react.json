@@ -1,0 +1,42 @@
+{
+  "detect": ["backend/pom.xml", "frontend/package.json", "compose.yaml"],
+  "stages": {
+    "lint": {
+      "run": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 -q checkstyle:check",
+      "image": "maven:3.9-eclipse-temurin-21",
+      "setup": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 -q dependency:go-offline",
+      "report": "text"
+    },
+    "build": {
+      "run": "docker compose build"
+    },
+    "student_tests": {
+      "run": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 test",
+      "image": "maven:3.9-eclipse-temurin-21",
+      "setup": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 -q dependency:go-offline",
+      "report": "junit",
+      "junit": "backend/target/surefire-reports"
+    },
+    "coverage": {
+      "run": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 test",
+      "image": "maven:3.9-eclipse-temurin-21",
+      "setup": "cd backend && mvn -B -Dmaven.repo.local=/opt/hbe-tools/m2 -q dependency:go-offline",
+      "format": "jacoco",
+      "file": "backend/target/site/jacoco/jacoco.xml",
+      "exclude": ["**/*Application.java"]
+    }
+  },
+  "services": {
+    "backend": {
+      "port": 8080,
+      "health": "/health"
+    },
+    "frontend": {
+      "port": 3000,
+      "health": "/"
+    }
+  },
+  "datastores": ["postgres:16"],
+  "env_required": ["DATABASE_URL"],
+  "ignore_paths": ["**/target/**", "**/node_modules/**", "**/dist/**", "**/package-lock.json"]
+}
