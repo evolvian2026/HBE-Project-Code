@@ -38,8 +38,8 @@ jobs:
       IMAGE: ${{ vars.ECR_REPOSITORY_URL }}:${{ github.sha }}
       DEPLOYMENT: ${{ vars.HBE_DEPLOYMENT }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -51,11 +51,11 @@ jobs:
           if aws ecr describe-images --repository-name "$repo" --image-ids imageTag="${{ github.sha }}" > /dev/null 2>&1; then
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
         if: steps.existing.outputs.pushed != 'true'
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: steps.existing.outputs.pushed != 'true'
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         if: steps.existing.outputs.pushed != 'true'
         with:
           context: .
