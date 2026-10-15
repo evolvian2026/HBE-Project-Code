@@ -150,7 +150,12 @@ Classroom scopes, see CONFIGURATION.md §5.2).
 **Exit:** second and third institutions onboarded on the demo stack, with grades flowing to
 their LMSs.
 
-## Phase 2.5: Move to production on AWS (1–2 weeks)
+## Phase 2.5: Move to production on AWS (1–2 weeks) — infrastructure written; applying waits on AWS access
+
+Written and tested offline: the app's Terraform (`deploy/aws/terraform/`, stages A and B, 3F),
+the deploy workflow, and the grader runner stack (`deploy/aws/grader-runners/`). Left: apply
+them in the AWS accounts, upgrade Supabase, cut DNS over.
+
 - Terraform `deploy/aws/` (stage A single host: EC2 t4g.medium, ASG of 1, Caddy, SSM, ECR,
   CloudWatch); S3 archive bucket with Object Lock
 - Upgrade Supabase to Pro (PITR) in Singapore; turn off `DEMO_MODE` retention overrides

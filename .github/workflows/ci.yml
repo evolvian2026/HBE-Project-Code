@@ -159,7 +159,7 @@ jobs:
         run: node --test --test-concurrency=1 grader/test/templates.docker.test.mjs
 
   terraform:
-    name: AWS Terraform (offline)
+    name: AWS infrastructure (offline)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -179,6 +179,19 @@ jobs:
       - name: State bucket bootstrap
         working-directory: deploy/aws/terraform/bootstrap
         run: terraform init -backend=false -input=false && terraform validate
+      - name: Grader runners (the hbe-grader account)
+        working-directory: deploy/aws/grader-runners
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+          terraform test
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Grader runners' scaler
+        working-directory: .
+        run: node --test deploy/aws/grader-runners/lambda/test/*.test.mjs
 
   docker:
     name: Docker image builds

@@ -36,14 +36,16 @@ export default tseslint.config(
     rules: { "no-restricted-properties": "off" },
   },
   {
-    // The grader runs on Actions runners, outside the platform's configuration system.
-    files: ["grader/**/*.mjs"],
+    // The grader runs on Actions runners, and its runners' scaler on AWS Lambda: both outside
+    // the platform's configuration system.
+    files: ["grader/**/*.mjs", "deploy/aws/grader-runners/lambda/**/*.mjs"],
     languageOptions: {
       globals: {
         AbortSignal: "readonly",
         Buffer: "readonly",
         clearTimeout: "readonly",
         fetch: "readonly",
+        Response: "readonly",
         setTimeout: "readonly",
       },
     },

@@ -12,6 +12,8 @@ coverage/
 deploy/aws/terraform/*.tfvars
 !deploy/aws/terraform/*.tfvars.example
 deploy/aws/terraform/backend.hcl
+deploy/aws/grader-runners/*.tfvars
+deploy/aws/grader-runners/backend.hcl
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -20,3 +22,4 @@ deploy/aws/terraform/backend.hcl
 e2e/test-results/
 e2e/playwright-report/
 *.tsbuildinfo
+deploy/aws/grader-runners/.build/

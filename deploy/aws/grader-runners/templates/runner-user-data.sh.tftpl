@@ -1,0 +1,46 @@
+#!/bin/bash
+# Boot script of a grader runner (rendered by Terraform; see ../main.tf). Sets up Docker and
+# the GitHub Actions runner, runs exactly one job, then shuts down, which terminates the
+# instance. Whatever goes wrong, it shuts down too: the scaler starts another.
+set -euo pipefail
+exec > >(tee -a /var/log/hbe-runner.log) 2>&1
+trap 'shutdown -h now' EXIT
+
+imds() {
+  local token
+  token=$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1"
+}
+
+# The one-time runner config the scaler stored for this runner (read once, then deleted).
+name=$(imds tags/instance/RunnerName)
+param="${ssm_prefix}/jit/$name"
+jit=$(aws ssm get-parameter --region "${region}" --name "$param" --with-decryption --query Parameter.Value --output text)
+aws ssm delete-parameter --region "${region}" --name "$param" || true
+
+if ! command -v docker > /dev/null; then
+  dnf install -y -q docker git libicu tar gzip
+fi
+systemctl enable --now docker
+if ! docker compose version > /dev/null 2>&1; then
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  base="https://github.com/docker/compose/releases/download/v${compose_version}/docker-compose-linux-x86_64"
+  curl -fsSL -o /tmp/docker-compose "$base"
+  curl -fsSL -o /tmp/docker-compose.sha256 "$base.sha256"
+  echo "$(cut -d ' ' -f 1 /tmp/docker-compose.sha256)  /tmp/docker-compose" | sha256sum -c -
+  install -m 755 /tmp/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+
+id runner > /dev/null 2>&1 || useradd -m runner
+usermod -aG docker runner
+cd /home/runner
+if [ ! -x run.sh ]; then
+  curl -fsSL -o runner.tar.gz \
+    "https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz"
+  echo "${runner_sha256}  runner.tar.gz" | sha256sum -c -
+  tar xzf runner.tar.gz && rm runner.tar.gz
+  chown -R runner:runner /home/runner
+fi
+
+# One job, as the unprivileged user (it can use Docker, which is the point of the grader).
+sudo -u runner -H ./run.sh --jitconfig "$jit" || echo "runner exited with $?"

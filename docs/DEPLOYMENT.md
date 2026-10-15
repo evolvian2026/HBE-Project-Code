@@ -220,7 +220,7 @@ the Auto Scaling group replaces it in a few minutes.
 ### 2.4 Grader runners on EC2 (platform-paid compute)
 
 ```
-GitHub (grader repo) ── workflow_job webhook ──▶ API Gateway + Lambda (scale-up)
+GitHub (grader repo) ── workflow_job webhook ──▶ Lambda function URL (scaler)
                                                    │ launches
                                                    ▼
                       AWS account "hbe-grader" (separate from the app account)
@@ -229,15 +229,22 @@ GitHub (grader repo) ── workflow_job webhook ──▶ API Gateway + Lambda 
                       ephemeral runner registers → runs evaluate.yml → terminates
 ```
 
-- Built with the open-source **`terraform-aws-github-runner`** module, which scales to zero
-  when idle. Set a **max-instances cap** (e.g. 10) to put a hard ceiling on cost.
-- **Pre-baked AMI** with Docker, Compose, Playwright browsers and cached base images for every
-  stack profile, so runs start fast.
+- **As built**: `deploy/aws/grader-runners/` (its README is the runbook). Rather than the
+  open-source `terraform-aws-github-runner` module (several Lambdas, queues and downloaded
+  release bundles for features the grader doesn't use), a small scaler Lambda reacts to the
+  grader repository's `workflow_job` webhook and runs every minute: it registers a
+  just-in-time runner per queued job and starts an instance for it, up to a **max-runners
+  cap** (default 10, the hard ceiling on cost), and terminates instances that idle, never
+  register or outlive a job. It scales to zero when idle, and is tested offline in CI.
+- **Pre-baked AMI** (optional, `ami_id`) with Docker, Compose, Playwright browsers and cached
+  base images for every stack profile, so runs start faster; without one, each instance sets
+  itself up at boot (about a minute).
 - **x86 runners**, not ARM, because many student stacks and base images only ship amd64.
 - **Hardening**: the instance role has only SSM and CloudWatch permissions; IMDS hop limit 1 so
   containers can't reach instance credentials; no platform secrets on the runner; one job per
   instance, which is destroyed afterwards.
-- The workflow switches `runs-on: ubuntu-latest` to `runs-on: [self-hosted, hbe-grader]`. GitHub
+- The workflow switches `runs-on: ubuntu-latest` to `runs-on: [self-hosted, hbe-grader]` by
+  setting the grader repository's `HBE_RUNNER_LABELS` variable (unset it to go back). GitHub
   OIDC results authentication still works unchanged.
 - **Cost control**: per-institution run quotas (already enforced), spot instances, an AWS
   Budgets alert on the grader account, and a monthly usage report per institution in the super

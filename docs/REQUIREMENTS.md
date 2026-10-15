@@ -194,7 +194,7 @@ Priority: **M** = MVP, **S** = should-have in v1, **C** = could-have / later.
 | Archive backup | Cloudflare R2 free (demo) → S3 ap-southeast-1 with Object Lock (production) | Backblaze B2 |
 | Observability | pino, Sentry, OpenTelemetry → Grafana Cloud/Honeycomb | Datadog |
 | Hosting | **Demo:** Render free web service (Singapore), all roles in one container. **Production:** AWS EC2 ap-southeast-1 with Docker Compose + Caddy, later ALB + Auto Scaling group; Terraform; ECR; SSM | ECS Fargate, Render paid |
-| Grader compute | GitHub-hosted runners (demo) → ephemeral self-hosted EC2 spot runners via `terraform-aws-github-runner` (production); **paid by the platform** | — |
+| Grader compute | GitHub-hosted runners (demo) → ephemeral self-hosted EC2 spot runners (production; `deploy/aws/grader-runners/`); **paid by the platform** | — |
 | DNS / domain | Any registrar; Cloudflare DNS recommended (proxy **off** for Render records) | — |
 | Platform testing | Vitest, Playwright, pgTAP, MSW for GitHub API mocks | Jest |
 
