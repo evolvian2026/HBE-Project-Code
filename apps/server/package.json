@@ -25,7 +25,7 @@
     "@hbe/lms": "workspace:*",
     "@hbe/queue": "workspace:*",
     "@hbe/settings": "workspace:*",
-    "@sentry/node": "10.75.3",
+    "@sentry/node": "11.6.0",
     "@supabase/supabase-js": "2.117.3",
     "fastify": "5.12.5",
     "jose": "6.2.12",
